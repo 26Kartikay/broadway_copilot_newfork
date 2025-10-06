@@ -106,7 +106,6 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const latestMessageId = latestMessage.meta.messageId as string;
 
     const vibeCheckData: Prisma.VibeCheckUncheckedCreateInput = {
-      userId,
       comment: result.comment,
       fit_silhouette_score: result.fit_silhouette.score,
       fit_silhouette_explanation: result.fit_silhouette.explanation,
