@@ -1,7 +1,7 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  extensions = [ vector(version: "0.8.1") ]
+  extensions = [ vector(version: "0.8.0") ]
 }
 
 generator client {
