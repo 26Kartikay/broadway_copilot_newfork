@@ -71,11 +71,11 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
           missingProfileField: null,
         };
       }
-    } else if (validTonalities.includes(buttonPayload)) {
+    } else if (validTonalities.includes(buttonPayload.toLowerCase())) {
       return {
         ...state,
         intent: 'vibe_check',
-        selectedTonality: buttonPayload,
+        selectedTonality: buttonPayload.toLowerCase(),
         pending: PendingType.VIBE_CHECK_IMAGE,
         missingProfileField: null,
       };

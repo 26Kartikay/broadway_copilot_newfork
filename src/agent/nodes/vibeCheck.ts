@@ -38,9 +38,9 @@ const NoImageLLMOutputSchema = z.object({
 });
 
 const tonalityButtons: QuickReplyButton[] = [
-  { text: ' Friendly', id: 'friendly' },
-  { text: ' Savage', id: 'savage' },
-  { text: ' Hype BFF', id: 'hype_bff' },
+  { text: 'Friendly', id: 'friendly' },
+  { text: 'Savage', id: 'savage' },
+  { text: 'Hype BFF', id: 'hype_bff' },
 ];
 
 export async function vibeCheck(state: GraphState): Promise<GraphState> {
@@ -118,7 +118,8 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       overall_score: result.overall_score,
       recommendations: result.recommendations,
       prompt: result.prompt,
-      tonality: state.selectedTonality, // save the selected tonality
+      tonality: state.selectedTonality, 
+      userId
     };
 
     const [, user] = await prisma.$transaction([

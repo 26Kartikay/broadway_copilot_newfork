@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { MessageRole, PendingType } from '@prisma/client';
 import { MessageContent, MessageContentPart } from '../../lib/ai';
 
+import { Tonality } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { queueFeedbackRequest } from '../../lib/tasks';
@@ -44,7 +45,11 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
   });
 
   const pendingToPersist = (state.pending as PendingType | undefined) ?? PendingType.NONE;
-  const selectedTonalityToPersist = state.selectedTonality ?? null; // save tonality if present
+  const validTonalities: Tonality[] = ['savage', 'friendly', 'hype_bff'];
+  const selectedTonalityToPersist: Tonality | null =
+    state.selectedTonality && validTonalities.includes(state.selectedTonality as Tonality)
+      ? (state.selectedTonality as Tonality)
+      : null;
 
   let success = true;
   try {
