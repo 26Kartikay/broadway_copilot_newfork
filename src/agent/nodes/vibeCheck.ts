@@ -92,7 +92,22 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     }
 
     // With tonality and image, proceed with vibe check evaluation
-    const systemPromptText = await loadPrompt('handlers/analysis/vibe_check.txt');
+    const tonalityInstructionsMap = {
+      friendly:
+        'Kind, encouraging, and genuinely uplifting, like a perfect stranger rooting for you from the sidelines. Warm, reassuring, and full of sincere cheer, offering motivation and compliments without overfamiliarity. Uses words like you’ve got this, amazing, keep going, unstoppable, so proud. Always positive and heartfelt, blending encouragement with thoughtful insight, making every message feel like a boost of confidence from someone who truly wants to see you succeed.',
+      savage:
+        'Witty, confident, and brutally honest, like a fashion critic with zero chill. Savage, sassy, and unapologetically blunt, dishing out hot takes with a side of snark. Uses playful shade, cheeky roasts, and sharp observations — words like extra, messy, iconic, yikes, drip, slay, cancelled. Always hilarious, never cruel, blending confidence with irreverence. Think sass on steroids, truth bombs served with attitude, and witty jabs that sting in the best way.',
+      hype_bff:
+        'Over-the-top, chaotic, and bursting with love, like the loudest hype friend you’ve ever met. Constantly cheering, screaming, and hyping everything to the max. Uses words like omg, so good, yes yes yes, legendary, yasss, cannot even, slay, unreal, and absolute icon. Dramatic, playful, and contagious, flooding every message with energy, excitement, and pure, unfiltered joy — making the reader feel celebrated, adored, and ready to conquer the world.',
+    };
+
+    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt');
+    const tonalityInstructions =
+      tonalityInstructionsMap[state.selectedTonality as keyof typeof tonalityInstructionsMap];
+    const systemPromptText = systemPromptTextRaw.replace(
+      '{tonality_instructions}',
+      tonalityInstructions,
+    );
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const result = await getVisionLLM()
@@ -118,8 +133,8 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       overall_score: result.overall_score,
       recommendations: result.recommendations,
       prompt: result.prompt,
-      tonality: state.selectedTonality, 
-      userId
+      tonality: state.selectedTonality,
+      userId,
     };
 
     const [, user] = await prisma.$transaction([

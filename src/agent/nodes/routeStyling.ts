@@ -18,7 +18,7 @@ const LLMOutputSchema = z.object({
 
 export async function routeStyling(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
-  const buttonPayload = state.input.ButtonPayload;
+  const buttonPayload = (state.input.ButtonPayload ?? '').toLowerCase();
 
   logger.debug({ userId, buttonPayload }, 'Entered routeStyling with button payload');
 
