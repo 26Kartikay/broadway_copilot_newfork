@@ -278,11 +278,20 @@ export function fetchColorAnalysis(userId: string): Tool {
           where: { userId },
           orderBy: { createdAt: 'desc' },
         });
-
+        logger.debug({ userId, result }, 'Raw fetchColorAnalysis result');
         if (!result) {
           return 'No color analysis found for the user.';
         }
-
+        result.colors_suited = Array.isArray(result.colors_suited) ? result.colors_suited : [];
+        result.colors_to_wear =
+          typeof result.colors_to_wear === 'object' && result.colors_to_wear !== null
+            ? result.colors_to_wear
+            : { clothing: [], jewelry: [] };
+        result.colors_to_avoid = Array.isArray(result.colors_to_avoid)
+          ? result.colors_to_avoid
+          : [];
+        result.palette_name = result.palette_name ?? null;
+        result.palette_description = result.palette_description ?? null;
         return result;
       } catch (err: unknown) {
         logger.error({ userId, err: (err as Error)?.message }, 'Failed to fetch color analysis');
