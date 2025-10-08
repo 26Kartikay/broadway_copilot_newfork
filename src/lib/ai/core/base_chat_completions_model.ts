@@ -141,6 +141,10 @@ export abstract class BaseChatCompletionsModel extends BaseChatModel {
           strict: true,
         },
       };
+      console.log(
+        'Groq Structured Output JSON Schema:',
+        JSON.stringify(tool.function.parameters, null, 2),
+      );
       params.tools = [...(params.tools ?? []), tool];
       params.tool_choice = {
         type: 'function',
