@@ -11,10 +11,6 @@ import { fetchColorAnalysis, searchWardrobe } from '../tools';
 
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The main outfit suggestion.'),
-  message2_text: z
-    .string()
-    .nullable()
-    .describe('An optional, short follow-up message to ask a question or suggest the next step.'),
 });
 
 export async function handleStyling(state: GraphState): Promise<GraphState> {
@@ -34,14 +30,14 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
       const response = await getTextLLM()
         .withStructuredOutput(LLMOutputSchema)
         .run(systemPrompt, conversationHistoryTextOnly, state.traceBuffer, 'handleStyling');
-      const reply_text = response.message1_text as string;
+
+      const reply_text = response.message1_text;
       logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
       const replies: Replies = [{ reply_type: 'text', reply_text }];
       return { ...state, assistantReply: replies };
     }
 
     const tools = [searchWardrobe(userId), fetchColorAnalysis(userId)];
-
     const systemPromptText = await loadPrompt(`handlers/styling/handle_${stylingIntent}.txt`);
     const systemPrompt = new SystemMessage(systemPromptText);
 
@@ -57,13 +53,8 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
       state.traceBuffer,
     );
 
+    // Only use message1_text
     const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];
-    if (finalResponse.message2_text) {
-      replies.push({
-        reply_type: 'text',
-        reply_text: finalResponse.message2_text,
-      });
-    }
 
     logger.debug({ userId, replies }, 'Returning styling response');
     return { ...state, assistantReply: replies };

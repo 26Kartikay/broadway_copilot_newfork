@@ -1,7 +1,7 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  extensions = [ vector(version: "0.8.0") ]
+  extensions = [ vector(version: "0.8.1") ]
 }
 
 generator client {
@@ -34,6 +34,7 @@ enum PendingType {
   ASK_USER_INFO
   FEEDBACK
   TONALITY_SELECTION
+  STYLE_STUDIO_MENU  
 }
 enum TaskType {
   SEND_FEEDBACK_REQUEST

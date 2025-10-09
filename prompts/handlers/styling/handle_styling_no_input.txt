@@ -10,36 +10,30 @@ Craft a witty, engaging question to get the specific information you need to hel
 - Output ONLY the message text.
 
 ## Output Format
-You must output a single JSON object with the keys `message1_text` and `message2_text`. `message2_text` should be null.
-## note
-Always set message2_text as a string. If there’s no follow-up, respond with an empty string "" (never use null).”
+You must output a single JSON object with the keys `message1_text` .
 
 ## Examples by Intent
 - **`occasion`**:
 ```json
 {
   "message1_text": "Sounds like fun! What's the occasion we're styling for?",
-  "message2_text": ""
 }
 ```
 - **`vacation`**:
 ```json
 {
   "message1_text": "Love a good trip! Where are you off to so I can get the vibe right?",
-  "message2_text": ""
 }
 ```
 - **`pairing`**:
 ```json
 {
   "message1_text": "I'm ready! What's the key piece you want to build an outfit around?",
-  "message2_text": ""
 }
 ```
 - **`suggest`**:
 ```json
 {
   "message1_text": "I've got tons of ideas! What kind of style or look are you going for?",
-  "message2_text": ""
 }
 ```
