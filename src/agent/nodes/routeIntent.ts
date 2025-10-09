@@ -12,13 +12,21 @@ import { GraphState, IntentLabel } from '../state';
 
 // --- Shared constants section ---
 const validTonalities: string[] = ['friendly', 'savage', 'hype_bff'];
-const stylingRelated: string[] = ['styling', 'occasion', 'vacation', 'pairing'];
+const stylingRelated: string[] = [
+  'style_studio',    
+  'style_studio_occasion',
+  'style_studio_vacation',
+  'style_studio_pairing', 
+  'style_studio_general'  
+];
+
+//const stylingRelated: string[] = ['style_studio', 'occasion', 'vacation', 'pairing'];
 const otherValid: string[] = ['general', 'vibe_check', 'color_analysis', 'suggest'];
 
 // --- LLM Output Schema ---
 const LLMOutputSchema = z.object({
   intent: z
-    .enum(['general', 'vibe_check', 'color_analysis', 'styling'])
+    .enum(['general', 'vibe_check', 'color_analysis', 'style_studio'])
     .describe(
       "The primary intent of the user's message, used to route to the appropriate handler.",
     ),
@@ -50,7 +58,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     let intent: IntentLabel = 'general';
 
     if (stylingRelated.includes(buttonPayload)) {
-      intent = 'styling';
+      intent = 'style_studio';
     } else if (otherValid.includes(buttonPayload)) {
       intent = buttonPayload as IntentLabel;
       if (intent === 'vibe_check') {

@@ -10,12 +10,11 @@ import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, searchWardrobe } from '../tools';
 
 const LLMOutputSchema = z.object({
-  message1_text: z.string().describe('The main outfit suggestion.'),
-  message2_text: z
-    .string()
-    .nullable()
-    .describe('An optional, short follow-up message to ask a question or suggest the next step.'),
+  stylingIntent: z.enum(['occasion', 'vacation', 'pairing', 'suggest']),
+  message1_text: z.string(),
+  message2_text: z.string().nullable(),
 });
+
 
 export async function handleStyling(state: GraphState): Promise<GraphState> {
   const { user, stylingIntent, conversationHistoryTextOnly } = state;

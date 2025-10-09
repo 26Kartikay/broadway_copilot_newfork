@@ -102,17 +102,22 @@ export async function sendMenu(
   }
 
   const tonalityOptions = ['Hype BFF', 'Friendly', 'Savage'];
+  const styleStudioOptions = ['Style for any occasion', 'Vacation looks', 'General styling'];
+
   const isTonality =
     buttons.length === 3 && buttons.every((b) => tonalityOptions.includes(b.text.trim()));
 
-  // Updated template SID selection to include your custom styling template SID
+  const isStyleStudio =
+    buttons.length >= 2 &&
+    buttons.some((b) => styleStudioOptions.includes(b.text.trim()));
+
+  // Updated template SID selection to include Style Studio buttons
   const contentSid = isTonality
     ? TWILIO_QUICKREPLY_TONALITY_SID
-    : buttons.length === 2
-      ? TWILIO_QUICKREPLY2_SID
-      : buttons.length === 3 &&
-          buttons.some((b) => ['Occasion', 'Pairing', 'Vacation'].includes(b.text))
-        ? TWILIO_QUICKREPLY_STYLING_SID
+    : isStyleStudio
+      ? TWILIO_QUICKREPLY_STYLING_SID
+      : buttons.length === 2
+        ? TWILIO_QUICKREPLY2_SID
         : TWILIO_QUICKREPLY3_SID;
 
   const templateLocales: Record<string, string> = {

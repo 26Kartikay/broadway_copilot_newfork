@@ -141,16 +141,21 @@ export abstract class BaseChatCompletionsModel extends BaseChatModel {
           strict: true,
         },
       };
+      // Added logging here for JSON schema
       console.log(
         'Groq Structured Output JSON Schema:',
         JSON.stringify(tool.function.parameters, null, 2),
       );
+
       params.tools = [...(params.tools ?? []), tool];
       params.tool_choice = {
         type: 'function',
         function: { name: toolName },
       };
     }
+
+    // Added logging here for chat messages array
+    console.log('Chat messages sent:', JSON.stringify(messages, null, 2));
 
     return params;
   }
@@ -185,6 +190,9 @@ export abstract class BaseChatCompletionsModel extends BaseChatModel {
           throw new Error(`Failed to parse arguments for ${tc.function.name}: ${e}`);
         }
       });
+    // Added logs here for assistant message and tool calls
+    console.log('Assistant message:', assistant);
+    console.log('Extracted tool calls:', toolCalls);
 
     if (toolCalls.length > 0) {
       assistant.meta.tool_calls = toolCalls;
