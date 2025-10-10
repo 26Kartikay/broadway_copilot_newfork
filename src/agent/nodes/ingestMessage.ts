@@ -9,7 +9,7 @@ import { extractTextContent } from '../../utils/text';
 import { GraphState } from '../state';
 
 /**
- * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
+ * Ingests incoming Twilio messages, processes media attachments,manages conversation history,
  * and prepares data for downstream processing in the agent graph.
  *
  * Handles message merging for multi-part messages, media download and storage,

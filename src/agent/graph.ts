@@ -6,6 +6,7 @@ import {
   colorAnalysis,
   handleFeedback,
   handleGeneral,
+  handleStyleStudio,
   handleStyling,
   ingestMessage,
   recordUserInfo,
@@ -31,6 +32,7 @@ export function buildAgentGraph() {
     .addNode('handleGeneral', handleGeneral)
     .addNode('sendReply', sendReply)
     .addNode('routeStyling', routeStyling)
+    .addNode('handleStyleStudio', handleStyleStudio)
     .addEdge(START, 'ingestMessage')
     .addConditionalEdges(
       'ingestMessage',
@@ -63,7 +65,8 @@ export function buildAgentGraph() {
         general: 'routeGeneral',
         vibe_check: 'vibeCheck',
         color_analysis: 'colorAnalysis',
-        styling: 'routeStyling',
+        //styling: 'routeStyling',
+        style_studio: 'handleStyleStudio',
       },
     )
     .addEdge('routeGeneral', 'handleGeneral')
@@ -89,7 +92,8 @@ export function buildAgentGraph() {
     )
     .addEdge('vibeCheck', 'sendReply')
     .addEdge('askUserInfo', 'sendReply')
-    .addEdge('handleStyling', 'sendReply')
+    .addEdge('handleStyleStudio', 'sendReply')
+    //.addEdge('handleStyling', 'sendReply')
     .addEdge('colorAnalysis', 'sendReply')
     .addEdge('handleGeneral', 'sendReply')
     .addEdge('handleFeedback', 'sendReply')

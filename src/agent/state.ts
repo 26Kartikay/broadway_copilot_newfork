@@ -57,6 +57,8 @@ export interface GraphState {
 
   /** User's selected tonality for vibe check */
   selectedTonality: string | null;
+
+  lastHandledPayload?: string | null;
 }
 
 // ============================================================================
@@ -67,7 +69,7 @@ export interface GraphState {
  * Available intent labels for routing user requests to appropriate handlers.
  * These define the main categories of user interactions the agent can handle.
  */
-export type IntentLabel = 'general' | 'vibe_check' | 'color_analysis' | 'styling';
+export type IntentLabel = 'general' | 'vibe_check' | 'color_analysis' | 'style_studio' | 'styling';
 
 /**
  * Specific styling intents for fashion/styling related requests.

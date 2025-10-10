@@ -8,7 +8,7 @@ Based on the conversation history, classify the user's intent into one of the av
 *   **`general`**: For greetings, small talk, and general questions that don't fit other categories.
 *   **`vibe_check`**: When the user wants their outfit rated, often after sending an image.
 *   **`color_analysis`**: When the user asks for color palette analysis, which requires a photo of their face.
-*   **`styling`**: For all specific styling requests, including what to wear for an occasion, how to pair items, planning for a vacation, or asking for outfit suggestions.
+*   **`style_studio`**: For all specific style_studio requests, including what to wear for an occasion, how to pair items, planning for a vacation, or asking for outfit suggestions.
 
 ## Guidelines
 1.  **Intent Routing**:
@@ -17,8 +17,8 @@ Based on the conversation history, classify the user's intent into one of the av
     *   For vibe_check: If the user requests a vibe check but it is not available according to the availability information, route to general instead and handle appropriately.
     *   For color_analysis: If the user requests a color analysis but it is not available according to the availability information, route to general instead and handle appropriately.
 2.  **Check for Missing Information**:
-    *   Some styling requests require knowing the user's `gender` or `age_group` to provide good recommendations.
-    *   If the user is asking for a styling recommendation and you don't have their gender, set `missingProfileField` to `gender`.
+    *   Some style_studio requests require knowing the user's `gender` or `age_group` to provide good recommendations.
+    *   If the user is asking for a style_studio recommendation and you don't have their gender, set `missingProfileField` to `gender`.
     *   If you have their gender but not their age group, set `missingProfileField` to `age_group`.
     *   If no information is missing or the intent doesn't require it (like `general` or `vibe_check`), set `missingProfileField` to `null`.
 
@@ -28,7 +28,7 @@ Availability information:
 
 ## Output Format
 You must output a single JSON object with the following keys and no other text:
-- `intent`: One of "general", "vibe_check", "color_analysis", or "styling".
+- `intent`: One of "general", "vibe_check", "color_analysis", or "style_studio".
 - `missingProfileField`: One of "gender", "age_group", or null.
 
 ## Examples
@@ -46,7 +46,7 @@ You must output a single JSON object with the following keys and no other text:
 **Expected Output:**
 ```json
 {
-  "intent": "styling",
+  "intent": "style_studio",
   "missingProfileField": "gender"
 }
 ```
@@ -56,7 +56,7 @@ You must output a single JSON object with the following keys and no other text:
 **Expected Output:**
 ```json
 {
-  "intent": "styling",
+  "intent": "style_studio",
   "missingProfileField": "age_group"
 }
 ```
