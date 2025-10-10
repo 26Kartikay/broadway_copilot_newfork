@@ -57,6 +57,8 @@ export interface GraphState {
 
   /** User's selected tonality for vibe check */
   selectedTonality: string | null;
+
+  lastHandledPayload?: string | null;
 }
 
 // ============================================================================

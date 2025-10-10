@@ -10,17 +10,18 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, IntentLabel } from '../state';
 
+import { handleStyleStudio } from './handleStyleStudio';
+
 // --- Shared constants section ---
 const validTonalities: string[] = ['friendly', 'savage', 'hype_bff'];
 const stylingRelated: string[] = [
-  'style_studio',    
+  'style_studio',
   'style_studio_occasion',
   'style_studio_vacation',
-  'style_studio_pairing', 
-  'style_studio_general'  
+  'style_studio_pairing',
+  'style_studio_general',
 ];
 
-//const stylingRelated: string[] = ['style_studio', 'occasion', 'vacation', 'pairing'];
 const otherValid: string[] = ['general', 'vibe_check', 'color_analysis', 'suggest'];
 
 // --- LLM Output Schema ---
@@ -59,6 +60,9 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
     if (stylingRelated.includes(buttonPayload)) {
       intent = 'style_studio';
+      if (state.pending === PendingType.NONE && !stylingRelated.includes(buttonPayload)) {
+        intent = 'general'; // Neutral intent to prevent auto menu loops
+      }
     } else if (otherValid.includes(buttonPayload)) {
       intent = buttonPayload as IntentLabel;
       if (intent === 'vibe_check') {
@@ -74,7 +78,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
         return {
           ...state,
           intent: 'vibe_check',
-          pending: PendingType.TONALITY_SELECTION, // No redundant comment
+          pending: PendingType.TONALITY_SELECTION,
           selectedTonality: null,
           missingProfileField: null,
         };
@@ -192,6 +196,11 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
           { userId, intent, pending: state.pending, generalIntent: state.generalIntent },
           'Set generalIntent to tonality for vibe_check with TONALITY_SELECTION',
         );
+      }
+
+      // New integration point: route to Style Studio handler when intent is style_studio
+      if (intent === 'style_studio') {
+        return handleStyleStudio(state);
       }
 
       return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };

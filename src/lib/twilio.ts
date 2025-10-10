@@ -108,8 +108,7 @@ export async function sendMenu(
     buttons.length === 3 && buttons.every((b) => tonalityOptions.includes(b.text.trim()));
 
   const isStyleStudio =
-    buttons.length >= 2 &&
-    buttons.some((b) => styleStudioOptions.includes(b.text.trim()));
+    buttons.length >= 2 && buttons.some((b) => styleStudioOptions.includes(b.text.trim()));
 
   // Updated template SID selection to include Style Studio buttons
   const contentSid = isTonality

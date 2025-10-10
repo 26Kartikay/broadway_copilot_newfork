@@ -6,6 +6,7 @@ import {
   colorAnalysis,
   handleFeedback,
   handleGeneral,
+  handleStyleStudio,
   handleStyling,
   ingestMessage,
   recordUserInfo,
@@ -14,7 +15,6 @@ import {
   routeStyling,
   sendReply,
   vibeCheck,
-  handleStyleStudio
 } from './nodes';
 import { GraphState } from './state';
 

@@ -15,7 +15,6 @@ const LLMOutputSchema = z.object({
   message2_text: z.string().nullable(),
 });
 
-
 export async function handleStyling(state: GraphState): Promise<GraphState> {
   const { user, stylingIntent, conversationHistoryTextOnly } = state;
   const userId = user.id;

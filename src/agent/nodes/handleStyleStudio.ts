@@ -15,13 +15,9 @@ const styleStudioMenuButtons = [
   { text: 'General styling', id: 'style_studio_general' },
 ];
 
-// General output schema for style studio LLM responses
-// General output schema for style studio LLM responses
 const StyleStudioOutputSchema = z.object({
   reply_text: z.string().describe('Detailed outfit advice including specific suggestions.'),
-  followup_question: z.string().optional().describe('Optional friendly follow-up question to keep conversation going.')
 });
-
 
 export async function handleStyleStudio(state: GraphState): Promise<GraphState> {
   logger.debug(
@@ -30,11 +26,14 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       intent: state.intent,
       pending: state.pending,
       buttonPayload: state.input.ButtonPayload,
+      lastHandledPayload: state.lastHandledPayload,
     },
     'Entering handleStyleStudio node',
   );
 
-  // Step 1: Show main menu if no pending selection
+  const payload = state.input.ButtonPayload;
+
+  // Step 1: If not in style studio menu pending state, send the menu and set pending
   if (state.pending !== PendingType.STYLE_STUDIO_MENU) {
     const replies: Replies = [
       {
@@ -47,13 +46,16 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       ...state,
       assistantReply: replies,
       pending: PendingType.STYLE_STUDIO_MENU,
+      lastHandledPayload: null,
     };
   }
 
-  // Step 2: Handle submenu selection based on button payload
-  const payload = state.input.ButtonPayload;
+  // Step 2: Prevent repeated reply for same button payload
+  if (payload && payload === state.lastHandledPayload) {
+    return { ...state, assistantReply: [] };
+  }
 
-  // Map payload to prompt files for subservices
+  // Step 3: Handle submenu based on payload
   const subservicePromptMap: Record<string, string> = {
     style_studio_occasion: 'handlers/style_studio/occasion.txt',
     style_studio_vacation: 'handlers/style_studio/vacation.txt',
@@ -66,7 +68,12 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       const systemMessage = new SystemMessage(promptText);
       const result = await getTextLLM()
         .withStructuredOutput(StyleStudioOutputSchema)
-        .run(systemMessage, state.conversationHistoryTextOnly, state.traceBuffer, 'handleStyleStudio');
+        .run(
+          systemMessage,
+          state.conversationHistoryTextOnly,
+          state.traceBuffer,
+          'handleStyleStudio',
+        );
 
       const replies: Replies = [
         {
@@ -75,32 +82,35 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         },
       ];
 
-      // After handling subservice, clear pending so user can do another action next
+      // Clear pending after reuse to avoid repeated menus, or keep if you want menu persistent
       return {
         ...state,
         assistantReply: replies,
-        pending: null,
+        pending: PendingType.NONE, // <-- Reset pending here after handling selection
+        lastHandledPayload: payload,
       };
     } catch (err: unknown) {
       throw new InternalServerError('Style Studio failed to generate a response', { cause: err });
     }
-  } else {
-    // If invalid selection, repeat menu or provide a fallback message
-    const replies: Replies = [
-      {
-        reply_type: 'text',
-        reply_text: 'Please select a valid Style Studio option from the menu below.',
-      },
-      {
-        reply_type: 'quick_reply',
-        reply_text: 'Choose a styling service:',
-        buttons: styleStudioMenuButtons,
-      },
-    ];
-    return {
-      ...state,
-      assistantReply: replies,
-      pending: PendingType.STYLE_STUDIO_MENU,
-    };
   }
+
+  // Step 4: Handle invalid payload by repeating menu prompt
+  const replies: Replies = [
+    {
+      reply_type: 'text',
+      reply_text: 'Please select a valid Style Studio option from the menu below.',
+    },
+    {
+      reply_type: 'quick_reply',
+      reply_text: 'Choose a styling service:',
+      buttons: styleStudioMenuButtons,
+    },
+  ];
+
+  return {
+    ...state,
+    assistantReply: replies,
+    pending: PendingType.STYLE_STUDIO_MENU,
+    lastHandledPayload: null,
+  };
 }
