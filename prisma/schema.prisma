@@ -88,6 +88,9 @@ model User {
   lastColorAnalysisAt DateTime?
 
   createdAt DateTime @default(now())
+  
+  dailyPromptOptIn Boolean @default(false)
+
 
   conversations Conversation[]
   wardrobe      WardrobeItem[]

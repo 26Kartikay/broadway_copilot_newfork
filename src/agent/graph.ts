@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 import {
   askUserInfo,
   colorAnalysis,
+  dailyFact,
   handleFeedback,
   handleGeneral,
   handleStyleStudio,
@@ -33,6 +34,7 @@ export function buildAgentGraph() {
     .addNode('sendReply', sendReply)
     .addNode('routeStyling', routeStyling)
     .addNode('handleStyleStudio', handleStyleStudio)
+    .addNode('dailyFact', dailyFact)
     .addEdge(START, 'ingestMessage')
     .addConditionalEdges(
       'ingestMessage',
