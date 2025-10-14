@@ -24,6 +24,6 @@ async function sendGreetingMenuOnly() {
 }
 
 // Schedule greeting menu only at 9 AM and 6 PM daily
-cron.schedule('15 10,18 * * *', sendGreetingMenuOnly);
+cron.schedule('25 10,18 * * *', sendGreetingMenuOnly, { timezone: 'Asia/Kolkata' });
 
 console.log('Greeting menu scheduler started');
