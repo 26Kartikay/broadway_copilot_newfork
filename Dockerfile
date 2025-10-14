@@ -25,8 +25,7 @@ RUN npm ci --legacy-peer-deps --only=production
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prompts ./prompts
 COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client
-COPY --from=build /app/scripts ./scripts   
+COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client   
 EXPOSE 8080
 
 CMD ["node", "dist/index.js"]
