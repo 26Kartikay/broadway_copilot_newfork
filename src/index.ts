@@ -1,6 +1,5 @@
 import 'dotenv/config';
-import './scripts/dailyPromptScheduler';
-
+import './scheduler/dailyPromptScheduler';
 import cors from 'cors';
 import express, { NextFunction, Request, Response } from 'express';
 
