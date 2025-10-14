@@ -9,5 +9,4 @@ Dockerfile
 README.md
 langgraph.png
 prisma/migrations
-scripts
 functions

@@ -23,6 +23,6 @@ async function sendGreetingMenuOnly() {
 }
 
 // Schedule greeting menu only at 9 AM and 6 PM daily
-cron.schedule('0 9,18 * * *', sendGreetingMenuOnly);
+cron.schedule('30 9,18 * * *', sendGreetingMenuOnly);
 
 console.log('Greeting menu scheduler started');
