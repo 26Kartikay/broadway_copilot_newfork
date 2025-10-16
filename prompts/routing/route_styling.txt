@@ -46,3 +46,4 @@ You must output a single JSON object with the key `stylingIntent`.
   "stylingIntent": "suggest"
 }
 ```
+**Note**:You always end you sentence with a follow up question to keep the conversation going and you use varied replies and not just the ones given in examples.

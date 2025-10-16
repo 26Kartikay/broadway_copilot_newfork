@@ -12,16 +12,12 @@ import { PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
 
 /**
- * Schema for a color object with name and hex code.
+ * Schema for a color object with name.
  */
 const ColorObjectSchema = z.object({
   name: z
     .string()
     .describe("A concise, shopper-friendly color name (e.g., 'Warm Ivory', 'Deep Espresso')."),
-  hex: z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/)
-    .describe('The representative hex color code (#RRGGBB).'),
 });
 
 /**
@@ -53,6 +49,11 @@ const LLMOutputSchema = z.object({
   colors_to_avoid: z
     .array(ColorObjectSchema)
     .describe('Colors that clash with the palette and should be avoided.'),
+  follow_up: z
+    .string()
+    .describe(
+      "A short, natural follow-up question to keep the chat going (e.g., 'Would you like me to suggest outfits in your palette?' or 'Want me to show how this palette works for makeup too?').",
+    ),
 });
 
 const NoImageLLMOutputSchema = z.object({
@@ -104,7 +105,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(LLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryWithImages, state.traceBuffer, 'colorAnalysis');
 
-    // Save results to DB
+    // Save results to DB (excluding follow-up)
     const [, user] = await prisma.$transaction([
       prisma.colorAnalysis.create({
         data: {
@@ -123,17 +124,19 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       }),
     ]);
 
-    // Format a single WhatsApp-friendly message
+    // Beautifully formatted WhatsApp message
     const formattedMessage = `
-🎨 *Your Color Palette: ${output.palette_name ?? 'Unknown'}*
+💫 *${output.compliment}*
 
-💬 ${output.compliment}
+🎨 *Your Color Palette:* _${output.palette_name ?? 'Unknown'}_
 
-✨ *Why it suits you:* ${output.palette_description ?? 'N/A'}
+🩵  ${output.palette_description ?? 'N/A'}
 
-👗 *Colors to Wear:* ${output.colors_to_wear.clothing.join(', ')}
-💍 *Jewelry:* ${output.colors_to_wear.jewelry.join(', ')}
-⚠️ *Colors to Avoid:* ${output.colors_to_avoid.map((c) => c.name).join(', ')}
+👗 *Best Clothing Colors:* ${output.colors_to_wear.clothing.join(', ')}
+💍 *Jewelry That Shines on You:* ${output.colors_to_wear.jewelry.join(', ')}
+🚫 *Colors to Avoid:* ${output.colors_to_avoid.map((c) => c.name).join(', ')}
+
+${output.follow_up}
 `;
 
     const replies: Replies = [{ reply_type: 'text', reply_text: formattedMessage.trim() }];

@@ -9,11 +9,22 @@ import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories } from '../tools';
 
-// Define the output schema for chat responses locally
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The first text message response to the user.'),
   message2_text: z.string().nullable().describe('The second text message response to the user.'),
 });
+
+function formatLLMOutput(text: string): string {
+  if (!text) return '';
+
+  // Split text by existing line breaks (or treat full text as one line if none)
+  const lines = text.split('\n');
+
+  // Add an extra newline after each line
+  const spacedLines = lines.map(line => line.trim()).join('\n\n');
+
+  return spacedLines.trim();
+}
 
 export async function handleGeneral(state: GraphState): Promise<GraphState> {
   const { user, generalIntent, input, conversationHistoryTextOnly, traceBuffer } = state;
@@ -49,7 +60,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     }
 
     if (generalIntent === 'tonality') {
-      const tonalityText = 'Choose your vibe! ✨💬';
+      const tonalityText = 'Choose your vibe! *✨💬*';
       const buttons = [
         { text: 'Hype BFF 🔥', id: 'hype_bff' },
         { text: 'Friendly 🙂', id: 'friendly' },
@@ -61,9 +72,10 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     }
 
     if (generalIntent === 'chat') {
-      // Inline chat handling logic
+      let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt');
+      systemPromptText += "\nPlease respond concisely, avoiding verbosity.";
+
       const tools = [fetchRelevantMemories(userId)];
-      const systemPromptText = await loadPrompt('handlers/general/handle_chat.txt');
       const systemPrompt = new SystemMessage(systemPromptText);
 
       const finalResponse = await agentExecutor(
@@ -74,16 +86,19 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
         traceBuffer,
       );
 
-      const replies: Replies = [{ reply_type: 'text', reply_text: finalResponse.message1_text }];
-      if (finalResponse.message2_text) {
-        replies.push({ reply_type: 'text', reply_text: finalResponse.message2_text });
-      }
+      // Format LLM output with line spaces after 2-3 sentences
+      const formattedMessage1 = formatLLMOutput(finalResponse.message1_text);
+      const formattedMessage2 = finalResponse.message2_text ? formatLLMOutput(finalResponse.message2_text) : null;
 
-      logger.debug({ userId, messageId }, 'Chat handled');
+      const replies: Replies = [{ reply_type: 'text', reply_text: formattedMessage1 }];
+      if (formattedMessage2) replies.push({ reply_type: 'text', reply_text: formattedMessage2 });
+
+      logger.debug({ userId, messageId }, 'Chat handled with formatted output');
       return { ...state, assistantReply: replies };
     }
 
     throw new InternalServerError(`Unhandled general intent: ${generalIntent}`);
+
   } catch (err: unknown) {
     throw new InternalServerError('Failed to handle general intent', {
       cause: err,
