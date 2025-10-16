@@ -1,0 +1,30 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.FactLLMOutputSchema = void 0;
+exports.dailyFact = dailyFact;
+const zod_1 = require("zod");
+const ai_1 = require("../../lib/ai");
+const messages_1 = require("../../lib/ai/core/messages");
+exports.FactLLMOutputSchema = zod_1.z.object({
+    fact_text: zod_1.z.string().describe('A fun, single-sentence fact for WhatsApp users.'),
+});
+async function dailyFact(state) {
+    const systemPromptText = 'Provide a fun color fact suitable for a WhatsApp daily tip.';
+    const systemPrompt = new messages_1.SystemMessage(systemPromptText);
+    const traceBuffer = state.traceBuffer ?? { nodeRuns: [], llmTraces: [] };
+    const response = await (0, ai_1.getTextLLM)()
+        .withStructuredOutput(exports.FactLLMOutputSchema)
+        .run(systemPrompt, [], traceBuffer, 'dailyFact');
+    const fact = response.fact_text;
+    const replies = [
+        {
+            reply_type: 'text',
+            reply_text: fact,
+        },
+    ];
+    return {
+        assistantReply: replies,
+        pending: null,
+    };
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiL3Vzci9zcmMvYXBwL3NyYy9hZ2VudC9ub2Rlcy9kYWlseUZhY3QudHMiLCJzb3VyY2VzIjpbIi91c3Ivc3JjL2FwcC9zcmMvYWdlbnQvbm9kZXMvZGFpbHlGYWN0LnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiI7OztBQVVBLDhCQTBCQztBQXBDRCw2QkFBd0I7QUFDeEIscUNBQTBDO0FBQzFDLHlEQUEyRDtBQUk5QyxRQUFBLG1CQUFtQixHQUFHLE9BQUMsQ0FBQyxNQUFNLENBQUM7SUFDMUMsU0FBUyxFQUFFLE9BQUMsQ0FBQyxNQUFNLEVBQUUsQ0FBQyxRQUFRLENBQUMsaURBQWlELENBQUM7Q0FDbEYsQ0FBQyxDQUFDO0FBRUksS0FBSyxVQUFVLFNBQVMsQ0FBQyxLQUFpQjtJQUMvQyxNQUFNLGdCQUFnQixHQUFHLDZEQUE2RCxDQUFDO0lBQ3ZGLE1BQU0sWUFBWSxHQUFHLElBQUksd0JBQWEsQ0FBQyxnQkFBZ0IsQ0FBQyxDQUFDO0lBR3pELE1BQU0sV0FBVyxHQUFHLEtBQUssQ0FBQyxXQUFXLElBQUksRUFBRSxRQUFRLEVBQUUsRUFBRSxFQUFFLFNBQVMsRUFBRSxFQUFFLEVBQUUsQ0FBQztJQUd6RSxNQUFNLFFBQVEsR0FBRyxNQUFNLElBQUEsZUFBVSxHQUFFO1NBQ2hDLG9CQUFvQixDQUFDLDJCQUFtQixDQUFDO1NBQ3pDLEdBQUcsQ0FBQyxZQUFZLEVBQUUsRUFBRSxFQUFFLFdBQVcsRUFBRSxXQUFXLENBQUMsQ0FBQztJQUVuRCxNQUFNLElBQUksR0FBRyxRQUFRLENBQUMsU0FBUyxDQUFDO0lBRWhDLE1BQU0sT0FBTyxHQUFZO1FBQ3ZCO1lBQ0UsVUFBVSxFQUFFLE1BQU07WUFDbEIsVUFBVSxFQUFFLElBQUk7U0FDakI7S0FDRixDQUFDO0lBR0YsT0FBTztRQUNMLGNBQWMsRUFBRSxPQUFPO1FBQ3ZCLE9BQU8sRUFBRSxJQUFJO0tBQ2QsQ0FBQztBQUNKLENBQUMiLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyB6IH0gZnJvbSAnem9kJztcbmltcG9ydCB7IGdldFRleHRMTE0gfSBmcm9tICcuLi8uLi9saWIvYWknO1xuaW1wb3J0IHsgU3lzdGVtTWVzc2FnZSB9IGZyb20gJy4uLy4uL2xpYi9haS9jb3JlL21lc3NhZ2VzJztcbmltcG9ydCB0eXBlIHsgR3JhcGhTdGF0ZSwgUmVwbGllcyB9IGZyb20gJy4uL3N0YXRlJztcblxuLy8gT3V0cHV0IHNjaGVtYSBmb3IgTExNIHN0cnVjdHVyZWQgcmVzcG9uc2VcbmV4cG9ydCBjb25zdCBGYWN0TExNT3V0cHV0U2NoZW1hID0gei5vYmplY3Qoe1xuICBmYWN0X3RleHQ6IHouc3RyaW5nKCkuZGVzY3JpYmUoJ0EgZnVuLCBzaW5nbGUtc2VudGVuY2UgZmFjdCBmb3IgV2hhdHNBcHAgdXNlcnMuJyksXG59KTtcblxuZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIGRhaWx5RmFjdChzdGF0ZTogR3JhcGhTdGF0ZSk6IFByb21pc2U8UGFydGlhbDxHcmFwaFN0YXRlPj4ge1xuICBjb25zdCBzeXN0ZW1Qcm9tcHRUZXh0ID0gJ1Byb3ZpZGUgYSBmdW4gY29sb3IgZmFjdCBzdWl0YWJsZSBmb3IgYSBXaGF0c0FwcCBkYWlseSB0aXAuJztcbiAgY29uc3Qgc3lzdGVtUHJvbXB0ID0gbmV3IFN5c3RlbU1lc3NhZ2Uoc3lzdGVtUHJvbXB0VGV4dCk7XG5cbiAgLy8gVXNlIHRoZSB0cmFjZSBidWZmZXIgZnJvbSB0aGUgc3RhdGUgb3IgZmFsbGJhY2sgdG8gZW1wdHlcbiAgY29uc3QgdHJhY2VCdWZmZXIgPSBzdGF0ZS50cmFjZUJ1ZmZlciA/PyB7IG5vZGVSdW5zOiBbXSwgbGxtVHJhY2VzOiBbXSB9O1xuXG4gIC8vIEludm9rZSBMTE0gdG8gZ2V0IHN0cnVjdHVyZWQgZmFjdCBvdXRwdXRcbiAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBnZXRUZXh0TExNKClcbiAgICAud2l0aFN0cnVjdHVyZWRPdXRwdXQoRmFjdExMTU91dHB1dFNjaGVtYSlcbiAgICAucnVuKHN5c3RlbVByb21wdCwgW10sIHRyYWNlQnVmZmVyLCAnZGFpbHlGYWN0Jyk7XG5cbiAgY29uc3QgZmFjdCA9IHJlc3BvbnNlLmZhY3RfdGV4dDtcblxuICBjb25zdCByZXBsaWVzOiBSZXBsaWVzID0gW1xuICAgIHtcbiAgICAgIHJlcGx5X3R5cGU6ICd0ZXh0JyxcbiAgICAgIHJlcGx5X3RleHQ6IGZhY3QsXG4gICAgfSxcbiAgXTtcblxuICAvLyBSZXR1cm4gcGFydGlhbCBzdGF0ZSB3aXRoIGFzc2lzdGFudCByZXBsaWVzIGFuZCBjbGVhciBwZW5kaW5nIHN0YXR1c1xuICByZXR1cm4ge1xuICAgIGFzc2lzdGFudFJlcGx5OiByZXBsaWVzLFxuICAgIHBlbmRpbmc6IG51bGwsXG4gIH07XG59XG4iXX0=

@@ -1,0 +1,48 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.routeGeneral = routeGeneral;
+const zod_1 = require("zod");
+const ai_1 = require("../../lib/ai");
+const messages_1 = require("../../lib/ai/core/messages");
+const logger_1 = require("../../utils/logger");
+const prompts_1 = require("../../utils/prompts");
+const text_1 = require("../../utils/text");
+const errors_1 = require("../../utils/errors");
+const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
+const MENU_REGEX = /\b(help|menu|options?|what can you do\??)\b/i;
+const LLMOutputSchema = zod_1.z.object({
+    generalIntent: zod_1.z
+        .enum(['greeting', 'menu', 'chat'])
+        .describe("The user's specific intent, used to route to the correct general handler."),
+});
+async function routeGeneral(state) {
+    const userId = state.user.id;
+    const messageId = state.input.MessageSid;
+    const lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
+    const lastMessage = lastMessageContent ? (0, text_1.extractTextContent)(lastMessageContent) : '';
+    logger_1.logger.debug({ userId, messageId, lastMessage }, 'Routing general intent');
+    try {
+        if (GREETING_REGEX.test(lastMessage)) {
+            logger_1.logger.debug({ userId }, 'General intent routed to "greeting" by regex');
+            return { ...state, generalIntent: 'greeting' };
+        }
+        if (MENU_REGEX.test(lastMessage)) {
+            logger_1.logger.debug({ userId }, 'General intent routed to "menu" by regex');
+            return { ...state, generalIntent: 'menu' };
+        }
+        const systemPromptText = await (0, prompts_1.loadPrompt)('routing/route_general.txt');
+        const systemPrompt = new messages_1.SystemMessage(systemPromptText);
+        const response = await (0, ai_1.getTextLLM)()
+            .withStructuredOutput(LLMOutputSchema)
+            .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeGeneral');
+        logger_1.logger.debug({ userId, generalIntent: response.generalIntent }, 'General intent routed using LLM');
+        const { generalIntent } = response;
+        return { ...state, generalIntent };
+    }
+    catch (err) {
+        throw new errors_1.InternalServerError('Failed to route general intent', {
+            cause: err,
+        });
+    }
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiL3Vzci9zcmMvYXBwL3NyYy9hZ2VudC9ub2Rlcy9yb3V0ZUdlbmVyYWwudHMiLCJzb3VyY2VzIjpbIi91c3Ivc3JjL2FwcC9zcmMvYWdlbnQvbm9kZXMvcm91dGVHZW5lcmFsLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiI7O0FBdUJBLG9DQXNDQztBQTdERCw2QkFBd0I7QUFFeEIscUNBQTBDO0FBQzFDLHlEQUEyRDtBQUMzRCwrQ0FBNEM7QUFDNUMsaURBQWlEO0FBQ2pELDJDQUFzRDtBQUV0RCwrQ0FBeUQ7QUFHekQsTUFBTSxjQUFjLEdBQUcsaUNBQWlDLENBQUM7QUFDekQsTUFBTSxVQUFVLEdBQUcsOENBQThDLENBQUM7QUFFbEUsTUFBTSxlQUFlLEdBQUcsT0FBQyxDQUFDLE1BQU0sQ0FBQztJQUMvQixhQUFhLEVBQUUsT0FBQztTQUNiLElBQUksQ0FBQyxDQUFDLFVBQVUsRUFBRSxNQUFNLEVBQUUsTUFBTSxDQUFDLENBQUM7U0FDbEMsUUFBUSxDQUFDLDJFQUEyRSxDQUFDO0NBQ3pGLENBQUMsQ0FBQztBQUtJLEtBQUssVUFBVSxZQUFZLENBQUMsS0FBaUI7SUFDbEQsTUFBTSxNQUFNLEdBQUcsS0FBSyxDQUFDLElBQUksQ0FBQyxFQUFFLENBQUM7SUFDN0IsTUFBTSxTQUFTLEdBQUcsS0FBSyxDQUFDLEtBQUssQ0FBQyxVQUFVLENBQUM7SUFDekMsTUFBTSxrQkFBa0IsR0FBRyxLQUFLLENBQUMsMkJBQTJCLENBQUMsRUFBRSxDQUFDLENBQUMsQ0FBQyxDQUFDLEVBQUUsT0FBTyxDQUFDO0lBQzdFLE1BQU0sV0FBVyxHQUFHLGtCQUFrQixDQUFDLENBQUMsQ0FBQyxJQUFBLHlCQUFrQixFQUFDLGtCQUFrQixDQUFDLENBQUMsQ0FBQyxDQUFDLEVBQUUsQ0FBQztJQUVyRixlQUFNLENBQUMsS0FBSyxDQUFDLEVBQUUsTUFBTSxFQUFFLFNBQVMsRUFBRSxXQUFXLEVBQUUsRUFBRSx3QkFBd0IsQ0FBQyxDQUFDO0lBRTNFLElBQUksQ0FBQztRQUVILElBQUksY0FBYyxDQUFDLElBQUksQ0FBQyxXQUFXLENBQUMsRUFBRSxDQUFDO1lBQ3JDLGVBQU0sQ0FBQyxLQUFLLENBQUMsRUFBRSxNQUFNLEVBQUUsRUFBRSw4Q0FBOEMsQ0FBQyxDQUFDO1lBQ3pFLE9BQU8sRUFBRSxHQUFHLEtBQUssRUFBRSxhQUFhLEVBQUUsVUFBMkIsRUFBRSxDQUFDO1FBQ2xFLENBQUM7UUFDRCxJQUFJLFVBQVUsQ0FBQyxJQUFJLENBQUMsV0FBVyxDQUFDLEVBQUUsQ0FBQztZQUNqQyxlQUFNLENBQUMsS0FBSyxDQUFDLEVBQUUsTUFBTSxFQUFFLEVBQUUsMENBQTBDLENBQUMsQ0FBQztZQUNyRSxPQUFPLEVBQUUsR0FBRyxLQUFLLEVBQUUsYUFBYSxFQUFFLE1BQXVCLEVBQUUsQ0FBQztRQUM5RCxDQUFDO1FBR0QsTUFBTSxnQkFBZ0IsR0FBRyxNQUFNLElBQUEsb0JBQVUsRUFBQywyQkFBMkIsQ0FBQyxDQUFDO1FBQ3ZFLE1BQU0sWUFBWSxHQUFHLElBQUksd0JBQWEsQ0FBQyxnQkFBZ0IsQ0FBQyxDQUFDO1FBRXpELE1BQU0sUUFBUSxHQUFHLE1BQU0sSUFBQSxlQUFVLEdBQUU7YUFDaEMsb0JBQW9CLENBQUMsZUFBZSxDQUFDO2FBQ3JDLEdBQUcsQ0FBQyxZQUFZLEVBQUUsS0FBSyxDQUFDLDJCQUEyQixFQUFFLEtBQUssQ0FBQyxXQUFXLEVBQUUsY0FBYyxDQUFDLENBQUM7UUFFM0YsZUFBTSxDQUFDLEtBQUssQ0FDVixFQUFFLE1BQU0sRUFBRSxhQUFhLEVBQUUsUUFBUSxDQUFDLGFBQWEsRUFBRSxFQUNqRCxpQ0FBaUMsQ0FDbEMsQ0FBQztRQUNGLE1BQU0sRUFBRSxhQUFhLEVBQUUsR0FBRyxRQUFRLENBQUM7UUFDbkMsT0FBTyxFQUFFLEdBQUcsS0FBSyxFQUFFLGFBQWEsRUFBRSxDQUFDO0lBQ3JDLENBQUM7SUFBQyxPQUFPLEdBQVksRUFBRSxDQUFDO1FBQ3RCLE1BQU0sSUFBSSw0QkFBbUIsQ0FBQyxnQ0FBZ0MsRUFBRTtZQUM5RCxLQUFLLEVBQUUsR0FBRztTQUNYLENBQUMsQ0FBQztJQUNMLENBQUM7QUFDSCxDQUFDIiwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgeiB9IGZyb20gJ3pvZCc7XG5cbmltcG9ydCB7IGdldFRleHRMTE0gfSBmcm9tICcuLi8uLi9saWIvYWknO1xuaW1wb3J0IHsgU3lzdGVtTWVzc2FnZSB9IGZyb20gJy4uLy4uL2xpYi9haS9jb3JlL21lc3NhZ2VzJztcbmltcG9ydCB7IGxvZ2dlciB9IGZyb20gJy4uLy4uL3V0aWxzL2xvZ2dlcic7XG5pbXBvcnQgeyBsb2FkUHJvbXB0IH0gZnJvbSAnLi4vLi4vdXRpbHMvcHJvbXB0cyc7XG5pbXBvcnQgeyBleHRyYWN0VGV4dENvbnRlbnQgfSBmcm9tICcuLi8uLi91dGlscy90ZXh0JztcblxuaW1wb3J0IHsgSW50ZXJuYWxTZXJ2ZXJFcnJvciB9IGZyb20gJy4uLy4uL3V0aWxzL2Vycm9ycyc7XG5pbXBvcnQgeyBHZW5lcmFsSW50ZW50LCBHcmFwaFN0YXRlIH0gZnJvbSAnLi4vc3RhdGUnO1xuXG5jb25zdCBHUkVFVElOR19SRUdFWCA9IC9cXGIoaGl8aGVsbG98aGV5fGhleWF8eW98c3VwKVxcYi9pO1xuY29uc3QgTUVOVV9SRUdFWCA9IC9cXGIoaGVscHxtZW51fG9wdGlvbnM/fHdoYXQgY2FuIHlvdSBkb1xcPz8pXFxiL2k7XG5cbmNvbnN0IExMTU91dHB1dFNjaGVtYSA9IHoub2JqZWN0KHtcbiAgZ2VuZXJhbEludGVudDogelxuICAgIC5lbnVtKFsnZ3JlZXRpbmcnLCAnbWVudScsICdjaGF0J10pXG4gICAgLmRlc2NyaWJlKFwiVGhlIHVzZXIncyBzcGVjaWZpYyBpbnRlbnQsIHVzZWQgdG8gcm91dGUgdG8gdGhlIGNvcnJlY3QgZ2VuZXJhbCBoYW5kbGVyLlwiKSxcbn0pO1xuXG4vKipcbiAqIFJvdXRlcyBnZW5lcmFsIG1lc3NhZ2VzIChncmVldGluZy9tZW51L2NoYXQpIHZpYSByZWdleCBzaG9ydGN1dHMsIGVsc2UgTExNLlxuICovXG5leHBvcnQgYXN5bmMgZnVuY3Rpb24gcm91dGVHZW5lcmFsKHN0YXRlOiBHcmFwaFN0YXRlKTogUHJvbWlzZTxHcmFwaFN0YXRlPiB7XG4gIGNvbnN0IHVzZXJJZCA9IHN0YXRlLnVzZXIuaWQ7XG4gIGNvbnN0IG1lc3NhZ2VJZCA9IHN0YXRlLmlucHV0Lk1lc3NhZ2VTaWQ7XG4gIGNvbnN0IGxhc3RNZXNzYWdlQ29udGVudCA9IHN0YXRlLmNvbnZlcnNhdGlvbkhpc3RvcnlUZXh0T25seS5hdCgtMSk/LmNvbnRlbnQ7XG4gIGNvbnN0IGxhc3RNZXNzYWdlID0gbGFzdE1lc3NhZ2VDb250ZW50ID8gZXh0cmFjdFRleHRDb250ZW50KGxhc3RNZXNzYWdlQ29udGVudCkgOiAnJztcblxuICBsb2dnZXIuZGVidWcoeyB1c2VySWQsIG1lc3NhZ2VJZCwgbGFzdE1lc3NhZ2UgfSwgJ1JvdXRpbmcgZ2VuZXJhbCBpbnRlbnQnKTtcblxuICB0cnkge1xuICAgIC8vIFJlZ2V4IHJvdXRpbmcgZm9yIGNvbW1vbiBjYXNlc1xuICAgIGlmIChHUkVFVElOR19SRUdFWC50ZXN0KGxhc3RNZXNzYWdlKSkge1xuICAgICAgbG9nZ2VyLmRlYnVnKHsgdXNlcklkIH0sICdHZW5lcmFsIGludGVudCByb3V0ZWQgdG8gXCJncmVldGluZ1wiIGJ5IHJlZ2V4Jyk7XG4gICAgICByZXR1cm4geyAuLi5zdGF0ZSwgZ2VuZXJhbEludGVudDogJ2dyZWV0aW5nJyBhcyBHZW5lcmFsSW50ZW50IH07XG4gICAgfVxuICAgIGlmIChNRU5VX1JFR0VYLnRlc3QobGFzdE1lc3NhZ2UpKSB7XG4gICAgICBsb2dnZXIuZGVidWcoeyB1c2VySWQgfSwgJ0dlbmVyYWwgaW50ZW50IHJvdXRlZCB0byBcIm1lbnVcIiBieSByZWdleCcpO1xuICAgICAgcmV0dXJuIHsgLi4uc3RhdGUsIGdlbmVyYWxJbnRlbnQ6ICdtZW51JyBhcyBHZW5lcmFsSW50ZW50IH07XG4gICAgfVxuXG4gICAgLy8gTExNIHJvdXRpbmcgZm9yIG90aGVyIGNhc2VzXG4gICAgY29uc3Qgc3lzdGVtUHJvbXB0VGV4dCA9IGF3YWl0IGxvYWRQcm9tcHQoJ3JvdXRpbmcvcm91dGVfZ2VuZXJhbC50eHQnKTtcbiAgICBjb25zdCBzeXN0ZW1Qcm9tcHQgPSBuZXcgU3lzdGVtTWVzc2FnZShzeXN0ZW1Qcm9tcHRUZXh0KTtcblxuICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgZ2V0VGV4dExMTSgpXG4gICAgICAud2l0aFN0cnVjdHVyZWRPdXRwdXQoTExNT3V0cHV0U2NoZW1hKVxuICAgICAgLnJ1bihzeXN0ZW1Qcm9tcHQsIHN0YXRlLmNvbnZlcnNhdGlvbkhpc3RvcnlUZXh0T25seSwgc3RhdGUudHJhY2VCdWZmZXIsICdyb3V0ZUdlbmVyYWwnKTtcblxuICAgIGxvZ2dlci5kZWJ1ZyhcbiAgICAgIHsgdXNlcklkLCBnZW5lcmFsSW50ZW50OiByZXNwb25zZS5nZW5lcmFsSW50ZW50IH0sXG4gICAgICAnR2VuZXJhbCBpbnRlbnQgcm91dGVkIHVzaW5nIExMTScsXG4gICAgKTtcbiAgICBjb25zdCB7IGdlbmVyYWxJbnRlbnQgfSA9IHJlc3BvbnNlO1xuICAgIHJldHVybiB7IC4uLnN0YXRlLCBnZW5lcmFsSW50ZW50IH07XG4gIH0gY2F0Y2ggKGVycjogdW5rbm93bikge1xuICAgIHRocm93IG5ldyBJbnRlcm5hbFNlcnZlckVycm9yKCdGYWlsZWQgdG8gcm91dGUgZ2VuZXJhbCBpbnRlbnQnLCB7XG4gICAgICBjYXVzZTogZXJyLFxuICAgIH0pO1xuICB9XG59XG4iXX0=

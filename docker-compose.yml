@@ -1,7 +1,12 @@
+version: "3.8"
+
 services:
   app:
-    image: node:22
+    build:
+      context: .
+      dockerfile: Dockerfile
     working_dir: /usr/src/app
+
     command:
       - /bin/bash
       - -lc
@@ -12,22 +17,18 @@ services:
           printf '%s\n' "$${*}"
         }
 
-        log "Installing dependencies..."
-        npm ci --legacy-peer-deps --silent --no-progress
-        log "Dependencies installed."
-
         log "Checking Postgres availability..."
         until node <<'NODE' >/dev/null 2>&1; do
-        const net = require('net');
-        const host = process.env.POSTGRES_HOST || 'db';
-        const port = Number(process.env.POSTGRES_PORT || 5432);
-        const socket = net.createConnection({ host, port }, () => {
-          socket.end();
-          process.exit(0);
-        });
-        const fail = () => process.exit(1);
-        socket.on('error', fail);
-        setTimeout(fail, 2000);
+          const net = require('net');
+          const host = process.env.POSTGRES_HOST || 'db';
+          const port = Number(process.env.POSTGRES_PORT || 5432);
+          const socket = net.createConnection({ host, port }, () => {
+            socket.end();
+            process.exit(0);
+          });
+          const fail = () => process.exit(1);
+          socket.on('error', fail);
+          setTimeout(fail, 2000);
         NODE
           sleep 1
         done
@@ -50,7 +51,7 @@ services:
         fi
         rm -f /tmp/prisma-db-push.log
         log "Database schema is in sync."
-
+        
         NGROK_API_URL="$${NGROK_API_URL:-http://ngrok:4040/api/tunnels}"
         log "Waiting for ngrok tunnel from $${NGROK_API_URL}..."
         while true; do
@@ -69,6 +70,7 @@ services:
 
         log "Starting development server..."
         npm run dev
+    
     env_file:
       - .env
     environment:
@@ -90,11 +92,23 @@ services:
         condition: service_started
       ngrok:
         condition: service_started
+      static-server:
+        condition: service_started
     volumes:
       - .:/usr/src/app
       - node_modules:/usr/src/app/node_modules
       - dist:/usr/src/app/dist
+      - ./local_tmp:/tmp
       - /usr/src/app/functions
+
+  static-server:
+    image: node:18-alpine
+    working_dir: /usr/src/app
+    command: sh -c "npm install -g http-server && http-server /usr/src/app/local_tmp -p 8080"
+    volumes:
+      - ./local_tmp:/usr/src/app/local_tmp
+    ports:
+      - "8081:8080"
 
   db:
     image: pgvector/pgvector:pg16-bookworm

@@ -13,6 +13,12 @@ import { PendingType, Prisma } from '@prisma/client';
 import { InternalServerError } from '../../utils/errors';
 import { GraphState, Replies } from '../state';
 
+import { execFile } from 'child_process';
+import util from 'util';
+import fs from 'fs/promises';
+
+const execFileAsync = util.promisify(execFile);
+
 const ScoringCategorySchema = z.object({
   score: z.number().min(0).max(10).describe('Score as a fractional number between 0 and 10.'),
   explanation: z.string().describe('A short explanation for this score.'),
@@ -43,6 +49,23 @@ const tonalityButtons: QuickReplyButton[] = [
   { text: 'Hype BFF', id: 'hype_bff' },
 ];
 
+async function generateVibeCheckImage(data: object): Promise<string | null> {
+  const inputJsonPath = '/tmp/vibe_image_input.json';
+  const outputImagePath = '/tmp/vibe_output.png';
+
+  try {
+    await fs.writeFile(inputJsonPath, JSON.stringify(data));
+    await execFileAsync('python3', ['src/image_generator/generate_image.py', inputJsonPath, outputImagePath]);
+
+    // You must move/upload generated image to public URL for WhatsApp
+    // For now, returning local path as placeholder:
+  return 'http://localhost:8081/vibe_output.png';
+  } catch (error) {
+    logger.error({ error }, 'Failed to generate vibe check image');
+    return null;
+  }
+}
+
 export async function vibeCheck(state: GraphState): Promise<GraphState> {
   logger.debug(
     {
@@ -57,7 +80,6 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
 
   try {
-    // If user hasn't chosen tonality yet, prompt for it
     if (!state.selectedTonality) {
       const replies: Replies = [
         {
@@ -91,7 +113,6 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       };
     }
 
-    // With tonality and image, proceed with vibe check evaluation
     const tonalityInstructionsMap = {
       friendly:
         'Kind, encouraging, and genuinely uplifting, like a perfect stranger rooting for you from the sidelines. Warm, reassuring, and full of sincere cheer, offering motivation and compliments without overfamiliarity. Uses words like you’ve got this, amazing, keep going, unstoppable, so proud. Always positive and heartfelt, blending encouragement with thoughtful insight, making every message feel like a boost of confidence from someone who truly wants to see you succeed.',
@@ -147,33 +168,100 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     queueWardrobeIndex(userId, latestMessageId);
 
-    const replies: Replies = [
-      {
-        reply_type: 'text',
-        reply_text: `
+    // Prepare formatted text reply (same as before)
+    const formattedMessage = `
 ✨ *Vibe Check Results* ✨
+
+
 
 ${result.comment}
 
-👕 *Fit & Silhouette*: ${result.fit_silhouette.score}/10  
+
+
+👕 *Fit & Silhouette*: ${result.fit_silhouette.score}/10  
 _${result.fit_silhouette.explanation}_
 
-🎨 *Color Harmony*: ${result.color_harmony.score}/10  
+
+
+🎨 *Color Harmony*: ${result.color_harmony.score}/10  
 _${result.color_harmony.explanation}_
 
-🧢 *Styling Details*: ${result.styling_details.score}/10  
+
+
+🧢 *Styling Details*: ${result.styling_details.score}/10  
 _${result.styling_details.explanation}_
 
-🎯 *Context Confidence*: ${result.context_confidence.score}/10  
+
+
+🎯 *Context Confidence*: ${result.context_confidence.score}/10  
 _${result.context_confidence.explanation}_
+
+
 
 ⭐ *Overall Score*: *${result.overall_score.toFixed(1)}/10*
 
-💡 *Recommendations*:  
-${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
-        `.trim(),
-      },
-    ];
+
+
+💡 *Recommendations*:  
+${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
+    `.trim();
+
+    // Extract user image URL from conversation history for the image generation
+    // Extract user image URL safely
+let userImageUrl: string | undefined;
+for (let i = state.conversationHistoryWithImages.length - 1; i >= 0; i--) {
+  const msg = state.conversationHistoryWithImages[i];
+  if (msg && msg.role === 'user' && Array.isArray(msg.content)) {
+    const imagePart = (msg.content as any[]).find(
+      (part) => part.type === 'image_url' && part.image_url?.url,
+    );
+    if (imagePart) {
+      userImageUrl = imagePart.image_url.url;
+      break;
+    }
+  }
+}
+
+
+    if (!userImageUrl) {
+      logger.error('No user image found in conversation history for vibe check generation');
+    }
+
+    // Data object for image generation
+    const imageData = {
+      template_url: 'https://res.cloudinary.com/drpb2m2ar/image/upload/v1760509589/Vibe_check_template_uyglqf.png',
+      user_image_path: userImageUrl ?? '', 
+      comment: result.comment,
+      fit_silhouette: result.fit_silhouette,
+      color_harmony: result.color_harmony,
+      styling_details: result.styling_details,
+      context_confidence: result.context_confidence,
+      overall_score: result.overall_score,
+      recommendations: result.recommendations,
+    };
+
+    // Generate image with fallback to text only
+    let generatedImageUrl: string | null = null;
+    try {
+      generatedImageUrl = await generateVibeCheckImage(imageData);
+    } catch (error) {
+      logger.error({ error }, 'Vibe check image generation failed');
+    }
+
+    // Compose replies with image if available, else only text
+    const replies: Replies = generatedImageUrl
+      ? [
+          {
+            reply_type: 'image',
+            media_url: generatedImageUrl,
+            reply_text: 'Your vibe check result image',
+          },
+          {
+            reply_type: 'text',
+            reply_text: formattedMessage,
+          },
+        ]
+      : [{ reply_type: 'text', reply_text: formattedMessage }];
 
     return {
       ...state,
