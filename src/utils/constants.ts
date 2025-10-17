@@ -16,7 +16,7 @@ export const TWILIO_QUICKREPLY_STYLING_SID = 'HXac140bbacae88c90224b3d55323a7937
  * Media links
  */
 export const WELCOME_IMAGE_URL =
-  'https://res.cloudinary.com/dn3g1tzq1/image/upload/v1755066077/photo.png';
+  'https://res.cloudinary.com/drpb2m2ar/image/upload/v1760700332/AI_Chatbot_Cover_img_odzhae.png';
 export const MESSAGE_TTL_SECONDS = 60 * 60; // 1 hour
 export const USER_STATE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 

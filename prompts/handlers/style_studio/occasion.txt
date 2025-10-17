@@ -51,3 +51,5 @@ The **entire content** of the `reply_text` field must be formatted using **line 
 {
   "reply_text": "string (either a question or the formatted advice)"
 }
+### Note
+-The **entire content** of the `reply_text` field must be formatted using **line breaks** (`\n`) and **bolded category headers**. The response **MUST ONLY INCLUDE** the content belonging to the specific categories defined below, and MUST end with the follow-up question. **The follow-up question itself must NOT have a header.**
