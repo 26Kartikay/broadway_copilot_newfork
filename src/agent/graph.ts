@@ -1,6 +1,5 @@
 import { PendingType } from '@prisma/client';
 import { END, START, StateGraph } from '../lib/graph';
-import { logger } from '../utils/logger';
 import {
   askUserInfo,
   colorAnalysis,
@@ -13,7 +12,7 @@ import {
   recordUserInfo,
   routeGeneral,
   routeIntent,
-  routeStyling,
+  routeStyleStudio,
   sendReply,
   vibeCheck,
 } from './nodes';
@@ -26,13 +25,13 @@ export function buildAgentGraph() {
     .addNode('routeIntent', routeIntent)
     .addNode('routeGeneral', routeGeneral)
     .addNode('askUserInfo', askUserInfo)
-    .addNode('handleStyling', handleStyling)
+    .addNode('handleStyling', handleStyling) // you may keep if needed for compatibility, else can remove
     .addNode('handleFeedback', handleFeedback)
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
     .addNode('handleGeneral', handleGeneral)
     .addNode('sendReply', sendReply)
-    .addNode('routeStyling', routeStyling)
+    .addNode('routeStyleStudio', routeStyleStudio)  // Added node for style studio routing
     .addNode('handleStyleStudio', handleStyleStudio)
     .addNode('dailyFact', dailyFact)
     .addEdge(START, 'ingestMessage')
@@ -67,35 +66,36 @@ export function buildAgentGraph() {
         general: 'routeGeneral',
         vibe_check: 'vibeCheck',
         color_analysis: 'colorAnalysis',
-        //styling: 'routeStyling',
-        style_studio: 'handleStyleStudio',
+        // Route all styling-related intents exclusively to Style Studio
+        styling: 'routeStyleStudio',
+        style_studio: 'routeStyleStudio',
       },
     )
     .addEdge('routeGeneral', 'handleGeneral')
     .addConditionalEdges(
-      'routeStyling',
-      (s: GraphState) => {
-        // Removed redundant debug log as per review
-
-        if (s.assistantReply) {
-          return 'sendReply';
-        }
-        if (s.stylingIntent) {
-          return 'handleStyling';
-        }
-        logger.warn({ userId: s.user.id }, 'Exiting styling flow unexpectedly, routing to general');
-        return 'routeGeneral';
-      },
-      {
-        handleStyling: 'handleStyling',
-        routeGeneral: 'routeGeneral',
-        sendReply: 'sendReply',
-      },
-    )
+  'routeStyleStudio',
+  (s: GraphState) => {
+    // 1. If routeStyleStudio prepared a reply (the menu), send it now.
+    if (s.assistantReply && s.assistantReply.length > 0) {
+      return 'sendReply';
+    }
+    // 2. If a sub-intent was set (user clicked a sub-menu button), proceed to the handler.
+    if (s.subIntent) {
+      return 'handleStyleStudio';
+    }
+    // 3. Fallback: If neither a reply nor a sub-intent was set, assume general chat.
+    return 'routeGeneral'; 
+  },
+  {
+    sendReply: 'sendReply',
+    handleStyleStudio: 'handleStyleStudio',
+    routeGeneral: 'routeGeneral',
+  },
+)
     .addEdge('vibeCheck', 'sendReply')
     .addEdge('askUserInfo', 'sendReply')
     .addEdge('handleStyleStudio', 'sendReply')
-    //.addEdge('handleStyling', 'sendReply')
+    .addEdge('handleStyling', 'sendReply')  // You may remove this if you fully drop old styling flow
     .addEdge('colorAnalysis', 'sendReply')
     .addEdge('handleGeneral', 'sendReply')
     .addEdge('handleFeedback', 'sendReply')

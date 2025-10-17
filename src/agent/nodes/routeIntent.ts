@@ -10,8 +10,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, IntentLabel } from '../state';
 
-import { handleStyleStudio } from './handleStyleStudio';
-
 // --- Shared constants section ---
 const validTonalities: string[] = ['friendly', 'savage', 'hype_bff'];
 const stylingRelated: string[] = [
@@ -58,9 +56,12 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   if (buttonPayload) {
     let intent: IntentLabel = 'general';
 
-    if (stylingRelated.includes(buttonPayload)) {
+    // Map 'stylestudio' payload explicitly to 'style_studio' intent
+    if (buttonPayload === 'stylestudio') {
       intent = 'style_studio';
-      if (state.pending === PendingType.NONE && !stylingRelated.includes(buttonPayload)) {
+    } else if (stylingRelated.includes(buttonPayload)) {
+      intent = 'style_studio';
+      if (pending === PendingType.NONE && !stylingRelated.includes(buttonPayload)) {
         intent = 'general'; // Neutral intent to prevent auto menu loops
       }
     } else if (otherValid.includes(buttonPayload)) {
@@ -198,9 +199,9 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
         );
       }
 
-      // New integration point: route to Style Studio handler when intent is style_studio
+      // Route to Style Studio handler when intent is style_studio
       if (intent === 'style_studio') {
-        return handleStyleStudio(state);
+        return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
       }
 
       return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };

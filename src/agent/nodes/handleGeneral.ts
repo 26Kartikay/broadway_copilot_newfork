@@ -35,10 +35,11 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     if (generalIntent === 'greeting') {
       const greetingText = `Welcome, ${user.profileName}! How can we assist you today?`;
       const buttons = [
-        { text: 'Vibe check', id: 'vibe_check' },
-        { text: 'Color analysis', id: 'color_analysis' },
-        { text: 'Styling', id: 'styling' },
-      ];
+  { text: 'Vibe check', id: 'vibe_check' },
+  { text: 'Color analysis', id: 'color_analysis' },
+  { text: 'Style Studio', id: 'style_studio' }, // Changed from 'styling'
+];
+
       const replies: Replies = [
         { reply_type: 'image', media_url: WELCOME_IMAGE_URL },
         { reply_type: 'quick_reply', reply_text: greetingText, buttons },
@@ -52,7 +53,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
       const buttons = [
         { text: 'Vibe check', id: 'vibe_check' },
         { text: 'Color analysis', id: 'color_analysis' },
-        { text: 'Styling', id: 'styling' },
+        { text: 'Style Studio', id: 'style_studio' },
       ];
       const replies: Replies = [{ reply_type: 'quick_reply', reply_text: menuText, buttons }];
       logger.debug({ userId, messageId }, 'Menu handled with static response');

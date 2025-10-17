@@ -40,6 +40,9 @@ export interface GraphState {
   /** Specific sub-intent for styling requests */
   stylingIntent: StylingIntent | null;
 
+  /** Specific sub-intent for Style Studio requests */
+  subIntent?: 'style_studio_occasion' | 'style_studio_vacation' | 'style_studio_general';
+
   /** Specific sub-intent for general conversation */
   generalIntent: GeneralIntent | null;
 
@@ -92,7 +95,11 @@ export type AvailableService =
   | 'occasion'
   | 'vacation'
   | 'color_analysis'
-  | 'suggest';
+  | 'suggest'
+  | 'style_studio'
+  | 'style_studio_occasion'
+  | 'style_studio_vacation'
+  | 'style_studio_general';
 
 /**
  * Standard reply structure for agent responses.

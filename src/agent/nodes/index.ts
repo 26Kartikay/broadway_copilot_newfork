@@ -12,5 +12,6 @@ export * from './routeIntent';
 export * from './routeStyling';
 export * from './sendReply';
 export * from './vibeCheck';
+export * from './routeStyleStudio';
 
 //
