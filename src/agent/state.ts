@@ -60,6 +60,9 @@ export interface GraphState {
 
   /** User's selected tonality for vibe check */
   selectedTonality: string | null;
+  
+  /** The payload from the last button click that successfully routed to a sub-intent */
+  lastSubIntentPayload?: string | null;
 
   lastHandledPayload?: string | null;
 }

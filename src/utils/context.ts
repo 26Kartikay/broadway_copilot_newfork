@@ -5,7 +5,7 @@ import { prisma } from '../lib/prisma';
 import { queueMemoryExtraction } from '../lib/tasks';
 import { logger } from './logger';
 
-const CONVERSATION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 30 minutes
 
 /**
  * Handles a stale conversation by closing it and creating a new one.

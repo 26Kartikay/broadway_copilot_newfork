@@ -51,21 +51,10 @@ services:
         rm -f /tmp/prisma-db-push.log
         log "Database schema is in sync."
 
-        NGROK_API_URL="$${NGROK_API_URL:-http://ngrok:4040/api/tunnels}"
-        log "Waiting for ngrok tunnel from $${NGROK_API_URL}..."
-        while true; do
-          RESPONSE=$$(curl -s --fail "$${NGROK_API_URL}" || true)
-          if [ -n "$${RESPONSE}" ]; then
-            PUBLIC_URL=$$(RESPONSE="$${RESPONSE}" node -e "const resp = process.env.RESPONSE; if (!resp) process.exit(1); try { const data = JSON.parse(resp); const tunnel = (data.tunnels || []).find(t => t.public_url && t.public_url.startsWith('https://')); if (tunnel) { process.stdout.write(tunnel.public_url); } } catch (err) { process.exit(1); }")
-            if [ -n "$${PUBLIC_URL}" ]; then
-              export SERVER_URL="$${PUBLIC_URL}"
-              log "Ngrok tunnel ready."
-              log "This is the URL – paste it in the Twilio console: $${PUBLIC_URL}/twilio"
-              break
-            fi
-          fi
-          sleep 2
-        done
+        # Use static ngrok domain instead of polling API
+        export SERVER_URL="https://${NGROK_DOMAIN}"
+        log "Using static ngrok domain: $${SERVER_URL}"
+        log "Twilio webhook URL: $${SERVER_URL}/twilio"
 
         log "Starting development server..."
         npm run dev
@@ -80,7 +69,7 @@ services:
       POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
       REDIS_URL: redis://redis:6379
-      NGROK_API_URL: http://ngrok:4040/api/tunnels
+      SERVER_URL: https://${NGROK_DOMAIN}
     ports:
       - "${PORT:-8080}:8080"
     depends_on:
@@ -139,13 +128,13 @@ services:
     image: ngrok/ngrok:latest
     command:
       - http
+      - --domain=${NGROK_DOMAIN}
       - app:8080
       - --log=stdout
       - --log-level=warn
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
       NGROK_DOMAIN: ${NGROK_DOMAIN:-}
-      NGROK_EDGE: ${NGROK_EDGE:-}
     ports:
       - "4040:4040"
 
