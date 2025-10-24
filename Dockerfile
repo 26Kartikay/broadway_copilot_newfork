@@ -44,19 +44,26 @@ RUN apt-get update \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Check installed versions
-# This will now work correctly as `pip3` is installed and ready
 RUN python3 --version && pip3 --version && node --version && npm --version
 
 # ==================================
-# ✅ Install Python dependencies early
+# ✅ Updated Python dependency installation
 # ==================================
-# If requirements.txt exists, install from it; otherwise, install manually
+# Copy requirements file (if it exists)
 COPY src/image_generator/requirements.txt ./requirements.txt
+
+# 🎯 GUARANTEE that critical dependencies are installed. 
+# We run the command unconditionally now. If the file exists, it uses the file.
+# If the file doesn't exist, we fall back to installing the minimum needed packages.
 RUN if [ -f requirements.txt ]; then \
         pip3 install --no-cache-dir -r requirements.txt; \
     else \
+        # Fallback if requirements.txt is missing/misplaced
         pip3 install --no-cache-dir requests pillow; \
     fi
+
+# 🚨 DIAGNOSTIC STEP: Confirm 'requests' is installed
+RUN pip3 show requests
 
 # ==================================
 # Copy Node app files and install production dependencies

@@ -19,6 +19,13 @@ import fs from 'fs/promises';
 
 const execFileAsync = util.promisify(execFile);
 
+// -------------------------------------------------------------------
+// 🎯 UPDATED: Access NGROK_DOMAIN from environment variables
+const NGROK_DOMAIN = process.env.NGROK_DOMAIN;
+// This route must match how your server exposes the volume-mounted directory (/app/vibe_media).
+const PUBLIC_IMAGE_ROUTE = '/vibe_images/vibe_output.png';
+// -------------------------------------------------------------------
+
 const ScoringCategorySchema = z.object({
   score: z.number().min(0).max(10).describe('Score as a fractional number between 0 and 10.'),
   explanation: z.string().describe('A short explanation for this score.'),
@@ -50,16 +57,22 @@ const tonalityButtons: QuickReplyButton[] = [
 ];
 
 async function generateVibeCheckImage(data: object): Promise<string | null> {
-  const inputJsonPath = '/tmp/vibe_image_input.json';
-  const outputImagePath = '/tmp/vibe_output.png';
+  // 🎯 FIX: Changed path from /tmp to the volume-mounted /app/vibe_media
+  const inputJsonPath = '/app/vibe_media/vibe_image_input.json';
+  const outputImagePath = '/app/vibe_media/vibe_output.png';
+
+  if (!NGROK_DOMAIN) {
+      logger.error('NGROK_DOMAIN environment variable is not set.');
+      return null;
+  }
 
   try {
     await fs.writeFile(inputJsonPath, JSON.stringify(data));
     await execFileAsync('python3', ['src/image_generator/generate_image.py', inputJsonPath, outputImagePath]);
 
-    // You must move/upload generated image to public URL for WhatsApp
-    // For now, returning local path as placeholder:
-  return 'http://localhost:8081/vibe_output.png';
+    // 🎯 The public URL is generated from the Ngrok domain and the static route
+    const publicUrl = `https://${NGROK_DOMAIN}${PUBLIC_IMAGE_ROUTE}`;
+    return publicUrl;
   } catch (error) {
     logger.error({ error }, 'Failed to generate vibe check image');
     return null;
@@ -172,55 +185,40 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const formattedMessage = `
 ✨ *Vibe Check Results* ✨
 
-
-
 ${result.comment}
-
-
 
 👕 *Fit & Silhouette*: ${result.fit_silhouette.score}/10  
 _${result.fit_silhouette.explanation}_
 
-
-
 🎨 *Color Harmony*: ${result.color_harmony.score}/10  
 _${result.color_harmony.explanation}_
-
-
 
 🧢 *Styling Details*: ${result.styling_details.score}/10  
 _${result.styling_details.explanation}_
 
-
-
 🎯 *Context Confidence*: ${result.context_confidence.score}/10  
 _${result.context_confidence.explanation}_
 
-
-
 ⭐ *Overall Score*: *${result.overall_score.toFixed(1)}/10*
-
-
 
 💡 *Recommendations*:  
 ${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
     `.trim();
 
     // Extract user image URL from conversation history for the image generation
-    // Extract user image URL safely
-let userImageUrl: string | undefined;
-for (let i = state.conversationHistoryWithImages.length - 1; i >= 0; i--) {
-  const msg = state.conversationHistoryWithImages[i];
-  if (msg && msg.role === 'user' && Array.isArray(msg.content)) {
-    const imagePart = (msg.content as any[]).find(
-      (part) => part.type === 'image_url' && part.image_url?.url,
-    );
-    if (imagePart) {
-      userImageUrl = imagePart.image_url.url;
-      break;
+    let userImageUrl: string | undefined;
+    for (let i = state.conversationHistoryWithImages.length - 1; i >= 0; i--) {
+      const msg = state.conversationHistoryWithImages[i];
+      if (msg && msg.role === 'user' && Array.isArray(msg.content)) {
+        const imagePart = (msg.content as any[]).find(
+          (part) => part.type === 'image_url' && part.image_url?.url,
+        );
+        if (imagePart) {
+          userImageUrl = imagePart.image_url.url;
+          break;
+        }
+      }
     }
-  }
-}
 
 
     if (!userImageUrl) {
