@@ -75,7 +75,7 @@ export interface GraphState {
  * Available intent labels for routing user requests to appropriate handlers.
  * These define the main categories of user interactions the agent can handle.
  */
-export type IntentLabel = 'general' | 'vibe_check' | 'color_analysis' | 'style_studio' | 'styling';
+export type IntentLabel = 'general' | 'vibe_check' | 'color_analysis' | 'style_studio' | 'styling' | 'this_or_that' | 'skin_lab';
 
 /**
  * Specific styling intents for fashion/styling related requests.
@@ -102,8 +102,9 @@ export type AvailableService =
   | 'style_studio'
   | 'style_studio_occasion'
   | 'style_studio_vacation'
-  | 'style_studio_general';
-
+  | 'style_studio_general'
+  | 'this_or_that'
+  | 'skin_lab';
 /**
  * Standard reply structure for agent responses.
  * Defines the format for all message types the agent can send back to users.
@@ -115,6 +116,11 @@ type Reply =
     }
   | {
       reply_type: 'quick_reply';
+      reply_text: string;
+      buttons: QuickReplyButton[];
+    }
+    | {
+      reply_type: 'list_picker'; 
       reply_text: string;
       buttons: QuickReplyButton[];
     }

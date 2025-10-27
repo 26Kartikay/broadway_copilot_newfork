@@ -13,5 +13,6 @@ export * from './routeStyling';
 export * from './sendReply';
 export * from './vibeCheck';
 export * from './routeStyleStudio';
+export * from './handleSkinLab';
+export * from './handleThisOrThat';
 
-//

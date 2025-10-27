@@ -15,6 +15,8 @@ import {
   routeStyleStudio,
   sendReply,
   vibeCheck,
+  handleSkinLab,
+  handleThisOrThat,
 } from './nodes';
 import { GraphState } from './state';
 
@@ -25,25 +27,23 @@ export function buildAgentGraph() {
     .addNode('routeIntent', routeIntent)
     .addNode('routeGeneral', routeGeneral)
     .addNode('askUserInfo', askUserInfo)
-    .addNode('handleStyling', handleStyling) // you may keep if needed for compatibility, else can remove
+    .addNode('handleStyling', handleStyling) // optional compatibility
     .addNode('handleFeedback', handleFeedback)
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
     .addNode('handleGeneral', handleGeneral)
     .addNode('sendReply', sendReply)
-    .addNode('routeStyleStudio', routeStyleStudio)  // Added node for style studio routing
+    .addNode('routeStyleStudio', routeStyleStudio)
     .addNode('handleStyleStudio', handleStyleStudio)
     .addNode('dailyFact', dailyFact)
+    .addNode('handleSkinLab', handleSkinLab)
+    .addNode('handleThisOrThat', handleThisOrThat)
     .addEdge(START, 'ingestMessage')
     .addConditionalEdges(
       'ingestMessage',
       (s: GraphState) => {
-        if (s.pending === PendingType.ASK_USER_INFO) {
-          return 'recordUserInfo';
-        }
-        if (s.pending === PendingType.FEEDBACK) {
-          return 'handleFeedback';
-        }
+        if (s.pending === PendingType.ASK_USER_INFO) return 'recordUserInfo';
+        if (s.pending === PendingType.FEEDBACK) return 'handleFeedback';
         return 'routeIntent';
       },
       {
@@ -56,49 +56,50 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'routeIntent',
       (s: GraphState) => {
-        if (s.missingProfileField) {
-          return 'askUserInfo';
+        if (s.missingProfileField) return 'askUserInfo';
+        switch (s.intent) {
+          case 'skin_lab':
+            return 'handleSkinLab';
+          case 'this_or_that':
+            return 'handleThisOrThat';
+          default:
+            return s.intent || 'general';
         }
-        return s.intent || 'general';
       },
       {
         askUserInfo: 'askUserInfo',
         general: 'routeGeneral',
         vibe_check: 'vibeCheck',
         color_analysis: 'colorAnalysis',
-        // Route all styling-related intents exclusively to Style Studio
         styling: 'routeStyleStudio',
         style_studio: 'routeStyleStudio',
+        handleSkinLab: 'handleSkinLab',  
+    handleThisOrThat: 'handleThisOrThat',
       },
     )
     .addEdge('routeGeneral', 'handleGeneral')
     .addConditionalEdges(
-  'routeStyleStudio',
-  (s: GraphState) => {
-    // 1. If routeStyleStudio prepared a reply (the menu), send it now.
-    if (s.assistantReply && s.assistantReply.length > 0) {
-      return 'sendReply';
-    }
-    // 2. If a sub-intent was set (user clicked a sub-menu button), proceed to the handler.
-    if (s.subIntent) {
-      return 'handleStyleStudio';
-    }
-    // 3. Fallback: If neither a reply nor a sub-intent was set, assume general chat.
-    return 'routeGeneral'; 
-  },
-  {
-    sendReply: 'sendReply',
-    handleStyleStudio: 'handleStyleStudio',
-    routeGeneral: 'routeGeneral',
-  },
-)
+      'routeStyleStudio',
+      (s: GraphState) => {
+        if (s.assistantReply && s.assistantReply.length > 0) return 'sendReply';
+        if (s.subIntent) return 'handleStyleStudio';
+        return 'routeGeneral';
+      },
+      {
+        sendReply: 'sendReply',
+        handleStyleStudio: 'handleStyleStudio',
+        routeGeneral: 'routeGeneral',
+      },
+    )
     .addEdge('vibeCheck', 'sendReply')
     .addEdge('askUserInfo', 'sendReply')
     .addEdge('handleStyleStudio', 'sendReply')
-    .addEdge('handleStyling', 'sendReply')  // You may remove this if you fully drop old styling flow
+    .addEdge('handleStyling', 'sendReply')
     .addEdge('colorAnalysis', 'sendReply')
     .addEdge('handleGeneral', 'sendReply')
     .addEdge('handleFeedback', 'sendReply')
+    .addEdge('handleSkinLab', 'sendReply')
+    .addEdge('handleThisOrThat', 'sendReply')
     .addEdge('sendReply', END);
 
   return graph.compile();

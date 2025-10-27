@@ -148,6 +148,39 @@ export async function sendMenu(
     handleTwilioError(err as TwilioApiError);
   }
 }
+/**
+ * Sends a WhatsApp list picker message via Twilio’s Content API.
+ * Requires a Content Template (type: twilio/list-picker) with up to 10 menu options.
+ */
+export async function sendListPicker(
+  to: string,
+  contentSid: string, // Twilio-approved list picker Content SID
+  variables?: Record<string, string>,
+): Promise<void> {
+  const client = getTwilioClient();
+  const fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
+
+  const payload: TwilioMessageOptions = {
+    from: fromNumber,
+    to: `whatsapp:+${to}`,
+    contentSid,
+    contentVariables: variables ? JSON.stringify(variables) : '',
+  };
+
+  addStatusCallback(payload);
+
+  try {
+    const resp = await client.messages.create(payload);
+    logger.debug(
+      { sid: resp.sid, to },
+      'Sent WhatsApp List Picker message successfully',
+    );
+    await awaitStatuses(resp.sid);
+  } catch (err: unknown) {
+    handleTwilioError(err as TwilioApiError);
+  }
+}
+
 
 export async function sendImage(to: string, imageUrl: string, caption?: string): Promise<void> {
   await sendText(to, caption || '', imageUrl);

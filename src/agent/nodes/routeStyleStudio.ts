@@ -27,7 +27,7 @@ export async function routeStyleStudio(state: GraphState): Promise<GraphState> {
   logger.debug({ userId, payload }, 'Entered routeStyleStudio');
 
   try {
-    if (payload === 'style_studio') {
+    if (payload === 'style_studio' || state.input.Text?.trim()?.toLowerCase() === 'stylestudio') {
       const replies: Replies = [
         {
           reply_type: 'quick_reply',

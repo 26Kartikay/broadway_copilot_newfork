@@ -150,3 +150,22 @@ export interface QuickReplyButton {
   text: string;
   id: string;
 }
+/**
+ * Represents a Twilio List Picker option item for WhatsApp.
+ * Each item contains a title, description, and unique identifier.
+ */
+export interface TwilioListPickerItem {
+  item: string; // Display text (max 24 chars)
+  description: string; // Subtext shown under the item (max 72 chars)
+  id: string; // Internal identifier for routing
+}
+
+/**
+ * Represents the structure for a WhatsApp list picker content message.
+ * Used when creating a Content Template or sending a contentSid of type `twilio/list-picker`.
+ */
+export interface TwilioListPickerContent {
+  body: string; // Introductory text
+  button: string; // Button label to open the list
+  items: TwilioListPickerItem[];
+}
