@@ -65,6 +65,9 @@ export interface GraphState {
   lastSubIntentPayload?: string | null;
 
   lastHandledPayload?: string | null;
+    
+  thisOrThatFirstImageId?: string | undefined;
+
 }
 
 // ============================================================================

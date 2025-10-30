@@ -34,8 +34,10 @@ enum PendingType {
   ASK_USER_INFO
   FEEDBACK
   TONALITY_SELECTION
-  STYLE_STUDIO_MENU 
-  THIS_OR_THAT_IMAGE_INPUT 
+  STYLE_STUDIO_MENU  
+  THIS_OR_THAT_IMAGE_INPUT
+  THIS_OR_THAT_FIRST_IMAGE
+  THIS_OR_THAT_SECOND_IMAGE
 }
 enum TaskType {
   SEND_FEEDBACK_REQUEST
@@ -136,6 +138,8 @@ model Message {
 
   content          Json[] @default([])
   additionalKwargs Json?
+
+  thisOrThatFirstImageId String? 
 
   memoriesProcessed Boolean @default(false)
   wardrobeProcessed Boolean @default(false)

@@ -79,18 +79,26 @@ export function buildAgentGraph() {
     )
     .addEdge('routeGeneral', 'handleGeneral')
     .addConditionalEdges(
-      'routeStyleStudio',
-      (s: GraphState) => {
-        if (s.assistantReply && s.assistantReply.length > 0) return 'sendReply';
-        if (s.subIntent) return 'handleStyleStudio';
-        return 'routeGeneral';
-      },
-      {
-        sendReply: 'sendReply',
-        handleStyleStudio: 'handleStyleStudio',
-        routeGeneral: 'routeGeneral',
-      },
-    )
+  'routeStyleStudio',
+  (s: GraphState) => {
+    // If user picked Style Studio from the list, show menu
+    if (s.input?.ButtonPayload === 'style_studio') return 'sendReply';
+
+    // If a sub-intent was selected (occasion, vacation, etc.)
+    if (s.subIntent) return 'handleStyleStudio';
+
+    // If there’s already a prepared reply, just send it
+    if (s.assistantReply && s.assistantReply.length > 0) return 'sendReply';
+
+    // Default fallback
+    return 'routeGeneral';
+  },
+  {
+    sendReply: 'sendReply',
+    handleStyleStudio: 'handleStyleStudio',
+    routeGeneral: 'routeGeneral',
+  },
+)
     .addEdge('vibeCheck', 'sendReply')
     .addEdge('askUserInfo', 'sendReply')
     .addEdge('handleStyleStudio', 'sendReply')

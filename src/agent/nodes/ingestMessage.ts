@@ -9,7 +9,7 @@ import { extractTextContent } from '../../utils/text';
 import { GraphState } from '../state';
 
 /**
- * Ingests incoming Twilio messages, processes media attachments,manages conversation history,
+ * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
  * and prepares data for downstream processing in the agent graph.
  *
  * Handles message merging for multi-part messages, media download and storage,
@@ -54,6 +54,8 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     messages,
     pending: dbPending,
     selectedTonality: dbSelectedTonality,
+    // ✨ CRITICAL CHANGE 1: Destructure the loaded image ID
+    thisOrThatFirstImageId: dbThisOrThatFirstImageId,
   } = await prisma.$transaction(async (tx) => {
     const [lastMessage, latestAssistantMessage] = await Promise.all([
       tx.message.findFirst({
@@ -67,19 +69,27 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           role: MessageRole.AI,
         },
         orderBy: { createdAt: 'desc' },
-        select: { pending: true, selectedTonality: true }, // <-- now selecting selectedTonality
+        select: { 
+          pending: true, 
+          selectedTonality: true, 
+          // ✨ CRITICAL CHANGE 2: Select the missing field from the database
+          thisOrThatFirstImageId: true, 
+        },
       }),
     ]);
 
-    // Pull from DB
+    // Pull state from DB
     const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
     const selectedTonalityDB = latestAssistantMessage?.selectedTonality ?? null;
+    // ✨ CRITICAL CHANGE 3: Retrieve the image ID from the loaded message
+    const thisOrThatFirstImageIdDB = latestAssistantMessage?.thisOrThatFirstImageId ?? undefined;
 
     logger.debug(
       {
         whatsappId,
         pendingStateDB,
         selectedTonalityDB,
+        thisOrThatFirstImageIdDB, // Add the ID to the log for debugging
         conversationId,
         graphRunId,
         buttonPayload,
@@ -146,19 +156,21 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
       })
       .then((msgs) => msgs.reverse());
 
-    // Return both pending and selectedTonality from DB (for fallback/merge)
     return {
       savedMessage,
       messages,
       pending: pendingStateDB,
       selectedTonality: selectedTonalityDB,
+      // ✨ CRITICAL CHANGE 4: Return the loaded image ID from the transaction
+      thisOrThatFirstImageId: thisOrThatFirstImageIdDB, 
     };
   });
 
   logger.debug(
     {
       pending: state.pending ?? dbPending,
-      selectedTonality: state.selectedTonality ?? dbSelectedTonality ?? null,
+      selectedTonality: state.selectedTonality ?? dbSelectedTonality,
+      thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId, // Add to log for clarity
       messagesCount: messages.length,
     },
     'IngestMessage: Final state before returning',
@@ -200,8 +212,8 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   logger.debug({ whatsappId, graphRunId }, 'Message ingested successfully');
 
   /**
-   * The key: PREFER the latest computed state for pending/selectedTonality (from routing/handler).
-   * Use fallback from DB only if handler did not provide them.
+   * The key: PREFER the latest computed state (from routing/handler) if set,
+   * otherwise, use the value loaded from the DB.
    */
   return {
     ...state,
@@ -209,6 +221,8 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     conversationHistoryTextOnly,
     pending: state.pending ?? dbPending, // prioritize latest logic/state
     selectedTonality: state.selectedTonality ?? dbSelectedTonality, // prioritize latest logic/state
+    // ✨ CRITICAL CHANGE 5: Merge the loaded image ID back into the GraphState
+    thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId,
     user,
     input,
   };

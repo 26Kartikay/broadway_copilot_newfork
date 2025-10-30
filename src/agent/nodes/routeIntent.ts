@@ -1,224 +1,214 @@
 import { z } from 'zod';
-
 import { PendingType } from '@prisma/client';
-
 import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
-import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, IntentLabel } from '../state';
+import { logger } from '../../utils/logger';
 
-// --- Shared constants section ---
-const validTonalities: string[] = ['friendly', 'savage', 'hype_bff'];
-const stylingRelated: string[] = [
-    'style_studio',
-    'style_studio_occasion',
-    'style_studio_vacation',
-    'style_studio_pairing',
-    'style_studio_general',
-];
+const validTonalities = ['friendly', 'savage', 'hype_bff'];
+const otherValid = ['general', 'vibe_check', 'color_analysis', 'suggest', 'this_or_that','skin_lab'];
 
-const otherValid: string[] = ['general', 'vibe_check', 'color_analysis', 'suggest'];
-
-// --- LLM Output Schema ---
 const LLMOutputSchema = z.object({
-    intent: z
-        .enum(['general', 'vibe_check', 'color_analysis', 'style_studio'])
-        .describe(
-            "The primary intent of the user's message, used to route to the appropriate handler.",
-        ),
-    missingProfileField: z
-        .enum(['gender', 'age_group'])
-        .nullable()
-        .describe(
-            "The profile field that is missing and required to fulfill the user's intent. Null if no field is missing.",
-        ),
+  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'style_studio', 'this_or_that','skin_lab']),
+  missingProfileField: z.enum(['gender', 'age_group']).nullable(),
 });
 
 export async function routeIntent(state: GraphState): Promise<GraphState> {
-    logger.debug(
-        {
-            buttonPayload: state.input.ButtonPayload,
-            pending: state.pending,
-            selectedTonality: state.selectedTonality,
-            userId: state.user.id,
-        },
-        'Routing intent with current state',
-    );
+  logger.debug(
+    {
+      buttonPayload: state.input.ButtonPayload,
+      pending: state.pending,
+      selectedTonality: state.selectedTonality,
+      userId: state.user.id,
+    },
+    'Routing intent with current state',
+  );
 
-    const { user, input, conversationHistoryWithImages, pending } = state;
-    const userId = user.id;
-    const buttonPayload = input.ButtonPayload;
+  const { user, input, conversationHistoryWithImages, pending } = state;
+  const userId = user.id;
+  const buttonPayload = input.ButtonPayload;
 
-    // Priority 1: Handle explicit button payload routing
-    if (buttonPayload) {
-        let intent: IntentLabel = 'general';
-
-        // Map 'stylestudio' payload explicitly to 'style_studio' intent
-        if (buttonPayload === 'stylestudio') {
-            intent = 'style_studio';
-        } else if (stylingRelated.includes(buttonPayload)) {
-            intent = 'style_studio';
-            if (pending === PendingType.NONE && !stylingRelated.includes(buttonPayload)) {
-                intent = 'general'; // Neutral intent to prevent auto menu loops
-            }
-        } else if (otherValid.includes(buttonPayload)) {
-            intent = buttonPayload as IntentLabel;
-            if (intent === 'vibe_check') {
-                logger.debug(
-                    {
-                        selectedTonality: state.selectedTonality,
-                        pending: state.pending,
-                        buttonPayload,
-                    },
-                    'Received vibe_check buttonPayload - resetting selectedTonality and pending',
-                );
-                // Force fresh tonality selection!
-                return {
-                    ...state,
-                    intent: 'vibe_check',
-                    pending: PendingType.TONALITY_SELECTION,
-                    selectedTonality: null,
-                    missingProfileField: null,
-                };
-            }
-        } else if (validTonalities.includes(buttonPayload.toLowerCase())) {
-            return {
-                ...state,
-                intent: 'vibe_check',
-                selectedTonality: buttonPayload.toLowerCase(),
-                pending: PendingType.VIBE_CHECK_IMAGE,
-                missingProfileField: null,
-            };
-        }
-
-        // Return early here so that LLM routing is skipped when buttonPayload is handled
-        return { ...state, intent, missingProfileField: null };
-    } else {
-        // Retrieve user message body for checks outside of button payloads
-        const userMessage = input.Body?.toLowerCase().trim() ?? '';
-        
-        // 🛑 NEW: Priority 1.5: Handle explicit text input that matches an intent key
-        if (userMessage === 'style_studio') {
-            logger.debug({ userId }, 'Explicit text match: Routing directly to style_studio.');
-            return { ...state, intent: 'style_studio', missingProfileField: null };
-        }
-        // 🛑 END NEW BLOCK
-
-        // Priority 2: Handle pending tonality selection
-        if (pending === PendingType.TONALITY_SELECTION) {
-            
-            // Note: userMessage is already defined above
-            // const userMessage = input.Body?.toLowerCase().trim() ?? ''; // Removed redundancy
-
-            if (validTonalities.includes(userMessage)) {
-                // User selected a valid tonality, update state and move to image upload pending
-                return {
-                    ...state,
-                    selectedTonality: userMessage,
-                    pending: PendingType.VIBE_CHECK_IMAGE,
-                    intent: 'vibe_check',
-                    missingProfileField: null,
-                };
-            } else {
-                // User input invalid tonality - prompt again or fallback
-                return {
-                    ...state,
-                    assistantReply: [
-                        {
-                            reply_type: 'text',
-                            reply_text: `Invalid tonality selection. Please choose one of: Friendly, Savage, Hype BFF`,
-                        },
-                    ],
-                    pending: PendingType.TONALITY_SELECTION,
-                };
-            }
-        }
-
-        // Priority 3: Handle pending image-based intents
-        const imageCount = numImagesInMessage(conversationHistoryWithImages);
-        if (imageCount > 0) {
-            if (pending === PendingType.VIBE_CHECK_IMAGE) {
-                logger.debug({ userId }, 'Routing to vibe_check due to pending intent and image presence');
-                return { ...state, intent: 'vibe_check', missingProfileField: null };
-            } else if (pending === PendingType.COLOR_ANALYSIS_IMAGE) {
-                logger.debug(
-                    { userId },
-                    'Routing to color_analysis due to pending intent and image presence',
-                );
-                return { ...state, intent: 'color_analysis', missingProfileField: null };
-            }
-        }
-
-        // Calculate cooldown periods for premium services (30-min cooldown)
-        const now = Date.now();
-        const lastVibeCheckAt = user.lastVibeCheckAt?.getTime() ?? null;
-        const vibeMinutesAgo = lastVibeCheckAt ? Math.floor((now - lastVibeCheckAt) / (1000 * 60)) : -1;
-        const canDoVibeCheck = vibeMinutesAgo === -1 || vibeMinutesAgo >= 30;
-
-        const lastColorAnalysisAt = user.lastColorAnalysisAt?.getTime() ?? null;
-        const colorMinutesAgo = lastColorAnalysisAt
-            ? Math.floor((now - lastColorAnalysisAt) / (1000 * 60))
-            : -1;
-        const canDoColorAnalysis = colorMinutesAgo === -1 || colorMinutesAgo >= 30;
-
-        // Priority 4: Use LLM for intelligent intent classification
-        try {
-            const systemPromptText = await loadPrompt('routing/route_intent.txt');
-            const formattedSystemPrompt = systemPromptText
-                .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
-                .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
-
-            const systemPrompt = new SystemMessage(formattedSystemPrompt);
-
-            const response = await getTextLLM()
-                .withStructuredOutput(LLMOutputSchema)
-                .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeIntent');
-
-            let { intent, missingProfileField } = response;
-
-            if (missingProfileField) {
-                logger.debug(
-                    { userId, missingProfileField },
-                    'Checking if missingProfileField can be cleared based on user profile',
-                );
-
-                if (missingProfileField === 'gender' && (user.inferredGender || user.confirmedGender)) {
-                    logger.debug(
-                        { userId },
-                        'Clearing missingProfileField gender because user already has it.',
-                    );
-                    missingProfileField = null;
-                } else if (
-                    missingProfileField === 'age_group' &&
-                    (user.inferredAgeGroup || user.confirmedAgeGroup)
-                ) {
-                    logger.debug(
-                        { userId },
-                        'Clearing missingProfileField age_group because user already has it.',
-                    );
-                    missingProfileField = null;
-                }
-            }
-
-            if (intent === 'vibe_check' && state.pending === PendingType.TONALITY_SELECTION) {
-                state.generalIntent = 'tonality';
-                logger.debug(
-                    { userId, intent, pending: state.pending, generalIntent: state.generalIntent },
-                    'Set generalIntent to tonality for vibe_check with TONALITY_SELECTION',
-                );
-            }
-
-            // Route to Style Studio handler when intent is style_studio
-            if (intent === 'style_studio') {
-                return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
-            }
-
-            return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
-        } catch (err: unknown) {
-            throw new InternalServerError('Failed to route intent', { cause: err });
-        }
+  // ------------------------------
+  // 1️⃣ Priority 1: Handle explicit button payloads
+  // ------------------------------
+  if (buttonPayload) {
+    // Style Studio root → opens List Picker
+    if (buttonPayload === 'style_studio' || buttonPayload === 'stylestudio') {
+      return {
+        ...state,
+        intent: 'style_studio',
+        pending: PendingType.STYLE_STUDIO_MENU,
+        missingProfileField: null,
+      };
     }
+
+    // Style Studio sub-services → normal quick flow
+    const validSubIntents = [
+      'style_studio_occasion',
+      'style_studio_vacation',
+      'style_studio_general',
+    ] as const;
+
+    if (validSubIntents.includes(buttonPayload as any)) {
+      const subIntent = buttonPayload as (typeof validSubIntents)[number];
+      return {
+        ...state,
+        intent: 'style_studio',
+        subIntent,
+        pending: PendingType.NONE,
+        missingProfileField: null,
+      };
+    }
+
+    // Handle other service payloads
+    if (otherValid.includes(buttonPayload)) {
+      const intent = buttonPayload as IntentLabel;
+
+      // vibe_check → triggers quick reply tonality options
+      if (intent === 'vibe_check') {
+        logger.debug({ buttonPayload }, 'Received vibe_check payload - resetting tonality.');
+        return {
+          ...state,
+          intent: 'vibe_check',
+          pending: PendingType.TONALITY_SELECTION, // ensures quick reply
+          selectedTonality: null,
+          missingProfileField: null,
+        };
+      }
+
+      // color_analysis → goes to image upload list picker
+      if (intent === 'color_analysis') {
+        return {
+          ...state,
+          intent: 'color_analysis',
+          pending: PendingType.COLOR_ANALYSIS_IMAGE,
+          missingProfileField: null,
+        };
+      }
+
+      return { ...state, intent, missingProfileField: null };
+    }
+
+    // Tonality selections
+    if (validTonalities.includes(buttonPayload.toLowerCase())) {
+      return {
+        ...state,
+        intent: 'vibe_check',
+        selectedTonality: buttonPayload.toLowerCase(),
+        pending: PendingType.VIBE_CHECK_IMAGE,
+        missingProfileField: null,
+      };
+    }
+
+    // Default fallback
+    return { ...state, intent: 'general', missingProfileField: null };
+  }
+
+  // ------------------------------
+  // 2️⃣ Priority 2: Handle text inputs
+  // ------------------------------
+  const userMessage = input.Body?.toLowerCase().trim() ?? '';
+
+  if (userMessage === 'style_studio') {
+    logger.debug({ userId }, 'Explicit text match: style_studio.');
+    return {
+      ...state,
+      intent: 'style_studio',
+      pending: PendingType.STYLE_STUDIO_MENU,
+      missingProfileField: null,
+    };
+  }
+
+  if (userMessage === 'vibe_check') {
+    return {
+      ...state,
+      intent: 'vibe_check',
+      pending: PendingType.TONALITY_SELECTION,
+      missingProfileField: null,
+    };
+  }
+
+  // ------------------------------
+  // 3️⃣ Pending tonality handling
+  // ------------------------------
+  if (pending === PendingType.TONALITY_SELECTION) {
+    if (validTonalities.includes(userMessage)) {
+      return {
+        ...state,
+        selectedTonality: userMessage,
+        pending: PendingType.VIBE_CHECK_IMAGE,
+        intent: 'vibe_check',
+        missingProfileField: null,
+      };
+    }
+    return {
+      ...state,
+      assistantReply: [
+        {
+          reply_type: 'text',
+          reply_text: `Invalid tonality. Choose: Friendly, Savage, or Hype BFF.`,
+        },
+      ],
+      pending: PendingType.TONALITY_SELECTION,
+    };
+  }
+
+  // ------------------------------
+  // 4️⃣ Handle image-based pending intents
+  // ------------------------------
+  const imageCount = numImagesInMessage(conversationHistoryWithImages);
+  if (imageCount > 0) {
+    if (pending === PendingType.VIBE_CHECK_IMAGE) {
+      logger.debug({ userId }, 'Routing to vibe_check due to image presence.');
+      return { ...state, intent: 'vibe_check', missingProfileField: null };
+    }
+    if (pending === PendingType.COLOR_ANALYSIS_IMAGE) {
+      logger.debug({ userId }, 'Routing to color_analysis due to image presence.');
+      return { ...state, intent: 'color_analysis', missingProfileField: null };
+    }
+  }
+
+  // ------------------------------
+  // 5️⃣ Fallback to LLM routing
+  // ------------------------------
+  const now = Date.now();
+  const lastVibeCheckAt = user.lastVibeCheckAt?.getTime() ?? null;
+  const vibeMinutesAgo = lastVibeCheckAt ? Math.floor((now - lastVibeCheckAt) / (1000 * 60)) : -1;
+  const canDoVibeCheck = vibeMinutesAgo === -1 || vibeMinutesAgo >= 30;
+
+  const lastColorAnalysisAt = user.lastColorAnalysisAt?.getTime() ?? null;
+  const colorMinutesAgo = lastColorAnalysisAt
+    ? Math.floor((now - lastColorAnalysisAt) / (1000 * 60))
+    : -1;
+  const canDoColorAnalysis = colorMinutesAgo === -1 || colorMinutesAgo >= 30;
+
+  try {
+    const systemPromptText = await loadPrompt('routing/route_intent.txt');
+    const formattedSystemPrompt = systemPromptText
+      .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
+      .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
+
+    const systemPrompt = new SystemMessage(formattedSystemPrompt);
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeIntent');
+
+    let { intent, missingProfileField } = response;
+
+    if (missingProfileField === 'gender' && (user.inferredGender || user.confirmedGender)) {
+      missingProfileField = null;
+    } else if (
+      missingProfileField === 'age_group' &&
+      (user.inferredAgeGroup || user.confirmedAgeGroup)
+    ) {
+      missingProfileField = null;
+    }
+
+    return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to route intent', { cause: err });
+  }
 }
