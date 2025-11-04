@@ -190,8 +190,6 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
         return { ...state, assistantReply };
       }
       
-      // Remove the processingReply warning by removing the unused variable definition.
-      
       logger.info({ whatsappId, messageId }, 'Starting This or That analysis with combined images');
 
       const combinedImageDataUrl = await combineImagesSideBySide(firstImageUrl!, secondImageUrl!);
@@ -222,11 +220,19 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
         ? '2nd outfit'
         : '2nd outfit';
 
-      // Build a concise message to avoid Twilio 1600-char limit
-      const reason = formatText(finalResponse.result_text || finalResponse.reasoning || '').slice(0, 280);
+      const reasonRaw = finalResponse.result_text || finalResponse.reasoning || '';
+      // Format reason text with paragraph breaks
+      const reasonFormatted = formatText(reasonRaw).slice(0, 280);
+
       const m = finalResponse.metrics;
-      const scores = m ? ` (Style ${m.style}/10 · Color ${m.color}/10 · Fit ${m.fit}/10)` : '';
-      const concise = `${winnerLabel} wins.${scores}${reason ? `\nWhy: ${reason}` : ''}`.trim();
+      const scoresText = m
+        ? `\n\nScores:\n• Style: ${m.style}/10\n• Color: ${m.color}/10\n• Fit: ${m.fit}/10`
+        : '';
+
+      const reasonText = reasonFormatted ? `\n\nReason:\n${reasonFormatted}` : '';
+
+      // Compose final multi-line answer, tidier aligned
+      const concise = `${winnerLabel} wins!${scoresText}${reasonText}`;
 
       logger.info({ winner: finalResponse.winner, mappedWinner: winnerLabel, length: concise.length }, 'ThisOrThat result composed');
 
