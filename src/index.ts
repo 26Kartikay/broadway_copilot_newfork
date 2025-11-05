@@ -2,9 +2,10 @@ import 'dotenv/config';
 import './scheduler/dailyPromptScheduler';
 
 import cors from 'cors';
+import { randomUUID } from 'crypto';
 import express, { NextFunction, Request, Response } from 'express';
 
-import { initializeAgent, runAgent } from './agent';
+import { initializeAgent, runAgent, runAgentForHttp } from './agent';
 import { connectPrisma } from './lib/prisma';
 import { connectRedis, redis } from './lib/redis';
 import { processStatusCallback } from './lib/twilio';
@@ -30,11 +31,65 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.use('/uploads', express.static(staticUploadsMount()));
+app.use(express.static('public'));
 
 const getMessageKey = (id: string) => `message:${id}`;
 const getUserActiveKey = (id: string) => `user_active:${id}`;
 const getUserQueueKey = (id: string) => `user_queue:${id}`;
 const getUserAbortChannel = (id: string) => `user_abort:${id}`;
+
+/**
+ * App-facing chat endpoint (no Twilio required). Returns replies in HTTP response.
+ */
+app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { userId, text, media, button, profileName, messageId } = req.body || {};
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const sid = String(messageId || `msg_${randomUUID()}`);
+
+    // Build a Twilio-like payload so the graph can run unchanged
+    const twilioPayload: TwilioWebhookRequest = {
+      MessageSid: sid,
+      SmsSid: sid,
+      SmsMessageSid: sid,
+      AccountSid: 'APP',
+      From: `app:${userId}`,
+      To: 'app:server',
+      Body: String(text ?? ''),
+      NumMedia: Array.isArray(media) ? String(media.length) : '0',
+      NumSegments: '1',
+      SmsStatus: 'received',
+      ApiVersion: '2010-04-01',
+      ProfileName: profileName ?? undefined,
+      WaId: String(userId),
+    } as TwilioWebhookRequest;
+
+    // Map media array -> MediaUrl0, MediaContentType0...
+    if (Array.isArray(media)) {
+      media.slice(0, 10).forEach((m: any, index: number) => {
+        (twilioPayload as any)[`MediaUrl${index}`] = m?.url;
+        if (m?.contentType) {
+          (twilioPayload as any)[`MediaContentType${index}`] = m.contentType;
+        }
+      });
+    }
+
+    // Map button to ButtonText/Payload if provided
+    if (button && (button.text || button.payload)) {
+      twilioPayload.ButtonText = button.text;
+      twilioPayload.ButtonPayload = button.payload;
+      twilioPayload.MessageType = button.type || 'quick_reply';
+    }
+
+    const { replies, pending } = await runAgentForHttp(String(userId), sid, twilioPayload);
+    return res.status(200).json({ replies, pending });
+  } catch (err: unknown) {
+    return next(err);
+  }
+});
 
 /**
  * Main Twilio webhook handler for incoming WhatsApp messages.

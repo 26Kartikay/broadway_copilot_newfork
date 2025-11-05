@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Broadway Chat (No WhatsApp)</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #0b0c10; color: #e9eef2; }
+      .container { max-width: 800px; margin: 0 auto; padding: 16px; }
+      .card { background: #111317; border: 1px solid #20242d; border-radius: 12px; padding: 16px; }
+      .row { display: flex; gap: 8px; margin-bottom: 12px; }
+      input, textarea { width: 100%; background: #0b0c10; color: #e9eef2; border: 1px solid #20242d; border-radius: 8px; padding: 10px; }
+      button { background: #2d6cdf; color: white; border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .messages { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+      .bubble { padding: 12px; border-radius: 12px; max-width: 80%; white-space: pre-wrap; }
+      .user { align-self: flex-end; background: #1e222b; }
+      .assistant { align-self: flex-start; background: #0f1220; border: 1px solid #20242d; }
+      .img { max-width: 240px; border-radius: 10px; border: 1px solid #20242d; display: block; margin-top: 8px; }
+      .qr { display: inline-flex; gap: 8px; margin-top: 8px; }
+      .qr button { background: #1f6feb; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Broadway Chat (No WhatsApp)</h2>
+      <div class="card">
+        <div class="row">
+          <input id="userId" placeholder="User ID (stable identifier)" value="demo_user" />
+          <input id="profileName" placeholder="Profile name (optional)" />
+        </div>
+        <div class="row">
+          <textarea id="text" placeholder="Type a message" rows="3"></textarea>
+        </div>
+        <div class="row">
+          <input id="mediaUrl" placeholder="Image URL (optional)" />
+          <button id="sendBtn">Send</button>
+        </div>
+        <div class="messages" id="messages"></div>
+      </div>
+    </div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const messagesEl = $('messages');
+
+      function addBubble(role, content) {
+        const el = document.createElement('div');
+        el.className = `bubble ${role}`;
+        el.innerHTML = content;
+        messagesEl.appendChild(el);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      async function send() {
+        const userId = $('userId').value.trim() || 'demo_user';
+        const profileName = $('profileName').value.trim() || undefined;
+        const text = $('text').value;
+        const mediaUrl = $('mediaUrl').value.trim();
+        const media = mediaUrl ? [{ url: mediaUrl, contentType: 'image/jpeg' }] : [];
+        const body = { userId, text, media, profileName };
+
+        addBubble('user', text || (mediaUrl ? `Sent image: ${mediaUrl}` : '(empty)'));
+
+        const btn = $('sendBtn');
+        btn.disabled = true;
+        try {
+          const resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const data = await resp.json();
+          const replies = data.replies || [];
+          for (const r of replies) {
+            if (r.reply_type === 'text') {
+              addBubble('assistant', r.reply_text);
+            } else if (r.reply_type === 'image') {
+              addBubble('assistant', (r.reply_text ? r.reply_text + '<br/>' : '') + `<img class="img" src="${r.media_url}" alt="image"/>`);
+            } else if (r.reply_type === 'quick_reply' || r.reply_type === 'list_picker') {
+              const buttons = (r.buttons || []).map(b => `<button disabled>${b.text}</button>`).join(' ');
+              addBubble('assistant', `${r.reply_text}<div class="qr">${buttons}</div>`);
+            }
+          }
+        } catch (e) {
+          addBubble('assistant', 'Error contacting server.');
+        } finally {
+          btn.disabled = false;
+          $('text').value = '';
+          $('mediaUrl').value = '';
+        }
+      }
+
+      $('sendBtn').addEventListener('click', send);
+      $('text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(); });
+    </script>
+  </body>
+  </html>
+
+

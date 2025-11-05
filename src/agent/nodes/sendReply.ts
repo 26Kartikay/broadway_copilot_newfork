@@ -60,6 +60,25 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
             ? (state.selectedTonality as Tonality)
             : null;
 
+    // If deliveryMode is HTTP, don't send via Twilio; return replies in state
+    if (state.deliveryMode === 'http') {
+        logger.debug({ whatsappId }, 'HTTP delivery mode: collecting replies for response');
+        await redis.hSet(messageKey, { status: 'delivered' });
+
+        await prisma.message.create({
+            data: {
+                conversationId,
+                role: MessageRole.AI,
+                content: formattedContent,
+                pending: pendingToPersist,
+                selectedTonality: selectedTonalityToPersality,
+            },
+        });
+
+        queueFeedbackRequest(user.id, conversationId);
+        return { ...state, httpResponse: orderedReplies };
+    }
+
     let success = true;
     try {
         // Loop uses the new ordered array, ensuring images are sent first
@@ -75,7 +94,6 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
                     'Sent text message',
                 );
             } else if (r.reply_type === 'quick_reply' || r.reply_type === 'list_picker') {
-                // This handles your List Picker (via sendMenu)
                 if (r.buttons.length >= 2 && r.buttons.length <= 4) {
                     await sendMenu(whatsappId, r.reply_text, r.buttons);
                 } else {
@@ -95,7 +113,6 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
                     'Sent menu message',
                 );
             } else if (r.reply_type === 'image') {
-                // The image is now guaranteed to be sent first (or before any list_picker that followed it)
                 await sendImage(whatsappId, r.media_url, r.reply_text);
                 logger.debug(
                     { whatsappId, replyIndex: index + 1, mediaUrl: r.media_url },

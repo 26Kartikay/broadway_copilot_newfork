@@ -68,6 +68,12 @@ export interface GraphState {
     
   thisOrThatFirstImageId?: string | undefined;
 
+  /** Delivery mode for responses: 'twilio' (default) or 'http' for app */
+  deliveryMode?: 'twilio' | 'http';
+
+  /** Replies returned over HTTP when deliveryMode is 'http' */
+  httpResponse?: Replies;
+
 }
 
 // ============================================================================

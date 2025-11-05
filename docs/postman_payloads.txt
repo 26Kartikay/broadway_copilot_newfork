@@ -1,0 +1,354 @@
+Broadway Bot - Request Bodies Cheatsheet (for Postman)
+=====================================================
+
+Use these to hit the local/prod backend without guessing payloads. Each section includes BOTH:
+- /api/chat (JSON) — no Twilio required
+- /twilio/ (x-www-form-urlencoded) — Twilio-shaped body for the webhook
+
+Notes
+- Replace placeholders like YOUR_HOST, user_123, and image URLs.
+- messageId may be omitted in /api/chat (the server generates one). For /twilio/, MessageSid is required.
+- Add X-Twilio-Signature header for /twilio/ (any value if TWILIO_VALIDATE_WEBHOOK=false).
+
+--------------------------------------------------------------------
+1. General: Greeting / Chat
+--------------------------------------------------------------------
+
+[APP] /api/chat JSON
+{
+  "userId": "user_123",
+  "profileName": "Alex",
+  "text": "Hello!"
+}
+
+[Twilio] /twilio/ form fields
+WaId=15551234567
+&MessageSid=msg_general_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=Hello!
+&NumMedia=0
+
+--------------------------------------------------------------------
+2. Menu navigation (General -> Menu)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "menu"
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_menu_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=menu
+&NumMedia=0
+
+--------------------------------------------------------------------
+3. Vibe Check (Tonality selection via button)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "button": {
+    "text": "Hype BFF",
+    "payload": "tonality_hype_bff",
+    "type": "quick_reply"
+  }
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_vibe_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=
+&NumMedia=0
+&ButtonText=Hype%20BFF
+&ButtonPayload=tonality_hype_bff
+&MessageType=button
+
+--------------------------------------------------------------------
+4. Color Analysis (with one selfie/image)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "color analysis",
+  "media": [
+    { "url": "https://example.com/selfie.jpg", "contentType": "image/jpeg" }
+  ]
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_color_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=color%20analysis
+&NumMedia=1
+&MediaUrl0=https://example.com/selfie.jpg
+&MediaContentType0=image/jpeg
+
+--------------------------------------------------------------------
+5. Style Studio: General
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "Style Studio"
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_ss_general_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=Style%20Studio
+&NumMedia=0
+
+--------------------------------------------------------------------
+6. Style Studio: Occasion (button tap)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "button": {
+    "text": "Style for any occasion",
+    "payload": "style_studio_occasion",
+    "type": "quick_reply"
+  }
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_ss_occasion_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=
+&NumMedia=0
+&ButtonText=Style%20for%20any%20occasion
+&ButtonPayload=style_studio_occasion
+&MessageType=button
+
+--------------------------------------------------------------------
+7. Style Studio: Vacation (button tap)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "button": {
+    "text": "Vacation looks",
+    "payload": "style_studio_vacation",
+    "type": "quick_reply"
+  }
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_ss_vacation_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=
+&NumMedia=0
+&ButtonText=Vacation%20looks
+&ButtonPayload=style_studio_vacation
+&MessageType=button
+
+--------------------------------------------------------------------
+8. Styling: Suggest outfits (free text)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "Suggest outfits for a dinner date"
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_styling_suggest_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=Suggest%20outfits%20for%20a%20dinner%20date
+&NumMedia=0
+
+--------------------------------------------------------------------
+9. Styling: Pairing (free text)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "How to style white sneakers with jeans?"
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_styling_pairing_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=How%20to%20style%20white%20sneakers%20with%20jeans%3F
+&NumMedia=0
+
+--------------------------------------------------------------------
+10. This or That: Compare two images
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "this or that",
+  "media": [
+    { "url": "https://example.com/lookA.jpg", "contentType": "image/jpeg" },
+    { "url": "https://example.com/lookB.jpg", "contentType": "image/jpeg" }
+  ]
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_thisorthat_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=this%20or%20that
+&NumMedia=2
+&MediaUrl0=https://example.com/lookA.jpg
+&MediaContentType0=image/jpeg
+&MediaUrl1=https://example.com/lookB.jpg
+&MediaContentType1=image/jpeg
+
+--------------------------------------------------------------------
+11. Skin Lab (image-based skin analysis)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "skin lab",
+  "media": [
+    { "url": "https://example.com/face.jpg", "contentType": "image/jpeg" }
+  ]
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_skinlab_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=skin%20lab
+&NumMedia=1
+&MediaUrl0=https://example.com/face.jpg
+&MediaContentType0=image/jpeg
+
+--------------------------------------------------------------------
+12. Quick-reply follow-up (generic button tap)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "button": {
+    "text": "Yes",
+    "payload": "more_yes",
+    "type": "quick_reply"
+  }
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_button_more_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=
+&NumMedia=0
+&ButtonText=Yes
+&ButtonPayload=more_yes
+&MessageType=button
+
+--------------------------------------------------------------------
+13. Location (if supported by your flows)
+--------------------------------------------------------------------
+
+[Twilio] (send coordinates)
+WaId=15551234567
+&MessageSid=msg_location_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=location
+&NumMedia=0
+&Latitude=37.7749
+&Longitude=-122.4194
+&Address=San%20Francisco
+&Label=SF
+
+(/api/chat has no special fields for location; pass as text for now.)
+
+--------------------------------------------------------------------
+14. Error handling test (empty text, no media)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": ""
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_empty_1
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=
+&NumMedia=0
+
+--------------------------------------------------------------------
+15. Custom messageId (idempotency testing)
+--------------------------------------------------------------------
+
+[APP]
+{
+  "userId": "user_123",
+  "text": "hello",
+  "messageId": "msg_custom_0001"
+}
+
+[Twilio]
+WaId=15551234567
+&MessageSid=msg_custom_0001
+&From=whatsapp:+15551234567
+&To=whatsapp:+14155238886
+&Body=hello
+&NumMedia=0
+
+--------------------------------------------------------------------
+Curl templates
+--------------------------------------------------------------------
+
+# APP (JSON) example
+curl -X POST http://YOUR_HOST/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId":"user_123",
+    "text":"Hello"
+  }'
+
+# Twilio (form-encoded) example
+curl -X POST http://YOUR_HOST/twilio/ \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "X-Twilio-Signature: dummy" \
+  --data-urlencode "WaId=15551234567" \
+  --data-urlencode "MessageSid=msg_abc" \
+  --data-urlencode "From=whatsapp:+15551234567" \
+  --data-urlencode "To=whatsapp:+14155238886" \
+  --data-urlencode "Body=Hello" \
+  --data-urlencode "NumMedia=0"
+
+

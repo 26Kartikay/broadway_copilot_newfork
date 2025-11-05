@@ -215,3 +215,75 @@ export async function runAgent(
     await sub.unsubscribe(channel);
   }
 }
+
+/**
+ * Executes the agent graph for app (HTTP) delivery. Returns replies and pending state.
+ */
+export async function runAgentForHttp(
+  userId: string,
+  messageId: string,
+  input: TwilioWebhookRequest,
+): Promise<{ replies: NonNullable<GraphState['httpResponse']>; pending: GraphState['pending'] }>
+{
+  const controller = new AbortController();
+  const sub = await getSubscriber();
+  const channel = getUserAbortChannel(userId);
+
+  const listener = (message: string) => {
+    if (message === messageId) {
+      controller.abort();
+    }
+  };
+  sub.subscribe(channel, listener);
+
+  const { WaId: whatsappId, ProfileName: profileName } = input;
+
+  if (!whatsappId) {
+    throw new Error('Whatsapp ID not found in webhook payload');
+  }
+
+  if (!compiledApp) {
+    throw new Error('Agent not initialized. Call initializeAgent() on startup.');
+  }
+
+  let conversation: Conversation | undefined;
+  let finalState: Partial<GraphState> | null = null;
+  const graphRunId = messageId;
+  try {
+    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
+      whatsappId,
+      profileName ?? '',
+    );
+    conversation = _conversation;
+
+    await prisma.graphRun.create({
+      data: {
+        id: graphRunId,
+        userId: user.id,
+        conversationId: conversation.id,
+        initialState: { input, user, deliveryMode: 'http' },
+      },
+    });
+
+    finalState = await compiledApp.invoke(
+      {
+        input,
+        user,
+        graphRunId,
+        conversationId: conversation.id,
+        deliveryMode: 'http',
+        traceBuffer: { nodeRuns: [], llmTraces: [] },
+      },
+      { signal: controller.signal, runId: graphRunId },
+    );
+    logGraphResult(graphRunId, 'COMPLETED', finalState);
+
+    const replies = (finalState?.httpResponse ?? []) as NonNullable<GraphState['httpResponse']>;
+    return { replies, pending: finalState?.pending ?? null };
+  } catch (err: unknown) {
+    logGraphResult(graphRunId, 'ERROR', finalState, err);
+    throw err;
+  } finally {
+    await sub.unsubscribe(channel);
+  }
+}
