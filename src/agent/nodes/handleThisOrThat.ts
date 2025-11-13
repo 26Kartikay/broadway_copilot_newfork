@@ -87,35 +87,28 @@ async function saveFirstImageUrl(
   imageUrl: string,
   ttlSeconds: number = 3600
 ) {
-  logger.debug({ whatsappId, imageUrl }, 'Saving first image URL to Redis');
-  await redis.hSet(`${REDIS_PREFIX}:${whatsappId}`, {
+    await redis.hSet(`${REDIS_PREFIX}:${whatsappId}`, {
     firstImageUrl: imageUrl,
     pending: 'SECOND_IMAGE',
   });
   await redis.expire(`${REDIS_PREFIX}:${whatsappId}`, ttlSeconds);
-  logger.debug({ whatsappId }, 'Saved first image URL to Redis');
-}
+  }
 
 async function saveSecondImageUrl(whatsappId: string, imageUrl: string) {
-  logger.debug({ whatsappId, imageUrl }, 'Saving second image URL to Redis');
   await redis.hSet(`${REDIS_PREFIX}:${whatsappId}`, {
     secondImageUrl: imageUrl,
     // Setting state to COMBINE_AND_ANALYZE here to trigger the next step
     pending: 'COMBINE_AND_ANALYZE', 
   });
-  logger.debug({ whatsappId }, 'Saved second image URL to Redis');
 }
 
 async function getImageState(whatsappId: string) {
   const state = await redis.hGetAll(`${REDIS_PREFIX}:${whatsappId}`);
-  logger.debug({ whatsappId, state }, 'Loaded Redis thisOrThat state');
   return state;
 }
 
 async function clearImageState(whatsappId: string) {
-  logger.debug({ whatsappId }, 'Clearing thisOrThat state from Redis');
   await redis.del(`${REDIS_PREFIX}:${whatsappId}`);
-  logger.debug({ whatsappId }, 'Cleared thisOrThat state from Redis');
 }
 
 export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
@@ -133,7 +126,6 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
       if (imageId) {
         // User sent the first image immediately. Save it and ask for the second.
         await saveFirstImageUrl(whatsappId, imageId);
-        logger.info({ whatsappId }, 'Starting new This or That flow, first image received.');
         const assistantReply: Replies = [{
           reply_type: 'text',
           reply_text: 'Great! Now upload a photo of your second outfit for the showdown.',
@@ -141,7 +133,6 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
         return { ...state, assistantReply };
       } else {
         // User started with text, or sent a non-image message. Ask for the first image.
-        logger.info({ whatsappId }, 'Starting new This or That flow - ask for first image');
         const assistantReply: Replies = [{
           reply_type: 'text',
           reply_text: "Let's play *This or That*! Please upload a photo of your first outfit.",

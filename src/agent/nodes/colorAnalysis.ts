@@ -83,10 +83,6 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(NoImageLLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'colorAnalysis');
 
-    logger.debug(
-      { userId, reply_text: response.reply_text },
-      'Invoking text LLM for no-image response',
-    );
 
     const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
     return {

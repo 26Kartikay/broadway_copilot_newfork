@@ -69,11 +69,11 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           role: MessageRole.AI,
         },
         orderBy: { createdAt: 'desc' },
-        select: { 
-          pending: true, 
-          selectedTonality: true, 
+        select: {
+          pending: true,
+          selectedTonality: true,
           // ✨ CRITICAL CHANGE 2: Select the missing field from the database
-          thisOrThatFirstImageId: true, 
+          thisOrThatFirstImageId: true,
         },
       }),
     ]);
@@ -84,19 +84,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     // ✨ CRITICAL CHANGE 3: Retrieve the image ID from the loaded message
     const thisOrThatFirstImageIdDB = latestAssistantMessage?.thisOrThatFirstImageId ?? undefined;
 
-    logger.debug(
-      {
-        whatsappId,
-        pendingStateDB,
-        selectedTonalityDB,
-        thisOrThatFirstImageIdDB, // Add the ID to the log for debugging
-        conversationId,
-        graphRunId,
-        buttonPayload,
-        text,
-      },
-      'IngestMessage: Current pending, selectedTonality, and input',
-    );
+    // REMOVED: logger.debug block for 'IngestMessage: Current pending, selectedTonality, and input'
 
     let savedMessage;
     if (lastMessage && lastMessage.role === MessageRole.USER) {
@@ -162,7 +150,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
       pending: pendingStateDB,
       selectedTonality: selectedTonalityDB,
       // ✨ CRITICAL CHANGE 4: Return the loaded image ID from the transaction
-      thisOrThatFirstImageId: thisOrThatFirstImageIdDB, 
+      thisOrThatFirstImageId: thisOrThatFirstImageIdDB,
     };
   });
 

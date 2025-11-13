@@ -4,7 +4,6 @@ import { ConversationStatus, PendingType } from '@prisma/client';
 import { getTextLLM, SystemMessage } from '../../lib/ai';
 import { prisma } from '../../lib/prisma';
 import { queueMemoryExtraction } from '../../lib/tasks';
-import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 
@@ -74,11 +73,6 @@ export async function handleFeedback(state: GraphState): Promise<GraphState> {
         reply_text: acknowledgementText ?? FEEDBACK_ACK_FALLBACK,
       },
     ];
-
-    logger.info(
-      { userId: user.id, conversationId, helpful, hasComment: Boolean(sanitizedComment) },
-      'Stored user feedback',
-    );
   }
 
   return {

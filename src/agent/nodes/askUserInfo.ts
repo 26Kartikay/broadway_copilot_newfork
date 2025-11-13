@@ -26,12 +26,6 @@ const LLMOutputSchema = z.object({
 export async function askUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
-
-  logger.debug(
-    { userId, messageId, missingField: state.missingProfileField },
-    'Asking user for missing profile information',
-  );
-
   try {
     const systemPromptText = await loadPrompt('data/ask_user_info.txt');
 

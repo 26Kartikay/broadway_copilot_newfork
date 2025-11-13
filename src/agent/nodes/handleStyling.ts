@@ -33,7 +33,6 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
         .withStructuredOutput(LLMOutputSchema)
         .run(systemPrompt, conversationHistoryTextOnly, state.traceBuffer, 'handleStyling');
       const reply_text = response.message1_text as string;
-      logger.debug({ userId, reply_text }, 'Returning with default LLM reply');
       const replies: Replies = [{ reply_type: 'text', reply_text }];
       return { ...state, assistantReply: replies };
     }
@@ -62,8 +61,6 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
         reply_text: finalResponse.message2_text,
       });
     }
-
-    logger.debug({ userId, replies }, 'Returning styling response');
     return { ...state, assistantReply: replies };
   } catch (err: unknown) {
     logger.error({ userId, err }, 'Error in handleStyling');

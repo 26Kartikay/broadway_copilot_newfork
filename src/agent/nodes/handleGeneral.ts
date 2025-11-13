@@ -41,10 +41,9 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
       logger.debug({ userId, messageId }, 'Greeting image sent, preparing list picker.');
 
       try {
-        // Send List Picker menu via Twilio’s Content Template
         await sendListPicker(
   user.whatsappId,
-  TWILIO_LIST_PICKER_SID,  // use constant imported from constants.ts
+  TWILIO_LIST_PICKER_SID,  
   { user_name: user.profileName ?? '' }
 );
       } catch (err) {

@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   app:
     image: node:22
@@ -8,9 +10,7 @@ services:
       - |
         set -Eeuo pipefail
 
-        log() {
-          printf '%s\n' "$${*}"
-        }
+        log() { printf '%s\n' "$${*}"; }
 
         log "Installing dependencies..."
         npm ci --legacy-peer-deps --silent --no-progress
@@ -51,11 +51,6 @@ services:
         rm -f /tmp/prisma-db-push.log
         log "Database schema is in sync."
 
-        # Use static ngrok domain instead of polling API
-        export SERVER_URL="https://${NGROK_DOMAIN}"
-        log "Using static ngrok domain: $${SERVER_URL}"
-        log "Twilio webhook URL: $${SERVER_URL}/twilio"
-
         log "Starting development server..."
         npm run dev
     env_file:
@@ -69,15 +64,14 @@ services:
       POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
       REDIS_URL: redis://redis:6379
-      SERVER_URL: https://${NGROK_DOMAIN}
+      SERVER_URL: ${SERVER_URL:-http://localhost:8080}
+      TWILIO_VALIDATE_WEBHOOK: ${TWILIO_VALIDATE_WEBHOOK:-false}
     ports:
       - "${PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
-      ngrok:
         condition: service_started
     volumes:
       - .:/usr/src/app

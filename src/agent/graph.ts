@@ -27,7 +27,7 @@ export function buildAgentGraph() {
     .addNode('routeIntent', routeIntent)
     .addNode('routeGeneral', routeGeneral)
     .addNode('askUserInfo', askUserInfo)
-    .addNode('handleStyling', handleStyling) // optional compatibility
+    .addNode('handleStyling', handleStyling) 
     .addNode('handleFeedback', handleFeedback)
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
