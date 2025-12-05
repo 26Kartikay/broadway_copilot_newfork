@@ -88,3 +88,17 @@ jobs:
           secrets: |-
             DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/PUBLIC_DATABASE_URL/versions/latest
             OPENAI_API_KEY=projects/${{ env.PROJECT_ID }}/secrets/OPENAI_API_KEY/versions/latest
+
+      - name: Deploy sendFeedbackRequest
+        uses: google-github-actions/deploy-cloud-functions@v4
+        with:
+          name: sendFeedbackRequest
+          entry_point: sendFeedbackRequest
+          runtime: nodejs20
+          project_id: ${{ env.PROJECT_ID }}
+          region: ${{ env.REGION }}
+          source_dir: ./functions
+          environment_variables: |-
+            FUNCTION_TARGET=sendFeedbackRequest
+          secrets: |-
+            DATABASE_URL=projects/${{ env.PROJECT_ID }}/secrets/PUBLIC_DATABASE_URL/versions/latest

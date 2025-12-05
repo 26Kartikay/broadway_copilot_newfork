@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   app:
     image: node:22
@@ -65,7 +63,6 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
       REDIS_URL: redis://redis:6379
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
-      TWILIO_VALIDATE_WEBHOOK: ${TWILIO_VALIDATE_WEBHOOK:-false}
     ports:
       - "${PORT:-8080}:8080"
     depends_on:
@@ -118,8 +115,11 @@ services:
     volumes:
       - redis_data:/data
 
+  # Optional: ngrok for exposing local server (useful for mobile app testing)
   ngrok:
     image: ngrok/ngrok:latest
+    profiles:
+      - tunnel
     command:
       - http
       - --domain=${NGROK_DOMAIN}

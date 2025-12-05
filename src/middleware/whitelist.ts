@@ -1,35 +1,40 @@
 import { NextFunction, Request, Response } from 'express';
+import { ChatRequest } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
-import { sendText } from '../lib/twilio';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { ForbiddenError, InternalServerError } from '../utils/errors';
 import { logger } from '../utils/logger';
 
+/**
+ * Middleware to check if a user is whitelisted.
+ * In development mode, all users are allowed.
+ * In production, only whitelisted users can access the API.
+ */
 export const whitelist = async (req: Request, res: Response, next: NextFunction) => {
   if (process.env.NODE_ENV === 'development') {
     return next();
   }
 
-  const { WaId } = req.body as TwilioWebhookRequest;
+  const { userId } = req.body as ChatRequest;
 
-  if (!WaId) {
+  if (!userId) {
     return next(new ForbiddenError('Unauthorized'));
   }
 
   try {
     const user = await prisma.userWhitelist.findUnique({
       where: {
-        waId: WaId,
+        waId: userId,
       },
     });
 
     if (!user) {
-      logger.info(`Unauthorized access attempt by ${WaId}`);
-      await sendText(
-        WaId,
-        "Hey! Thanks for your interest in Broadway. We're currently in a private beta. We'll let you know when we're ready for you!",
-      );
-      return res.status(403).send('Forbidden');
+      logger.info(`Unauthorized access attempt by ${userId}`);
+      // Return a JSON response for non-whitelisted users instead of sending via Twilio
+      return res.status(403).json({
+        error: 'Forbidden',
+        message:
+          "Hey! Thanks for your interest in Broadway. We're currently in a private beta. We'll let you know when we're ready for you!",
+      });
     }
 
     next();

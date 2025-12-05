@@ -8,10 +8,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories } from '../tools';
-import { sendListPicker } from '../../lib/twilio';
-import { TWILIO_LIST_PICKER_SID } from '../../utils/constants';
-
-
 
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The first text message response to the user.'),
@@ -21,7 +17,7 @@ const LLMOutputSchema = z.object({
 function formatLLMOutput(text: string): string {
   if (!text) return '';
   const lines = text.split('\n');
-  const spacedLines = lines.map(line => line.trim()).join('\n\n');
+  const spacedLines = lines.map((line) => line.trim()).join('\n\n');
   return spacedLines.trim();
 }
 
@@ -32,31 +28,32 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
 
   try {
     // ------------------------------------------
-    // Greeting Intent — Now uses List Picker
+    // Greeting Intent — Uses List Picker
     // ------------------------------------------
     if (generalIntent === 'greeting') {
-      const greetingText = `✨ Welcome, ${user.profileName || 'there'}! Let's explore some Broadway magic.`;
-      const replies: Replies = [{ reply_type: 'image', media_url: WELCOME_IMAGE_URL }];
+      const greetingText = `✨ Welcome, ${user.profileName || 'there'}! Let's explore some Broadway magic.\n\nWhat would you like to do today?`;
 
-      logger.debug({ userId, messageId }, 'Greeting image sent, preparing list picker.');
+      const replies: Replies = [
+        { reply_type: 'image', media_url: WELCOME_IMAGE_URL },
+        {
+          reply_type: 'list_picker',
+          reply_text: greetingText,
+          buttons: [
+            { text: 'Vibe check', id: 'vibe_check' },
+            { text: 'Color analysis', id: 'color_analysis' },
+            { text: 'Style Studio', id: 'style_studio' },
+            { text: 'This or That', id: 'this_or_that' },
+            { text: 'Skin Lab', id: 'skin_lab' },
+          ],
+        },
+      ];
 
-      try {
-        await sendListPicker(
-  user.whatsappId,
-  TWILIO_LIST_PICKER_SID,  
-  { user_name: user.profileName ?? '' }
-);
-      } catch (err) {
-        logger.error({ err, userId }, 'Failed to send Twilio List Picker greeting menu.');
-        // fallback to plain text
-        replies.push({ reply_type: 'text', reply_text: greetingText });
-      }
-
+      logger.debug({ userId, messageId }, 'Greeting handled with image and list picker');
       return { ...state, assistantReply: replies };
     }
 
     // ------------------------------------------
-    // Menu Intent (kept same, but can reuse List Picker if preferred)
+    // Menu Intent
     // ------------------------------------------
     if (generalIntent === 'menu') {
       const menuText = 'Please choose one of the following options:';
@@ -92,7 +89,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     // ------------------------------------------
     if (generalIntent === 'chat') {
       let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt');
-      systemPromptText += "\nPlease respond concisely, avoiding verbosity.";
+      systemPromptText += '\nPlease respond concisely, avoiding verbosity.';
 
       const tools = [fetchRelevantMemories(userId)];
       const systemPrompt = new SystemMessage(systemPromptText);
@@ -106,7 +103,9 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
       );
 
       const formattedMessage1 = formatLLMOutput(finalResponse.message1_text);
-      const formattedMessage2 = finalResponse.message2_text ? formatLLMOutput(finalResponse.message2_text) : null;
+      const formattedMessage2 = finalResponse.message2_text
+        ? formatLLMOutput(finalResponse.message2_text)
+        : null;
 
       const replies: Replies = [{ reply_type: 'text', reply_text: formattedMessage1 }];
       if (formattedMessage2) replies.push({ reply_type: 'text', reply_text: formattedMessage2 });
@@ -119,7 +118,6 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     // Unhandled intents
     // ------------------------------------------
     throw new InternalServerError(`Unhandled general intent: ${generalIntent}`);
-
   } catch (err: unknown) {
     throw new InternalServerError('Failed to handle general intent', { cause: err });
   }

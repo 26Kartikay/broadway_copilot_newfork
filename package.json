@@ -27,11 +27,9 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "groq-sdk": "^0.32.0",
-    "node-cron": "^4.2.1",
     "openai": "^5.20.1",
     "pino": "^9.9.4",
     "redis": "^5.8.2",
-    "twilio": "^5.9.0",
     "zod": "^4.1.5",
     "zod-to-json-schema": "^3.24.6"
   },

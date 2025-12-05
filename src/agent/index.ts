@@ -1,11 +1,10 @@
 import 'dotenv/config';
 
 import { Conversation, GraphRunStatus, MessageRole, PendingType, Prisma } from '@prisma/client';
+import { MessageInput } from '../lib/chat/types';
 import { StateGraph } from '../lib/graph';
 import { prisma } from '../lib/prisma';
 import { redis } from '../lib/redis';
-import { sendText } from '../lib/twilio';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
 import { getOrCreateUserAndConversation } from '../utils/context';
 import { logError } from '../utils/errors';
 import { logger } from '../utils/logger';
@@ -112,16 +111,17 @@ async function logGraphResult(
 }
 
 /**
- * Executes the agent graph for a single message with proper error handling and abort support.
+ * Executes the agent graph for HTTP delivery. Returns replies and pending state.
  *
- * @param input - Raw Twilio webhook payload containing message data
- * @param options - Optional configuration including abort signal
+ * @param userId - The user identifier
+ * @param messageId - The message identifier
+ * @param input - The normalized message input
  */
-export async function runAgent(
+export async function runAgentForHttp(
   userId: string,
   messageId: string,
-  input: TwilioWebhookRequest,
-): Promise<void> {
+  input: MessageInput,
+): Promise<{ replies: NonNullable<GraphState['httpResponse']>; pending: GraphState['pending'] }> {
   const controller = new AbortController();
   const sub = await getSubscriber();
   const channel = getUserAbortChannel(userId);
@@ -133,10 +133,10 @@ export async function runAgent(
   };
   sub.subscribe(channel, listener);
 
-  const { WaId: whatsappId, ProfileName: profileName } = input;
+  const { WaId: identifierId, ProfileName: profileName } = input;
 
-  if (!whatsappId) {
-    throw new Error('Whatsapp ID not found in webhook payload');
+  if (!identifierId) {
+    throw new Error('User ID not found in message input');
   }
 
   if (!compiledApp) {
@@ -148,7 +148,7 @@ export async function runAgent(
   const graphRunId = messageId;
   try {
     const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
-      whatsappId,
+      identifierId,
       profileName ?? '',
     );
     conversation = _conversation;
@@ -173,21 +173,27 @@ export async function runAgent(
       { signal: controller.signal, runId: graphRunId },
     );
     logGraphResult(graphRunId, 'COMPLETED', finalState);
+
+    const replies = (finalState?.httpResponse ?? []) as NonNullable<GraphState['httpResponse']>;
+    return { replies, pending: finalState?.pending ?? null };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
       logGraphResult(graphRunId, 'ABORTED', finalState, err);
       throw err;
     }
+
     logGraphResult(graphRunId, 'ERROR', finalState, err);
 
     const error = logError(err, {
-      whatsappId,
+      userId: identifierId,
       messageId,
-      location: 'runAgent',
+      location: 'runAgentForHttp',
     });
-    try {
-      await sendText(whatsappId, 'Sorry, something went wrong. Please try again later.');
-      if (conversation) {
+
+    // For HTTP mode, we don't send error messages via external service
+    // The error will be returned in the HTTP response
+    if (conversation) {
+      try {
         await prisma.message.create({
           data: {
             conversationId: conversation.id,
@@ -201,88 +207,16 @@ export async function runAgent(
             pending: PendingType.NONE,
           },
         });
+      } catch (dbErr: unknown) {
+        logError(dbErr, {
+          userId: identifierId,
+          messageId,
+          location: 'runAgentForHttp.saveErrorMessage',
+          originalError: error.message,
+        });
       }
-    } catch (sendErr: unknown) {
-      logError(sendErr, {
-        whatsappId,
-        messageId,
-        location: 'runAgent.sendTextFallback',
-        originalError: error.message,
-      });
     }
     throw error;
-  } finally {
-    await sub.unsubscribe(channel);
-  }
-}
-
-/**
- * Executes the agent graph for app (HTTP) delivery. Returns replies and pending state.
- */
-export async function runAgentForHttp(
-  userId: string,
-  messageId: string,
-  input: TwilioWebhookRequest,
-): Promise<{ replies: NonNullable<GraphState['httpResponse']>; pending: GraphState['pending'] }>
-{
-  const controller = new AbortController();
-  const sub = await getSubscriber();
-  const channel = getUserAbortChannel(userId);
-
-  const listener = (message: string) => {
-    if (message === messageId) {
-      controller.abort();
-    }
-  };
-  sub.subscribe(channel, listener);
-
-  const { WaId: whatsappId, ProfileName: profileName } = input;
-
-  if (!whatsappId) {
-    throw new Error('Whatsapp ID not found in webhook payload');
-  }
-
-  if (!compiledApp) {
-    throw new Error('Agent not initialized. Call initializeAgent() on startup.');
-  }
-
-  let conversation: Conversation | undefined;
-  let finalState: Partial<GraphState> | null = null;
-  const graphRunId = messageId;
-  try {
-    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
-      whatsappId,
-      profileName ?? '',
-    );
-    conversation = _conversation;
-
-    await prisma.graphRun.create({
-      data: {
-        id: graphRunId,
-        userId: user.id,
-        conversationId: conversation.id,
-        initialState: { input, user, deliveryMode: 'http' },
-      },
-    });
-
-    finalState = await compiledApp.invoke(
-      {
-        input,
-        user,
-        graphRunId,
-        conversationId: conversation.id,
-        deliveryMode: 'http',
-        traceBuffer: { nodeRuns: [], llmTraces: [] },
-      },
-      { signal: controller.signal, runId: graphRunId },
-    );
-    logGraphResult(graphRunId, 'COMPLETED', finalState);
-
-    const replies = (finalState?.httpResponse ?? []) as NonNullable<GraphState['httpResponse']>;
-    return { replies, pending: finalState?.pending ?? null };
-  } catch (err: unknown) {
-    logGraphResult(graphRunId, 'ERROR', finalState, err);
-    throw err;
   } finally {
     await sub.unsubscribe(channel);
   }

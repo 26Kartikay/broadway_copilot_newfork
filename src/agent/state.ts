@@ -1,7 +1,7 @@
 import { PendingType, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai';
-import { QuickReplyButton, TwilioWebhookRequest } from '../lib/twilio/types';
+import { MessageInput, QuickReplyButton } from '../lib/chat/types';
 import { TraceBuffer } from './tracing';
 
 // ============================================================================
@@ -22,8 +22,8 @@ export interface GraphState {
   /** The buffer for storing execution traces in-memory */
   traceBuffer: TraceBuffer;
 
-  /** Raw Twilio webhook request that initiated the interaction */
-  input: TwilioWebhookRequest;
+  /** Message input that initiated the interaction */
+  input: MessageInput;
 
   /** User profile information from the database */
   user: User;
@@ -60,20 +60,16 @@ export interface GraphState {
 
   /** User's selected tonality for vibe check */
   selectedTonality: string | null;
-  
+
   /** The payload from the last button click that successfully routed to a sub-intent */
-  lastSubIntentPayload?: string | null;
+  lastSubIntentPayload?: string | null;
 
   lastHandledPayload?: string | null;
-    
+
   thisOrThatFirstImageId?: string | undefined;
 
-  /** Delivery mode for responses: 'twilio' (default) or 'http' for app */
-  deliveryMode?: 'twilio' | 'http';
-
-  /** Replies returned over HTTP when deliveryMode is 'http' */
+  /** Replies returned in the HTTP response */
   httpResponse?: Replies;
-
 }
 
 // ============================================================================
@@ -84,7 +80,14 @@ export interface GraphState {
  * Available intent labels for routing user requests to appropriate handlers.
  * These define the main categories of user interactions the agent can handle.
  */
-export type IntentLabel = 'general' | 'vibe_check' | 'color_analysis' | 'style_studio' | 'styling' | 'this_or_that' | 'skin_lab';
+export type IntentLabel =
+  | 'general'
+  | 'vibe_check'
+  | 'color_analysis'
+  | 'style_studio'
+  | 'styling'
+  | 'this_or_that'
+  | 'skin_lab';
 
 /**
  * Specific styling intents for fashion/styling related requests.
@@ -128,8 +131,8 @@ type Reply =
       reply_text: string;
       buttons: QuickReplyButton[];
     }
-    | {
-      reply_type: 'list_picker'; 
+  | {
+      reply_type: 'list_picker';
       reply_text: string;
       buttons: QuickReplyButton[];
     }

@@ -49,24 +49,16 @@ jobs:
           image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}'
           env_vars: |-
             NODE_ENV=production
-            TWILIO_VALIDATE_WEBHOOK=true
-            TWILIO_WAIT_FOR_STATUS=true
-            TWILIO_HTTP_TIMEOUT_MS=5000
-            TWILIO_SENT_TIMEOUT_MS=5000
-            TWILIO_DELIVERED_TIMEOUT_MS=15000
             PROJECT_ID=${{ env.PROJECT_ID }}
             CLOUD_FUNCTION_REGION=${{ env.REGION }}
             CLOUD_TASKS_REGION=asia-south1
           secrets: |-
             OPENAI_API_KEY=OPENAI_API_KEY:latest
-            TWILIO_ACCOUNT_SID=TWILIO_ACCOUNT_SID:latest
-            TWILIO_AUTH_TOKEN=TWILIO_AUTH_TOKEN:latest
             DATABASE_URL=PRIVATE_DATABASE_URL:latest
             REDIS_URL=REDIS_URL:latest
             SERVER_URL=SERVER_URL:latest
             GROQ_API_KEY=GROQ_API_KEY:latest
             CLOUD_TASKS_SERVICE_ACCOUNT=CLOUD_TASKS_SERVICE_ACCOUNT:latest
-            TWILIO_WHATSAPP_FROM=TWILIO_WHATSAPP_FROM:latest
           flags: >-
             --execution-environment=gen2
             --network=chatbot-vpc

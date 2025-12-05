@@ -28,7 +28,11 @@ const LLMOutputSchema = z.object({
 
 function formatText(text?: string) {
   if (!text) return '';
-  return text.split('\n').map(l => l.trim()).join('\n\n').trim();
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n\n')
+    .trim();
 }
 
 function extractImageIdFromInput(input: any): string | null {
@@ -44,31 +48,28 @@ function extractImageIdFromInput(input: any): string | null {
   return null;
 }
 
-function isTwilioMediaUrl(url: string): boolean {
-  return /https?:\/\/api\.twilio\.com\//.test(url);
-}
-
-async function loadImageWithAuth(url: string) {
-  if (isTwilioMediaUrl(url)) {
-    const sid = process.env.TWILIO_ACCOUNT_SID || '';
-    const token = process.env.TWILIO_AUTH_TOKEN || '';
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-      },
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to fetch Twilio media: ${res.status}`);
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    return loadImage(buf);
+/**
+ * Load an image from a URL.
+ * Supports both direct URLs and data URLs.
+ */
+async function loadImageFromUrl(url: string) {
+  // If it's a data URL, load it directly
+  if (url.startsWith('data:')) {
+    return loadImage(url);
   }
-  return loadImage(url);
+
+  // Fetch the image and load it
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch image: ${res.status}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  return loadImage(buf);
 }
 
 async function combineImagesSideBySide(url1: string, url2: string): Promise<string> {
-  const img1 = await loadImageWithAuth(url1);
-  const img2 = await loadImageWithAuth(url2);
+  const img1 = await loadImageFromUrl(url1);
+  const img2 = await loadImageFromUrl(url2);
 
   const canvasWidth = img1.width + img2.width;
   const canvasHeight = Math.max(img1.height, img2.height);
@@ -83,60 +84,64 @@ async function combineImagesSideBySide(url1: string, url2: string): Promise<stri
 }
 
 async function saveFirstImageUrl(
-  whatsappId: string,
+  userId: string,
   imageUrl: string,
-  ttlSeconds: number = 3600
+  ttlSeconds: number = 3600,
 ) {
-    await redis.hSet(`${REDIS_PREFIX}:${whatsappId}`, {
+  await redis.hSet(`${REDIS_PREFIX}:${userId}`, {
     firstImageUrl: imageUrl,
     pending: 'SECOND_IMAGE',
   });
-  await redis.expire(`${REDIS_PREFIX}:${whatsappId}`, ttlSeconds);
-  }
+  await redis.expire(`${REDIS_PREFIX}:${userId}`, ttlSeconds);
+}
 
-async function saveSecondImageUrl(whatsappId: string, imageUrl: string) {
-  await redis.hSet(`${REDIS_PREFIX}:${whatsappId}`, {
+async function saveSecondImageUrl(userId: string, imageUrl: string) {
+  await redis.hSet(`${REDIS_PREFIX}:${userId}`, {
     secondImageUrl: imageUrl,
     // Setting state to COMBINE_AND_ANALYZE here to trigger the next step
-    pending: 'COMBINE_AND_ANALYZE', 
+    pending: 'COMBINE_AND_ANALYZE',
   });
 }
 
-async function getImageState(whatsappId: string) {
-  const state = await redis.hGetAll(`${REDIS_PREFIX}:${whatsappId}`);
+async function getImageState(userId: string) {
+  const state = await redis.hGetAll(`${REDIS_PREFIX}:${userId}`);
   return state;
 }
 
-async function clearImageState(whatsappId: string) {
-  await redis.del(`${REDIS_PREFIX}:${whatsappId}`);
+async function clearImageState(userId: string) {
+  await redis.del(`${REDIS_PREFIX}:${userId}`);
 }
 
 export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
   const { user, input } = state;
-  const whatsappId = user.id;
+  const userId = user.id;
   const messageId = input.MessageSid;
 
   try {
     const imageId = extractImageIdFromInput(input);
-    let redisState = await getImageState(whatsappId);
+    let redisState = await getImageState(userId);
     let currentStep = redisState.pending; // Use 'let' because we might change it
 
     // --- 1. START FLOW / RECEIVE FIRST IMAGE (currentStep is falsy or 'NONE') ---
     if (!currentStep || currentStep === 'NONE') {
       if (imageId) {
         // User sent the first image immediately. Save it and ask for the second.
-        await saveFirstImageUrl(whatsappId, imageId);
-        const assistantReply: Replies = [{
-          reply_type: 'text',
-          reply_text: 'Great! Now upload a photo of your second outfit for the showdown.',
-        }];
+        await saveFirstImageUrl(userId, imageId);
+        const assistantReply: Replies = [
+          {
+            reply_type: 'text',
+            reply_text: 'Great! Now upload a photo of your second outfit for the showdown.',
+          },
+        ];
         return { ...state, assistantReply };
       } else {
         // User started with text, or sent a non-image message. Ask for the first image.
-        const assistantReply: Replies = [{
-          reply_type: 'text',
-          reply_text: "Let's play *This or That*! Please upload a photo of your first outfit.",
-        }];
+        const assistantReply: Replies = [
+          {
+            reply_type: 'text',
+            reply_text: "Let's play *This or That*! Please upload a photo of your first outfit.",
+          },
+        ];
         return { ...state, assistantReply };
       }
     }
@@ -144,48 +149,54 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
     // --- 2. RECEIVE SECOND IMAGE (currentStep is 'SECOND_IMAGE') ---
     if (currentStep === 'SECOND_IMAGE') {
       if (!imageId) {
-        logger.warn({ whatsappId }, 'No second image found in message, prompting again');
-        const assistantReply: Replies = [{
-          reply_type: 'text',
-          reply_text: 'Please upload your second outfit photo to continue.',
-        }];
+        logger.warn({ userId }, 'No second image found in message, prompting again');
+        const assistantReply: Replies = [
+          {
+            reply_type: 'text',
+            reply_text: 'Please upload your second outfit photo to continue.',
+          },
+        ];
         return { ...state, assistantReply };
       }
-      
+
       // Found the second image. Save it and update the state.
-      await saveSecondImageUrl(whatsappId, imageId);
-      
+      await saveSecondImageUrl(userId, imageId);
+
       // Update the local state variables to correctly fall through to the next block.
-      redisState = await getImageState(whatsappId);
+      redisState = await getImageState(userId);
       currentStep = redisState.pending; // Should now be 'COMBINE_AND_ANALYZE'
-      
+
       // IMPORTANT FIX: DO NOT return here. Fall through to the analysis block.
     }
-    
+
     // --- 3. COMBINE AND ANALYZE (currentStep is 'COMBINE_AND_ANALYZE') ---
     // This block is either entered on the next turn, or immediately after the SECOND_IMAGE step.
     if (currentStep === 'COMBINE_AND_ANALYZE') {
-      
       // Use the latest redisState which should contain both URLs
-      const { firstImageUrl, secondImageUrl } = redisState; 
+      const { firstImageUrl, secondImageUrl } = redisState;
 
       if (!firstImageUrl || !secondImageUrl) {
-        // This is a safety check in case data was lost between the second image upload 
+        // This is a safety check in case data was lost between the second image upload
         // and the start of analysis.
-        logger.warn({ whatsappId }, 'Missing one or both images during analysis, restarting flow');
-        await clearImageState(whatsappId);
-        const assistantReply: Replies = [{
-          reply_type: 'text',
-          reply_text: "I lost track of one of your outfit photos. Let's start over. Please upload your first outfit photo.",
-        }];
+        logger.warn({ userId }, 'Missing one or both images during analysis, restarting flow');
+        await clearImageState(userId);
+        const assistantReply: Replies = [
+          {
+            reply_type: 'text',
+            reply_text:
+              "I lost track of one of your outfit photos. Let's start over. Please upload your first outfit photo.",
+          },
+        ];
         return { ...state, assistantReply };
       }
-      
-      logger.info({ whatsappId, messageId }, 'Starting This or That analysis with combined images');
+
+      logger.info({ userId, messageId }, 'Starting This or That analysis with combined images');
 
       const combinedImageDataUrl = await combineImagesSideBySide(firstImageUrl!, secondImageUrl!);
 
-      const systemPromptText = await loadPrompt('handlers/this_or_that/this_or_that_image_analysis.txt');
+      const systemPromptText = await loadPrompt(
+        'handlers/this_or_that/this_or_that_image_analysis.txt',
+      );
       const systemPrompt = new SystemMessage(systemPromptText);
       const userCombinedImageMessage = new UserMessage([
         { type: 'image_url', image_url: { url: combinedImageDataUrl } },
@@ -208,8 +219,8 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
       const winnerLabel = ['left', 'first', '1', 'one'].includes(w)
         ? '1st outfit'
         : ['right', 'second', '2', 'two'].includes(w)
-        ? '2nd outfit'
-        : '2nd outfit';
+          ? '2nd outfit'
+          : '2nd outfit';
 
       const reasonRaw = finalResponse.result_text || finalResponse.reasoning || '';
       // Format reason text with paragraph breaks
@@ -225,28 +236,33 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
       // Compose final multi-line answer, tidier aligned
       const concise = `${winnerLabel} wins!${scoresText}${reasonText}`;
 
-      logger.info({ winner: finalResponse.winner, mappedWinner: winnerLabel, length: concise.length }, 'ThisOrThat result composed');
+      logger.info(
+        { winner: finalResponse.winner, mappedWinner: winnerLabel, length: concise.length },
+        'ThisOrThat result composed',
+      );
 
       const resultReplies: Replies = [{ reply_type: 'text', reply_text: concise }];
 
-      await clearImageState(whatsappId);
+      await clearImageState(userId);
 
       return { ...state, assistantReply: resultReplies };
     }
 
     // --- 4. UNEXPECTED STATE FALLBACK ---
     // This should only be hit if a new, invalid state exists in Redis.
-    logger.error({ whatsappId, currentStep }, 'Unexpected flow state in handleThisOrThat');
-    await clearImageState(whatsappId);
-    const assistantReply: Replies = [{
-      reply_type: 'text',
-      reply_text: 'There was an error in the comparison process. Please start the This or That flow again.',
-    }];
+    logger.error({ userId, currentStep }, 'Unexpected flow state in handleThisOrThat');
+    await clearImageState(userId);
+    const assistantReply: Replies = [
+      {
+        reply_type: 'text',
+        reply_text:
+          'There was an error in the comparison process. Please start the This or That flow again.',
+      },
+    ];
     return { ...state, assistantReply };
-
   } catch (err) {
     logger.error(
-      { whatsappId, messageId, error: err instanceof Error ? err.message : String(err) },
+      { userId, messageId, error: err instanceof Error ? err.message : String(err) },
       'Failed handling This or That outfit comparison',
     );
     throw new InternalServerError('Failed to handle This or That outfit comparison', { cause: err });

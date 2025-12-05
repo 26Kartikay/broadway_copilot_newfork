@@ -4,12 +4,12 @@ import { AssistantMessage, MessageContent, UserMessage } from '../../lib/ai';
 import { prisma } from '../../lib/prisma';
 import { queueImageUpload } from '../../lib/tasks';
 import { logger } from '../../utils/logger';
-import { downloadTwilioMedia } from '../../utils/media';
+import { downloadMedia } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
 import { GraphState } from '../state';
 
 /**
- * Ingests incoming Twilio messages, processes media attachments, manages conversation history,
+ * Ingests incoming messages, processes media attachments, manages conversation history,
  * and prepares data for downstream processing in the agent graph.
  *
  * Handles message merging for multi-part messages, media download and storage,
@@ -23,25 +23,26 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     NumMedia: numMedia,
     MediaUrl0: mediaUrl0,
     MediaContentType0: mediaContentType0,
-    WaId: whatsappId,
+    WaId: userId,
   } = input;
 
-  if (!whatsappId) {
-    throw new Error('Whatsapp ID not found in webhook payload');
+  if (!userId) {
+    throw new Error('User ID not found in message input');
   }
 
-  let media: { serverUrl: string; twilioUrl: string; mimeType: string } | undefined;
+  let media: { serverUrl: string; originalUrl: string; mimeType: string } | undefined;
   let content: MessageContent = [{ type: 'text', text }];
+
   if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
     try {
-      const serverUrl = await downloadTwilioMedia(mediaUrl0, whatsappId, mediaContentType0);
+      const serverUrl = await downloadMedia(mediaUrl0, userId, mediaContentType0);
       content.push({ type: 'image_url', image_url: { url: serverUrl } });
-      media = { serverUrl, twilioUrl: mediaUrl0, mimeType: mediaContentType0 };
+      media = { serverUrl, originalUrl: mediaUrl0, mimeType: mediaContentType0 };
     } catch (error) {
       logger.warn(
         {
           error: error instanceof Error ? error.message : String(error),
-          whatsappId,
+          userId,
           mediaUrl0,
         },
         'Failed to download image, proceeding without it.',
@@ -54,7 +55,6 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     messages,
     pending: dbPending,
     selectedTonality: dbSelectedTonality,
-    // ✨ CRITICAL CHANGE 1: Destructure the loaded image ID
     thisOrThatFirstImageId: dbThisOrThatFirstImageId,
   } = await prisma.$transaction(async (tx) => {
     const [lastMessage, latestAssistantMessage] = await Promise.all([
@@ -72,7 +72,6 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
         select: {
           pending: true,
           selectedTonality: true,
-          // ✨ CRITICAL CHANGE 2: Select the missing field from the database
           thisOrThatFirstImageId: true,
         },
       }),
@@ -81,10 +80,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     // Pull state from DB
     const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
     const selectedTonalityDB = latestAssistantMessage?.selectedTonality ?? null;
-    // ✨ CRITICAL CHANGE 3: Retrieve the image ID from the loaded message
     const thisOrThatFirstImageIdDB = latestAssistantMessage?.thisOrThatFirstImageId ?? undefined;
-
-    // REMOVED: logger.debug block for 'IngestMessage: Current pending, selectedTonality, and input'
 
     let savedMessage;
     if (lastMessage && lastMessage.role === MessageRole.USER) {
@@ -99,7 +95,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           ...(media && {
             media: {
               create: {
-                twilioUrl: media.twilioUrl,
+                twilioUrl: media.originalUrl,
                 serverUrl: media.serverUrl,
                 mimeType: media.mimeType,
               },
@@ -117,7 +113,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           ...(media && {
             media: {
               create: {
-                twilioUrl: media.twilioUrl,
+                twilioUrl: media.originalUrl,
                 serverUrl: media.serverUrl,
                 mimeType: media.mimeType,
               },
@@ -149,7 +145,6 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
       messages,
       pending: pendingStateDB,
       selectedTonality: selectedTonalityDB,
-      // ✨ CRITICAL CHANGE 4: Return the loaded image ID from the transaction
       thisOrThatFirstImageId: thisOrThatFirstImageIdDB,
     };
   });
@@ -158,7 +153,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     {
       pending: state.pending ?? dbPending,
       selectedTonality: state.selectedTonality ?? dbSelectedTonality,
-      thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId, // Add to log for clarity
+      thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId,
       messagesCount: messages.length,
     },
     'IngestMessage: Final state before returning',
@@ -197,7 +192,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     }
   }
 
-  logger.debug({ whatsappId, graphRunId }, 'Message ingested successfully');
+  logger.debug({ userId, graphRunId }, 'Message ingested successfully');
 
   /**
    * The key: PREFER the latest computed state (from routing/handler) if set,
@@ -207,9 +202,8 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     ...state,
     conversationHistoryWithImages,
     conversationHistoryTextOnly,
-    pending: state.pending ?? dbPending, // prioritize latest logic/state
-    selectedTonality: state.selectedTonality ?? dbSelectedTonality, // prioritize latest logic/state
-    // ✨ CRITICAL CHANGE 5: Merge the loaded image ID back into the GraphState
+    pending: state.pending ?? dbPending,
+    selectedTonality: state.selectedTonality ?? dbSelectedTonality,
     thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId,
     user,
     input,

@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
+import { ChatRequest } from '../lib/chat/types';
 import { redis } from '../lib/redis';
-import { TwilioWebhookRequest } from '../lib/twilio/types';
 import {
   TOKEN_REFILL_PERIOD_MS,
   USER_REQUEST_LIMIT,
@@ -8,6 +8,7 @@ import {
 } from '../utils/constants';
 import { BadRequestError, HttpError, ServiceUnavailableError } from '../utils/errors';
 import { logger } from '../utils/logger';
+
 /**
  * Express middleware implementing token bucket rate limiting for user requests.
  * Uses Redis to track token counts with automatic refill over time.
@@ -19,15 +20,15 @@ import { logger } from '../utils/logger';
  * @throws {HttpError} When rate limit is exceeded (503 Service Unavailable)
  */
 export const rateLimiter = async (req: Request, _res: Response, next: NextFunction) => {
-  const webhook = req.body as TwilioWebhookRequest;
-  const whatsappId = webhook.WaId;
-  const messageId = req.body.MessageSid;
+  const chatRequest = req.body as ChatRequest;
+  const userId = chatRequest.userId;
+  const messageId = chatRequest.messageId;
 
-  if (!whatsappId) {
-    throw new BadRequestError('Missing WhatsApp ID');
+  if (!userId) {
+    throw new BadRequestError('Missing user ID');
   }
 
-  const key = `user:${whatsappId}`;
+  const key = `user:${userId}`;
 
   try {
     if ((await redis.exists(key)) === 0) {
@@ -37,7 +38,7 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
         lastMessageAt: Date.now(),
       });
       await redis.expire(key, USER_STATE_TTL_SECONDS);
-      logger.debug({ whatsappId }, 'Rate limiter: initialized new user token bucket');
+      logger.debug({ userId }, 'Rate limiter: initialized new user token bucket');
     }
 
     const updatedAtStr = await redis.hGet(key, 'updatedAt');
@@ -49,8 +50,8 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
     tokenRemaining = Math.min(tokenRemaining, USER_REQUEST_LIMIT);
 
     if (tokenRemaining <= 0) {
-      logger.warn({ whatsappId, messageId }, 'Rate limit exceeded');
-      throw new ServiceUnavailableError(`Rate limit exceeded for user ${whatsappId}`);
+      logger.warn({ userId, messageId }, 'Rate limit exceeded');
+      throw new ServiceUnavailableError(`Rate limit exceeded for user ${userId}`);
     } else {
       await redis.hSet(key, {
         tokens: tokenRemaining - 1,
@@ -58,10 +59,7 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
         lastMessageAt: Date.now(),
       });
       await redis.expire(key, USER_STATE_TTL_SECONDS);
-      logger.debug(
-        { whatsappId, tokensRemaining: tokenRemaining - 1 },
-        'Rate limiter: token consumed',
-      );
+      logger.debug({ userId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
     }
 
     next();

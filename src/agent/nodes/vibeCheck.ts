@@ -5,7 +5,7 @@ import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { queueWardrobeIndex } from '../../lib/tasks';
-import type { QuickReplyButton } from '../../lib/twilio/types';
+import type { QuickReplyButton } from '../../lib/chat/types';
 import { numImagesInMessage } from '../../utils/context';
 import { loadPrompt } from '../../utils/prompts';
 
