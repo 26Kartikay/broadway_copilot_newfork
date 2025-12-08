@@ -11,7 +11,7 @@ services:
         log() { printf '%s\n' "$${*}"; }
 
         log "Installing dependencies..."
-        npm ci --legacy-peer-deps --silent --no-progress
+        npm install --legacy-peer-deps
         log "Dependencies installed."
 
         log "Checking Postgres availability..."

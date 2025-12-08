@@ -1,10 +1,10 @@
 import { MessageRole, PendingType } from '@prisma/client';
-import { AssistantMessage, MessageContent, UserMessage } from '../../lib/ai';
+import { AssistantMessage, MessageContent, MessageContentPart, UserMessage } from '../../lib/ai';
 
 import { prisma } from '../../lib/prisma';
 import { queueImageUpload } from '../../lib/tasks';
 import { logger } from '../../utils/logger';
-import { downloadMedia } from '../../utils/media';
+import { convertLocalhostUrlToDataUrl, processMediaForAI } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
 import { GraphState } from '../state';
 
@@ -30,14 +30,17 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     throw new Error('User ID not found in message input');
   }
 
-  let media: { serverUrl: string; originalUrl: string; mimeType: string } | undefined;
+  let media: { serverUrl: string; aiUrl: string; originalUrl: string; mimeType: string } | undefined;
   let content: MessageContent = [{ type: 'text', text }];
 
   if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
     try {
-      const serverUrl = await downloadMedia(mediaUrl0, userId, mediaContentType0);
-      content.push({ type: 'image_url', image_url: { url: serverUrl } });
-      media = { serverUrl, originalUrl: mediaUrl0, mimeType: mediaContentType0 };
+      // Process media for both AI (OpenAI) and storage
+      const { aiUrl, serverUrl } = await processMediaForAI(mediaUrl0, userId, mediaContentType0);
+      
+      // Use aiUrl for conversation history (works with OpenAI locally and in prod)
+      content.push({ type: 'image_url', image_url: { url: aiUrl } });
+      media = { serverUrl, aiUrl, originalUrl: mediaUrl0, mimeType: mediaContentType0 };
     } catch (error) {
       logger.warn(
         {
@@ -45,7 +48,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           userId,
           mediaUrl0,
         },
-        'Failed to download image, proceeding without it.',
+        'Failed to process image, proceeding without it.',
       );
     }
   }
@@ -173,8 +176,19 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
       }),
     };
 
-    const contentWithImage = msg.content as MessageContent;
-    const textContent = extractTextContent(contentWithImage);
+    const rawContent = msg.content as MessageContent;
+    const textContent = extractTextContent(rawContent);
+
+    // Convert localhost image URLs to data URLs for AI compatibility
+    const contentWithImage: MessageContent = await Promise.all(
+      rawContent.map(async (part: MessageContentPart) => {
+        if (part.type === 'image_url' && part.image_url?.url) {
+          const convertedUrl = await convertLocalhostUrlToDataUrl(part.image_url.url);
+          return { ...part, image_url: { ...part.image_url, url: convertedUrl } };
+        }
+        return part;
+      }),
+    );
 
     if (msg.role === MessageRole.USER) {
       const messageWithImage = new UserMessage(contentWithImage);
