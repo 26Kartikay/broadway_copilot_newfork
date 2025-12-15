@@ -17,7 +17,37 @@ app.set('trust proxy', true);
 
 app.use(
   cors({
-    origin: [/http:\/\/localhost:\d+/, /http:\/\/127\.0\.0\.1:\d+/],
+    origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+      // Allow requests with no origin (mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+      
+      // Allow localhost for development
+      if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+      
+      // Allow Cloud Run URLs and custom domains
+      const serverUrl = process.env.SERVER_URL;
+      if (serverUrl) {
+        try {
+          const serverOrigin = new URL(serverUrl).origin;
+          if (origin === serverOrigin) {
+            return callback(null, true);
+          }
+        } catch {
+          // Invalid SERVER_URL, continue to default behavior
+        }
+      }
+      
+      // Allow *.run.app domains (Cloud Run default)
+      if (/^https:\/\/[^\.]+-[^\.]+\.a\.run\.app$/.test(origin) || 
+          /^https:\/\/[^\.]+\.run\.app$/.test(origin)) {
+        return callback(null, true);
+      }
+      
+      // Default: allow same-origin requests (frontend served from same domain)
+      callback(null, true);
+    },
     credentials: true,
   }),
 );
