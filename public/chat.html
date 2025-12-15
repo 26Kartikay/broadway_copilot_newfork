@@ -214,6 +214,114 @@
       box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
     }
 
+    /* Product Cards */
+    .product-cards-container {
+      margin-top: 16px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .product-cards {
+      display: flex;
+      gap: 12px;
+      padding: 4px;
+    }
+
+    .product-card {
+      flex: 0 0 160px;
+      background: var(--broadway-white);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--broadway-gray-medium);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      transition: all 0.2s ease;
+    }
+
+    .product-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      border-color: var(--broadway-gold);
+    }
+
+    .product-card-image {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      background: var(--broadway-gray);
+    }
+
+    .product-card-content {
+      padding: 10px;
+    }
+
+    .product-card-brand {
+      font-size: 10px;
+      color: var(--broadway-text-light);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .product-card-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--broadway-text);
+      line-height: 1.3;
+      margin-bottom: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .product-card-reason {
+      font-size: 10px;
+      color: var(--broadway-text-light);
+      line-height: 1.3;
+      margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .product-card-link {
+      display: block;
+      background: var(--broadway-gold);
+      color: var(--broadway-white);
+      text-align: center;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .product-card-link:hover {
+      background: var(--broadway-gold-dark);
+    }
+
+    /* Scrollbar for product cards */
+    .product-cards-container::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .product-cards-container::-webkit-scrollbar-track {
+      background: var(--broadway-gray);
+      border-radius: 2px;
+    }
+
+    .product-cards-container::-webkit-scrollbar-thumb {
+      background: var(--broadway-gold-light);
+      border-radius: 2px;
+    }
+
+    .product-cards-container::-webkit-scrollbar-thumb:hover {
+      background: var(--broadway-gold);
+    }
+
     /* Typing Indicator */
     .typing-indicator {
       display: none;
@@ -534,7 +642,7 @@
       document.getElementById('imagePreview').classList.remove('visible');
     }
 
-    function addMessage(content, isUser, buttons = null, imageUrl = null) {
+    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null) {
       const container = document.getElementById('messagesContainer');
       
       // Remove welcome message if present
@@ -563,6 +671,33 @@
           quickReplies.appendChild(button);
         });
         messageDiv.querySelector('.message-bubble').appendChild(quickReplies);
+      }
+
+      // Add product cards if present
+      if (products && products.length > 0) {
+        const productCardsContainer = document.createElement('div');
+        productCardsContainer.className = 'product-cards-container';
+        
+        const productCards = document.createElement('div');
+        productCards.className = 'product-cards';
+        
+        products.forEach(product => {
+          const card = document.createElement('div');
+          card.className = 'product-card';
+          card.innerHTML = `
+            <img class="product-card-image" src="${product.imageUrl || 'https://via.placeholder.com/160x140?text=No+Image'}" alt="${product.name}" onerror="this.src='https://via.placeholder.com/160x140?text=No+Image'">
+            <div class="product-card-content">
+              <div class="product-card-brand">${product.brand || 'Broadway'}</div>
+              <div class="product-card-name">${product.name}</div>
+              ${product.reason ? `<div class="product-card-reason">${product.reason}</div>` : ''}
+              <a href="${product.productLink}" target="_blank" class="product-card-link">View Product →</a>
+            </div>
+          `;
+          productCards.appendChild(card);
+        });
+        
+        productCardsContainer.appendChild(productCards);
+        messageDiv.querySelector('.message-bubble').appendChild(productCardsContainer);
       }
 
       container.appendChild(messageDiv);
@@ -638,8 +773,15 @@
           data.replies.forEach(reply => {
             const buttons = reply.buttons || null;
             const imageUrl = reply.reply_type === 'image' ? reply.media_url : null;
+            const products = reply.reply_type === 'product_card' ? reply.products : null;
             const text = reply.reply_text || '';
-            addMessage(text, false, buttons, imageUrl);
+            
+            // If it's a product_card reply, only show products (text is optional)
+            if (reply.reply_type === 'product_card') {
+              addMessage(text, false, null, null, products);
+            } else {
+              addMessage(text, false, buttons, imageUrl, null);
+            }
           });
         } else if (data.error) {
           addMessage(`Error: ${data.error}`, false);
@@ -680,8 +822,15 @@
           data.replies.forEach(reply => {
             const buttons = reply.buttons || null;
             const imageUrl = reply.reply_type === 'image' ? reply.media_url : null;
+            const products = reply.reply_type === 'product_card' ? reply.products : null;
             const replyText = reply.reply_text || '';
-            addMessage(replyText, false, buttons, imageUrl);
+            
+            // If it's a product_card reply, only show products (text is optional)
+            if (reply.reply_type === 'product_card') {
+              addMessage(replyText, false, null, null, products);
+            } else {
+              addMessage(replyText, false, buttons, imageUrl, null);
+            }
           });
         }
       } catch (error) {

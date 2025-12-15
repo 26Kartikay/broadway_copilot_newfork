@@ -11,7 +11,6 @@ Based on the conversation history, classify the user's intent into one of the av
 * **`style_studio`**: For all specific style_studio requests, including what to wear for an occasion, how to pair items, planning for a vacation, or asking for outfit suggestions.
 * **`this_or_that`**: For an interactive outfit comparison game where users send two outfit images for a side-by-side recommendation or comparison.
 * **`skin_lab`**: For AI-powered skin help, analysis, and personalized skin care advice.
-
 ## Guidelines
 1.  **Intent Routing**:
     -   Read the latest user message in the context of the conversation.
@@ -81,3 +80,7 @@ JSON
   "intent": "skin_lab",
   "missingProfileField": null
 }
+IMPORTANT: You must output ONLY a valid JSON object following the schema:
+{"intent": "...", "missingProfileField": ...}
+-Do NOT include any explanations, product recommendations, or extra text.
+-Use only the keys "intent" and "missingProfileField".

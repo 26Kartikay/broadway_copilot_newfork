@@ -49,6 +49,13 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
     if (r.reply_type === 'image') {
       parts.push({ type: 'image_url', image_url: { url: r.media_url } });
     }
+    if (r.reply_type === 'product_card' && 'products' in r) {
+      // Store product recommendations as a special text marker for history
+      parts.push({
+        type: 'text',
+        text: `[Product Recommendations: ${r.products.map((p) => p.name).join(', ')}]`,
+      });
+    }
     return parts;
   });
 

@@ -110,12 +110,140 @@ export interface ToolResult {
  * // }
  * ```
  */
+/**
+ * Recursively ensures all nested objects in JSON schema have a 'required' array.
+ * OpenAI requires this for function calling schemas.
+ * Exported so it can be used for structured output schemas as well.
+ */
+export function ensureRequiredArrays(schema: any): any {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  // Handle schemas with additionalProperties but no type FIRST (before other processing)
+  // OpenAI requires type when additionalProperties is present
+  if ('additionalProperties' in schema && !schema.type) {
+    const processed = {
+      ...schema,
+      type: 'object',
+      properties: schema.properties || {},
+    };
+    // Continue processing the fixed schema recursively
+    return ensureRequiredArrays(processed);
+  }
+
+  // Handle object types
+  if (schema.type === 'object') {
+    const processed: any = { ...schema };
+    
+    // Ensure 'type' is always present (OpenAI requirement)
+    if (!processed.type) {
+      processed.type = 'object';
+    }
+    
+    // If it has properties, process them
+    if (processed.properties && Object.keys(processed.properties).length > 0) {
+      // Recursively process nested properties first
+      const processedProperties: Record<string, any> = {};
+      for (const [key, value] of Object.entries(processed.properties)) {
+        processedProperties[key] = ensureRequiredArrays(value);
+      }
+      processed.properties = processedProperties;
+      
+      // OpenAI strict mode requires: if you have properties, you MUST have a 'required' array
+      // And if you have a 'required' array, it must include ALL property keys
+      // This is unusual but appears to be OpenAI's requirement
+      const allPropertyKeys = Object.keys(processedProperties);
+      if (allPropertyKeys.length > 0) {
+        // Always include all properties in required array for OpenAI compatibility
+        processed.required = allPropertyKeys;
+      }
+    } else {
+      // If it's an object type but has no properties, remove 'required' if present
+      // (OpenAI doesn't allow 'required' without 'properties')
+      if ('required' in processed) {
+        delete processed.required;
+      }
+      // Ensure it has an empty properties object for OpenAI compatibility
+      if (!processed.properties) {
+        processed.properties = {};
+      }
+    }
+    
+    // If additionalProperties is present, ensure type is also present (OpenAI requirement)
+    if ('additionalProperties' in processed && !processed.type) {
+      processed.type = 'object';
+    }
+    
+    return processed;
+  }
+
+  // Recursively process arrays
+  if (schema.type === 'array' && schema.items) {
+    return {
+      ...schema,
+      items: ensureRequiredArrays(schema.items),
+    };
+  }
+
+  // Handle anyOf - often used for optional fields (e.g., z.object({}).optional())
+  if (schema.anyOf) {
+    const processedAnyOf = schema.anyOf.map((item: any) => ensureRequiredArrays(item));
+    
+    // If anyOf contains an object type, ensure it's properly processed
+    const objectItem = processedAnyOf.find((item: any) => item.type === 'object' && item.properties);
+    if (objectItem && objectItem.properties && Object.keys(objectItem.properties).length > 0) {
+      if (!('required' in objectItem)) {
+        objectItem.required = [];
+      }
+    }
+    
+    return {
+      ...schema,
+      anyOf: processedAnyOf,
+    };
+  }
+  
+  // Recursively process oneOf, allOf
+  if (schema.oneOf) {
+    return {
+      ...schema,
+      oneOf: schema.oneOf.map((item: any) => ensureRequiredArrays(item)),
+    };
+  }
+  if (schema.allOf) {
+    return {
+      ...schema,
+      allOf: schema.allOf.map((item: any) => ensureRequiredArrays(item)),
+    };
+  }
+
+  return schema;
+}
+
 export function toOpenAIToolSpec(tool: Tool): OpenAIFunctionTool {
+  const rawSchema = z.toJSONSchema(tool.schema) as Record<string, unknown>;
+  
+  // Post-process to ensure OpenAI compatibility (required arrays for nested objects)
+  let processedSchema = ensureRequiredArrays(rawSchema);
+  
+  // Final safety check: if additionalProperties exists without type, fix it
+  if (typeof processedSchema === 'object' && processedSchema !== null) {
+    if ('additionalProperties' in processedSchema && !processedSchema.type) {
+      processedSchema = {
+        ...processedSchema,
+        type: 'object',
+        properties: processedSchema.properties || {},
+      };
+    }
+  }
+  
   return {
     type: 'function',
     name: tool.name,
     description: tool.description,
-    parameters: z.toJSONSchema(tool.schema) as Record<string, unknown>,
+    parameters: processedSchema,
+    // Allow non-strict to reduce Groq tool validation failures on minor argument shape deviations.
     strict: true,
   };
 }

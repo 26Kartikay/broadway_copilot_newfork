@@ -28,3 +28,6 @@ Output:
 {
   "subIntent": "style_studio_general"
 }
+IMPORTANT Note
+-You must output ONLY a valid JSON object with the key "subIntent".
+-Do NOT include any explanations, examples, markdown, or extra text.

@@ -70,6 +70,15 @@ enum WardrobeItemCategory {
   BAG
   ACCESSORY
 }
+
+enum ProductCategory {
+  CLOTHING_FASHION
+  BEAUTY_PERSONAL_CARE
+  HEALTH_WELLNESS
+  JEWELLERY_ACCESSORIES
+  FOOTWEAR
+  BAGS_LUGGAGE
+}
 enum Tonality {
   savage
   friendly
@@ -261,6 +270,57 @@ model WardrobeItem {
   @@index([userId, mainColor])
   @@index([userId, createdAt])
   @@index([userId, keywords])
+}
+
+// --- PRODUCT CATALOG ---
+
+model Product {
+  id        String @id @default(cuid())
+  handleId  String @unique                    // URL-friendly product identifier
+  barcode   String?                           // Product barcode/SKU
+  
+  name      String                            // article_name
+  brand     String                            // Brand name
+  
+  // Category & Type
+  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
+  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
+  
+  // Parsed from component string (for fast filtering)
+  style       String?                         // Athleisure, Minimal, Streetwear, etc.
+  fit         String?                         // Oversized, Slim, Regular, etc.
+  colors      String[]                        // Black, Navy, Red, etc.
+  patterns    String?                         // Solid, Graphics, Stripes, etc.
+  occasions   String[]                        // Casual, Work, Party, etc.
+  
+  // Full component tags as JSON (for category-specific tags)
+  componentTags Json                          // All parsed tags from component string
+  
+  // URLs
+  imageUrl    String                          // Product image URL
+  productLink String                          // Link to product page on broadwaylive.in
+  
+  // Vector search
+  searchDoc        String      @db.Text       // Combined text for embedding generation
+  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
+  
+  // Metadata
+  isActive    Boolean  @default(true)         // Whether product is available
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Indexes for fast filtering
+  @@index([category])
+  @@index([generalTag])
+  @@index([style])
+  @@index([fit])
+  @@index([patterns])
+  @@index([brand])
+  @@index([isActive])
+  @@index([createdAt])
 }
 
 // --- AGENT & LOGGING ---

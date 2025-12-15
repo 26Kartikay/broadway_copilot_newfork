@@ -118,6 +118,17 @@ export type AvailableService =
   | 'this_or_that'
   | 'skin_lab';
 /**
+ * Product recommendation structure for displaying products from Broadway catalog.
+ */
+export interface ProductRecommendation {
+  name: string;
+  brand: string;
+  imageUrl: string;
+  productLink: string;
+  reason?: string;
+}
+
+/**
  * Standard reply structure for agent responses.
  * Defines the format for all message types the agent can send back to users.
  */
@@ -139,6 +150,11 @@ type Reply =
   | {
       reply_type: 'image';
       media_url: string;
+      reply_text?: string;
+    }
+  | {
+      reply_type: 'product_card';
+      products: ProductRecommendation[];
       reply_text?: string;
     };
 

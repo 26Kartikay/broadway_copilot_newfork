@@ -16,7 +16,7 @@ import { MODEL_COSTS } from '../config/costs';
 import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from '../core/messages';
 import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
-import { ToolCall, toOpenAIToolSpec } from '../core/tools';
+import { ToolCall, toOpenAIToolSpec, ensureRequiredArrays } from '../core/tools';
 
 /**
  * A chat model that interacts with the OpenAI API.
@@ -291,11 +291,14 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
     if (this.structuredOutputSchema) {
       const toolName = this.structuredOutputToolName;
+      const rawSchema = z.toJSONSchema(this.structuredOutputSchema) as Record<string, unknown>;
+      // Apply the same schema processing as tools to ensure OpenAI compatibility
+      const processedSchema = ensureRequiredArrays(rawSchema);
       const tool: FunctionTool = {
         type: 'function',
         name: toolName,
         description: 'Structured output formatter',
-        parameters: z.toJSONSchema(this.structuredOutputSchema) as Record<string, unknown>,
+        parameters: processedSchema,
         strict: true,
       };
       params.tools = [...(params.tools ?? []), tool];

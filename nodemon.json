@@ -1,0 +1,12 @@
+{
+  "watch": ["src", "prompts"],
+  "ext": "ts,txt,json",
+  "ignore": ["node_modules", "dist", ".git", "uploads", "*.test.ts"],
+  "exec": "ts-node --transpile-only src/index.ts",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 500,
+  "verbose": false
+}
+

@@ -21,6 +21,9 @@ jobs:
       - name: 'Checkout'
         uses: 'actions/checkout@v4'
 
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
         uses: 'google-github-actions/auth@v2'
@@ -28,16 +31,21 @@ jobs:
           workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
           service_account: '${{ env.SERVICE_ACCOUNT }}'
 
+      - name: 'Set up Docker Buildx'
+        uses: 'docker/setup-buildx-action@v3'
+
       - name: 'Configure Docker for Artifact Registry'
         run: |
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-  
 
       - name: 'Build and Push Container'
-        run: |
-          DOCKER_TAG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}"
-          docker build --tag "${DOCKER_TAG}" .
-          docker push "${DOCKER_TAG}"
+        uses: 'docker/build-push-action@v5'
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - id: deploy
         name: 'Deploy to Cloud Run'
@@ -49,6 +57,7 @@ jobs:
           image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}'
           env_vars: |-
             NODE_ENV=production
+            PORT=8080
             PROJECT_ID=${{ env.PROJECT_ID }}
             CLOUD_FUNCTION_REGION=${{ env.REGION }}
             CLOUD_TASKS_REGION=asia-south1
@@ -70,7 +79,9 @@ jobs:
             --min-instances=1
             --no-invoker-iam-check
             --concurrency=8
+            --port=8080
 
-      - name: 'Show output'
+      - name: 'Show deployment URL'
         run: |
-          echo ${{ steps.deploy.outputs.url }}
+          echo "Service deployed successfully!"
+          echo "URL: ${{ steps.deploy.outputs.url }}"

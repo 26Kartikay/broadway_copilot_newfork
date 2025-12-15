@@ -63,6 +63,9 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
       REDIS_URL: redis://redis:6379
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
+      # Enable polling for file watching in Docker (works better on Windows/Mac)
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: 1000
     ports:
       - "${PORT:-8080}:8080"
     depends_on:
@@ -75,6 +78,9 @@ services:
       - node_modules:/usr/src/app/node_modules
       - dist:/usr/src/app/dist
       - /usr/src/app/functions
+    # Enable better file watching in Docker
+    stdin_open: true
+    tty: true
 
   db:
     image: pgvector/pgvector:pg16-bookworm

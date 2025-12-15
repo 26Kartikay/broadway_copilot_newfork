@@ -1,5 +1,6 @@
 import { ZodType } from 'zod';
 import { TraceBuffer } from '../../../agent/tracing';
+import { logger } from '../../../utils/logger';
 import { BaseChatModel } from '../core/base_chat_model';
 import {
   AssistantMessage,
@@ -30,7 +31,9 @@ async function getFinalStructuredOutput<T extends ZodType>(
   traceBuffer: TraceBuffer,
   nodeName: string,
 ): Promise<T['_output']> {
-  const lastMessage = conversation[conversation.length - 1];
+  // Find the most recent assistant message (the conversation can end on a ToolMessage
+  // when we stop due to maxLoops).
+  const lastMessage = [...conversation].reverse().find((m) => m instanceof AssistantMessage);
 
   // If the last message is an assistant's message, use it for parsing.
   if (lastMessage instanceof AssistantMessage) {
@@ -109,9 +112,12 @@ export async function agentExecutor<T extends ZodType>(
 ): Promise<T['_output']> {
   const runnerWithTools = runner.bind(options.tools);
 
+  // Tool information is available in traceBuffer for debugging if needed
+
   const conversation: BaseMessage[] = [...history];
 
   const seenToolCallIds = new Set<string>();
+  let maxLoopStop = false;
 
   for (let i = 0; i < maxLoops; i++) {
     const { assistant, toolCalls } = await runnerWithTools.run(
@@ -177,6 +183,22 @@ export async function agentExecutor<T extends ZodType>(
         ),
       );
     });
+
+    if (i === maxLoops - 1) {
+      maxLoopStop = true;
+    }
+  }
+
+  // If we bailed because of maxLoops and the conversation ends on a ToolMessage,
+  // run one more non-tool LLM call to let the model produce a final assistant message.
+  const lastMessage = conversation[conversation.length - 1];
+  if (maxLoopStop && !(lastMessage instanceof AssistantMessage)) {
+    logger.warn(
+      { nodeName: options.nodeName, maxLoops },
+      'agentExecutor: maxLoops hit with trailing non-assistant message; forcing final assistant run',
+    );
+    const { assistant } = await runner.run(systemPrompt, conversation, traceBuffer, options.nodeName);
+    conversation.push(assistant);
   }
 
   return await getFinalStructuredOutput(

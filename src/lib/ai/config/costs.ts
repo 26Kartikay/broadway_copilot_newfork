@@ -10,4 +10,8 @@ export const MODEL_COSTS: Record<string, { input: number; output: number }> = {
     input: 0.15,
     output: 0.75,
   },
+  'gpt-4o-mini': {
+    input: 0.15,
+    output: 0.6,
+  },
 };

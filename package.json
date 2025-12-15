@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn src/index.ts",
+    "dev": "ts-node-dev --respawn --poll --transpile-only --ignore-watch node_modules --ignore-watch dist --ignore-watch .git src/index.ts",
+    "dev:nodemon": "nodemon --watch src --watch prompts --ext ts,txt --exec \"ts-node --transpile-only src/index.ts\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts",
@@ -43,10 +44,12 @@
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "nodemon": "^3.1.9",
     "pino-pretty": "^13.1.1",
     "prettier": "^3.6.2",
     "prettier-plugin-organize-imports": "^4.3.0",
     "prisma": "^6.15.0",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "ts-prune": "^0.10.3",
     "typescript": "^5.9.2"

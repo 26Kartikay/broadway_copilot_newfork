@@ -134,12 +134,15 @@ All commands run inside the `app` container by default when using Compose. Run t
 | Command | Purpose |
 | --- | --- |
 | `npm ci` | Install dependencies (already handled at container build) |
-| `npm run dev` | Start the Express server with hot reload (default compose command) |
+| `npm run dev` | Start the Express server with hot reload using ts-node-dev with polling (default compose command) |
+| `npm run dev:nodemon` | Alternative: Start with nodemon for file watching (useful if ts-node-dev has issues) |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm run lint` | Lint the codebase |
 | `npx prisma generate` | Regenerate Prisma client after schema updates |
 | `npx prisma migrate dev` | Create and apply a new migration locally |
 | `npm run graph` | Regenerate `langgraph.png` from the current state graph |
+
+**Note:** Live reload is enabled by default. Changes to files in `src/` and `prompts/` will automatically restart the server. The setup uses polling mode for better compatibility with Docker file watching on Windows/Mac.
 
 ### Running Without Docker
 
@@ -203,11 +206,106 @@ Prisma manages the relational schema (source of truth lives in `functions/prisma
 - **Message** – Individual inbound/outbound messages with role, intent, and media references.
 - **Media** – Metadata and storage pointers for user-uploaded images.
 - **VibeCheck / ColorAnalysis** – Structured analysis outputs produced by the agent.
-- **WardrobeItem** – Catalog of a user’s wardrobe items with descriptors.
+- **WardrobeItem** – Catalog of a user's wardrobe items with descriptors.
 - **Memory** – Key-value store for long-term facts.
+- **Product** – Product catalog with vector embeddings for semantic search (see [Product Management](#product-management) below).
 - **GraphRun / NodeRun / LLMTrace** – Tracing artifacts for debugging agent executions.
 
 Run `npx prisma studio` (inside the container) to inspect data during development.
+
+### Product Management
+
+The product catalog is stored in the `Product` table with vector embeddings for semantic search. Products can be imported from CSV or JSON files and automatically generate embeddings using OpenAI's `text-embedding-3-small` model.
+
+#### Product Table Structure
+
+```prisma
+model Product {
+  id        String @id @default(cuid())
+  handleId  String @unique                    // URL-friendly product identifier
+  barcode   String?                           // Product barcode/SKU
+  
+  name      String                            // article_name
+  brand     String                            // Brand name
+  
+  // Category & Type
+  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
+  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
+  
+  // Parsed from component string (for fast filtering)
+  style       String?                         // Athleisure, Minimal, Streetwear, etc.
+  fit         String?                         // Oversized, Slim, Regular, etc.
+  colors      String[]                        // Black, Navy, Red, etc.
+  patterns    String?                         // Solid, Graphics, Stripes, etc.
+  occasions   String[]                        // Casual, Work, Party, etc.
+  
+  // Full component tags as JSON (for category-specific tags)
+  componentTags Json                          // All parsed tags from component string
+  
+  // URLs
+  imageUrl    String                          // Product image URL
+  productLink String                          // Link to product page on broadwaylive.in
+  
+  // Vector search
+  searchDoc        String      @db.Text       // Combined text for embedding generation
+  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
+  
+  // Metadata
+  isActive    Boolean  @default(true)         // Whether product is available
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([category])
+}
+```
+
+#### Importing Products
+
+Import products from a CSV or JSON file. The script automatically:
+- Parses product data and component tags
+- Generates search documents from product attributes
+- Creates vector embeddings using OpenAI
+- Stores products in the database with embeddings
+
+**Basic import (skips existing products):**
+```bash
+npx ts-node scripts/importProducts.ts --file=data/products.csv
+```
+
+**Import with clearing existing products:**
+```bash
+npx ts-node scripts/importProducts.ts --file=data/products.csv --clear
+```
+
+**Required CSV columns:**
+- `handle_id` – Unique product identifier
+- `article_name` – Product name
+- `brand` – Brand name
+- `general_tags` – Product type tags
+- `category` – Main category
+- `component_tags` – Tags string (e.g., "STYLE: Athleisure, COLOR: Black")
+- `images` – Product image URL
+- `product_url` – Link to product page
+
+**Optional columns:**
+- `barcode` – Product barcode/SKU
+- `id` – Auto-generated ID (ignored)
+- `tagged_at` – Timestamp (ignored)
+
+#### Deleting Products
+
+Delete all products from the database (including vector embeddings):
+
+```bash
+npx ts-node scripts/deleteProducts.ts --confirm
+```
+
+**Warning:** This permanently deletes all products. Use with caution.
+
+**Note:** After deleting products, you'll need to re-import them to regenerate embeddings. The import script handles embedding generation automatically.
 
 ---
 

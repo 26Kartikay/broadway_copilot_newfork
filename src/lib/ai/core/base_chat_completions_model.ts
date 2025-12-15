@@ -10,7 +10,7 @@ import z from 'zod';
 
 import { BaseChatModel } from './base_chat_model';
 import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from './messages';
-import { ToolCall, toOpenAIToolSpec } from './tools';
+import { ToolCall, toOpenAIToolSpec, ensureRequiredArrays } from './tools';
 
 export abstract class BaseChatCompletionsModel extends BaseChatModel {
   protected _buildChatCompletionsParams(
@@ -113,49 +113,58 @@ export abstract class BaseChatCompletionsModel extends BaseChatModel {
       params.seed = this.params.seed;
     }
 
-    if (this.boundTools.length > 0) {
-      const tools: ChatCompletionTool[] = this.boundTools.map((t) => {
-        const spec = toOpenAIToolSpec(t);
-        return {
-          type: 'function',
-          function: {
-            name: spec.name,
-            description: spec.description ?? '',
-            parameters: spec.parameters ?? {},
-            strict: spec.strict ?? null,
-          },
-        };
-      });
-      params.tools = tools;
+    const boundToolSpecs: ChatCompletionTool[] =
+      this.boundTools.length > 0
+        ? this.boundTools.map((t) => {
+            const spec = toOpenAIToolSpec(t);
+            return {
+              type: 'function',
+              function: {
+                name: spec.name,
+                description: spec.description ?? '',
+                parameters: spec.parameters ?? {},
+                strict: spec.strict ?? true,
+              },
+            };
+          })
+        : [];
+
+    if (boundToolSpecs.length > 0) {
+      params.tools = boundToolSpecs;
       params.tool_choice = 'auto';
     }
 
     if (this.structuredOutputSchema) {
       const toolName = this.structuredOutputToolName;
+      const rawSchema = z.toJSONSchema(this.structuredOutputSchema) as Record<string, unknown>;
+      // Apply the same schema processing as tools to ensure OpenAI compatibility
+      const processedSchema = ensureRequiredArrays(rawSchema);
       const tool: ChatCompletionTool = {
         type: 'function',
         function: {
           name: toolName,
           description: 'Structured output formatter',
-          parameters: z.toJSONSchema(this.structuredOutputSchema) as Record<string, unknown>,
+          parameters: processedSchema,
           strict: true,
         },
       };
-      // Added logging here for JSON schema
-      console.log(
-        'Groq Structured Output JSON Schema:',
-        JSON.stringify(tool.function.parameters, null, 2),
-      );
+      // JSON schema is available in traceBuffer for debugging if needed
 
       params.tools = [...(params.tools ?? []), tool];
-      params.tool_choice = {
-        type: 'function',
-        function: { name: toolName },
-      };
+
+      // If we already have bound tools, keep 'auto' so the model can use them;
+      // otherwise force the structured output tool.
+      if (!boundToolSpecs.length) {
+        params.tool_choice = {
+          type: 'function',
+          function: { name: toolName },
+        };
+      } else if (!params.tool_choice) {
+        params.tool_choice = 'auto';
+      }
     }
 
-    // Added logging here for chat messages array
-    console.log('Chat messages sent:', JSON.stringify(messages, null, 2));
+    // Chat messages are available in traceBuffer for debugging if needed
 
     return params;
   }
@@ -190,9 +199,7 @@ export abstract class BaseChatCompletionsModel extends BaseChatModel {
           throw new Error(`Failed to parse arguments for ${tc.function.name}: ${e}`);
         }
       });
-    // Added logs here for assistant message and tool calls
-    console.log('Assistant message:', assistant);
-    console.log('Extracted tool calls:', toolCalls);
+    // Assistant message and tool calls are available in traceBuffer for debugging if needed
 
     if (toolCalls.length > 0) {
       assistant.meta.tool_calls = toolCalls;
