@@ -53,6 +53,8 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
+          memory: 1Gi
+          timeout: 300
           environment_variables: |-
             FUNCTION_TARGET=imageUpload
           secrets: |-
@@ -68,6 +70,8 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
+          memory: 512Mi
+          timeout: 120
           environment_variables: |-
             FUNCTION_TARGET=storeMemories
           secrets: |-
@@ -83,6 +87,8 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
+          memory: 1Gi
+          timeout: 300
           environment_variables: |-
             FUNCTION_TARGET=indexWardrobe
           secrets: |-
@@ -98,6 +104,8 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           region: ${{ env.REGION }}
           source_dir: ./functions
+          memory: 256Mi
+          timeout: 60
           environment_variables: |-
             FUNCTION_TARGET=sendFeedbackRequest
           secrets: |-

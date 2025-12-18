@@ -57,7 +57,6 @@ jobs:
           image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/broadway-chatbot/${{ env.SERVICE }}:${{ github.sha }}'
           env_vars: |-
             NODE_ENV=production
-            PORT=8080
             PROJECT_ID=${{ env.PROJECT_ID }}
             CLOUD_FUNCTION_REGION=${{ env.REGION }}
             CLOUD_TASKS_REGION=asia-south1
