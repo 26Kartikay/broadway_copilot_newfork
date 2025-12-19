@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { extension as extFromMime } from 'mime-types';
+import { createCanvas, loadImage } from 'canvas';
 
 import { BadRequestError, InternalServerError } from './errors';
 import { logger } from './logger';
@@ -51,6 +52,92 @@ export function bufferToDataUrl(buffer: Buffer, mimeType: string): string {
 }
 
 /**
+ * Compresses and resizes an image to reduce file size.
+ * 
+ * @param buffer - Image buffer
+ * @param mimeType - Original MIME type
+ * @param maxWidth - Maximum width in pixels (default: 1920)
+ * @param maxHeight - Maximum height in pixels (default: 1920)
+ * @param quality - JPEG quality 0-1 (default: 0.85)
+ * @returns Compressed image buffer and updated MIME type
+ */
+export async function compressImage(
+  buffer: Buffer,
+  mimeType: string,
+  maxWidth: number = 1920,
+  maxHeight: number = 1920,
+  quality: number = 0.85,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  try {
+    // Only compress image types
+    if (!mimeType.startsWith('image/')) {
+      return { buffer, mimeType };
+    }
+
+    // Load image from buffer
+    const img = await loadImage(buffer);
+    
+    // Calculate new dimensions while maintaining aspect ratio
+    let width = img.width;
+    let height = img.height;
+    
+    if (width <= maxWidth && height <= maxHeight) {
+      // Image is already small enough, return as-is
+      return { buffer, mimeType };
+    }
+
+    if (width > height) {
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+    } else {
+      if (height > maxHeight) {
+        width = Math.round((width * maxHeight) / height);
+        height = maxHeight;
+      }
+    }
+
+    // Create canvas and draw resized image
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+
+    // Convert to JPEG for better compression (unless it's PNG with transparency or WebP)
+    const isPng = mimeType === 'image/png';
+    const isWebP = mimeType === 'image/webp';
+    const outputType = isPng || isWebP ? mimeType : 'image/jpeg';
+    const outputMimeType = outputType;
+
+    // Convert canvas to buffer
+    const compressedBuffer = canvas.toBuffer(outputType === 'image/png' ? 'image/png' : 'image/jpeg', {
+      quality: outputType === 'image/jpeg' ? quality : undefined,
+    });
+
+    logger.debug(
+      {
+        originalSize: buffer.length,
+        compressedSize: compressedBuffer.length,
+        reduction: `${((1 - compressedBuffer.length / buffer.length) * 100).toFixed(1)}%`,
+        originalDimensions: `${img.width}x${img.height}`,
+        newDimensions: `${width}x${height}`,
+        mimeType: outputMimeType,
+      },
+      'Image compressed',
+    );
+
+    return { buffer: compressedBuffer, mimeType: outputMimeType };
+  } catch (error) {
+    // If compression fails, return original buffer
+    logger.warn(
+      { error: error instanceof Error ? error.message : String(error), mimeType },
+      'Failed to compress image, using original',
+    );
+    return { buffer, mimeType };
+  }
+}
+
+/**
  * Processes media for use with AI models.
  * 
  * - If the URL is already a data URL, returns it as-is (works locally and in prod)
@@ -88,6 +175,11 @@ export async function processMediaForAI(
       }
       buffer = Buffer.from(await response.arrayBuffer());
     }
+
+    // Compress image to reduce storage usage
+    const compressed = await compressImage(buffer, actualMimeType);
+    buffer = compressed.buffer;
+    actualMimeType = compressed.mimeType;
 
     // Save to local filesystem
     const extension = extFromMime(actualMimeType);
