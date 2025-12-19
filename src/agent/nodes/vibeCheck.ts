@@ -7,6 +7,7 @@ import { prisma } from '../../lib/prisma';
 import { queueWardrobeIndex } from '../../lib/tasks';
 import type { QuickReplyButton } from '../../lib/chat/types';
 import { numImagesInMessage } from '../../utils/context';
+import { generateVibeCheckImage } from '../../utils/imageGenerator';
 import { loadPrompt } from '../../utils/prompts';
 
 import { PendingType, Prisma } from '@prisma/client';
@@ -153,10 +154,35 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     queueWardrobeIndex(userId, latestMessageId);
 
-    const replies: Replies = [
-  {
-    reply_type: 'text',
-    reply_text: `
+    // Generate image
+    let imageUrl: string | undefined;
+    try {
+      imageUrl = await generateVibeCheckImage(state.user.whatsappId, {
+        overall_score: result.overall_score,
+        fit_silhouette: result.fit_silhouette,
+        color_harmony: result.color_harmony,
+        styling_details: result.styling_details,
+        context_confidence: result.context_confidence,
+      });
+    } catch (err: unknown) {
+      logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate vibe check image');
+      // Continue without image if generation fails
+    }
+
+    const replies: Replies = [];
+    
+    // Add image reply first if generated
+    if (imageUrl) {
+      replies.push({
+        reply_type: 'image',
+        media_url: imageUrl,
+      });
+    }
+    
+    // Add text reply
+    replies.push({
+      reply_type: 'text',
+      reply_text: `
 ✨ *Vibe Check Results* ✨
 
 ${result.comment}
@@ -179,10 +205,8 @@ _${result.context_confidence.explanation}_
 ${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
 
 ${result.follow_up}  
-    `.trim(),
-  },
-];
-
+      `.trim(),
+    });
 
     return {
       ...state,

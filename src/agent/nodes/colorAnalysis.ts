@@ -5,6 +5,7 @@ import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
+import { generateColorAnalysisImage } from '../../utils/imageGenerator';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 
@@ -120,6 +121,20 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       }),
     ]);
 
+    // Generate image
+    let imageUrl: string | undefined;
+    try {
+      imageUrl = await generateColorAnalysisImage(state.user.whatsappId, {
+        palette_name: output.palette_name,
+        colors_suited: output.colors_suited,
+        colors_to_wear: output.colors_to_wear,
+        colors_to_avoid: output.colors_to_avoid,
+      });
+    } catch (err: unknown) {
+      logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate color analysis image');
+      // Continue without image if generation fails
+    }
+
     // Beautifully formatted WhatsApp message
     const formattedMessage = `
 💫 *${output.compliment}*
@@ -135,7 +150,18 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 ${output.follow_up}
 `;
 
-    const replies: Replies = [{ reply_type: 'text', reply_text: formattedMessage.trim() }];
+    const replies: Replies = [];
+    
+    // Add image reply first if generated
+    if (imageUrl) {
+      replies.push({
+        reply_type: 'image',
+        media_url: imageUrl,
+      });
+    }
+    
+    // Add text reply
+    replies.push({ reply_type: 'text', reply_text: formattedMessage.trim() });
 
     logger.debug({ userId, messageId, replies }, 'Color analysis completed successfully');
 
