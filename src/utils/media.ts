@@ -106,13 +106,15 @@ export async function compressImage(
     // Convert to JPEG for better compression (unless it's PNG with transparency or WebP)
     const isPng = mimeType === 'image/png';
     const isWebP = mimeType === 'image/webp';
-    const outputType = isPng || isWebP ? mimeType : 'image/jpeg';
-    const outputMimeType = outputType;
+    const outputMimeType = isPng || isWebP ? mimeType : 'image/jpeg';
 
     // Convert canvas to buffer
-    const compressedBuffer = canvas.toBuffer(outputType === 'image/png' ? 'image/png' : 'image/jpeg', {
-      quality: outputType === 'image/jpeg' ? quality : undefined,
-    });
+    let compressedBuffer: Buffer;
+    if (outputMimeType === 'image/png') {
+      compressedBuffer = canvas.toBuffer('image/png');
+    } else {
+      compressedBuffer = canvas.toBuffer('image/jpeg', { quality });
+    }
 
     logger.debug(
       {
