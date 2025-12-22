@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
+import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
@@ -126,7 +126,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     const latestMessage = state.conversationHistoryWithImages.at(-1);
     if (latestMessage && latestMessage.content && Array.isArray(latestMessage.content)) {
       const imagePart = latestMessage.content.find(
-        (part: any) => part.type === 'image_url' && part.image_url?.url
+        (part): part is ImagePart => part.type === 'image_url' && 'image_url' in part
       );
       if (imagePart && imagePart.image_url?.url) {
         userImageUrl = imagePart.image_url.url;
