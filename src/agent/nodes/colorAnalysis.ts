@@ -121,6 +121,18 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       }),
     ]);
 
+    // Extract user image URL from the latest message
+    let userImageUrl: string | null = null;
+    const latestMessage = state.conversationHistoryWithImages.at(-1);
+    if (latestMessage && latestMessage.content && Array.isArray(latestMessage.content)) {
+      const imagePart = latestMessage.content.find(
+        (part: any) => part.type === 'image_url' && part.image_url?.url
+      );
+      if (imagePart && imagePart.image_url?.url) {
+        userImageUrl = imagePart.image_url.url;
+      }
+    }
+
     // Generate image
     let imageUrl: string | undefined;
     try {
@@ -129,6 +141,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         colors_suited: output.colors_suited,
         colors_to_wear: output.colors_to_wear,
         colors_to_avoid: output.colors_to_avoid,
+        userImageUrl,
       });
     } catch (err: unknown) {
       logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate color analysis image');
