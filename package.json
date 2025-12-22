@@ -24,6 +24,7 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "@prisma/client": "^6.15.0",
     "canvas": "^3.2.0",
+    "colornames": "^1.1.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",

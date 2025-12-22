@@ -1,58 +1,57 @@
 import { createCanvas, loadImage, registerFont } from 'canvas';
 import fs from 'fs/promises';
 import path from 'path';
+import colornames from 'colornames';
 
 import { InternalServerError } from './errors';
 import { logger } from './logger';
 import { ensureDir, userUploadDir } from './paths';
 
-// Color name to hex mapping
-const COLOR_MAP: Record<string, string> = {
-  red: '#FF0000',
-  orange: '#FFA500',
-  yellow: '#FFFF00',
-  gold: '#FFD700',
-  coral: '#FF7F50',
-  peach: '#FFE5B4',
-  terracotta: '#E2725B',
-  rust: '#B7410E',
-  mustard: '#FFDB58',
-  blue: '#0000FF',
-  navy: '#000080',
-  teal: '#008080',
-  turquoise: '#40E0D0',
-  mint: '#98FF98',
-  black: '#000000',
-  white: '#FFFFFF',
-  gray: '#808080',
-  grey: '#808080',
-  'cool gray': '#8C92AC',
-  beige: '#F5F5DC',
-  cream: '#FFFDD0',
-  ivory: '#FFFFF0',
-  purple: '#800080',
-  lavender: '#E6E6FA',
-  violet: '#8A2BE2',
-  green: '#008000',
-  olive: '#808000',
-  emerald: '#50C878',
-  brown: '#A52A2A',
-  tan: '#D2B48C',
-  camel: '#C19A6B',
-  pink: '#FFC0CB',
-  rose: '#FF007F',
-  blush: '#DE5D83',
-  silver: '#C0C0C0',
-  bronze: '#CD7F32',
-};
-
+/**
+ * Converts a color name to hex code using colornames library with fallback logic
+ */
 function colorNameToHex(colorName: string): string {
   const normalized = colorName.toLowerCase().trim();
-  if (COLOR_MAP[normalized]) return COLOR_MAP[normalized];
   
-  for (const [key, hex] of Object.entries(COLOR_MAP)) {
-    if (normalized.includes(key) || key.includes(normalized)) return hex;
+  // Try direct lookup first
+  const directMatch = colornames(normalized);
+  if (directMatch) return directMatch;
+  
+  // Try with common variations
+  const variations = [
+    normalized.replace(/\s+/g, ''), // Remove spaces: "olive green" -> "olivegreen"
+    normalized.replace(/\s+/g, '-'), // Replace spaces with hyphens: "olive green" -> "olive-green"
+    normalized.replace(/\b(pastel|deep|light|dark|bright|soft|warm|cool|icy|muted)\b/g, '').trim(), // Remove descriptors
+  ];
+  
+  for (const variant of variations) {
+    if (variant && variant !== normalized) {
+      const match = colornames(variant);
+      if (match) return match;
+    }
   }
+  
+  // Try partial matching - check if any color name contains the input or vice versa
+  const allColors = colornames.all();
+  for (const colorEntry of allColors) {
+    const colorNameLower = colorEntry.name.toLowerCase();
+    // Check if the input contains the color name or the color name contains the input
+    if (normalized.includes(colorNameLower) || colorNameLower.includes(normalized)) {
+      // Use the value property from the entry
+      if (colorEntry.value) return colorEntry.value;
+    }
+  }
+  
+  // Try splitting compound names (e.g., "Olive Green" -> try "olive" and "green")
+  const words = normalized.split(/\s+/);
+  for (const word of words) {
+    if (word.length > 2) { // Skip very short words
+      const match = colornames(word);
+      if (match) return match;
+    }
+  }
+  
+  // Fallback to gray if no match found
   return '#808080';
 }
 
