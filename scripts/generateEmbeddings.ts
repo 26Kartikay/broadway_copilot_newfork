@@ -36,7 +36,6 @@ interface ProductData {
   patterns: string | null;
   occasions: string[];
   componentTags: any;
-  description: string | null;
   searchDoc?: string | null; // Optional, will be regenerated
 }
 
@@ -65,11 +64,6 @@ function buildSearchDoc(product: ProductData): string {
   }
   if (product.occasions.length > 0) {
     parts.push(`Occasions: ${product.occasions.join(', ')}`);
-  }
-
-  // Add description if available
-  if (product.description && product.description.trim()) {
-    parts.push(`Description: ${product.description.trim()}`);
   }
 
   // Add any additional tags from componentTags
@@ -151,7 +145,6 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
         patterns: true,
         occasions: true,
         componentTags: true,
-        description: true,
       },
     });
 
@@ -161,28 +154,53 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 
     console.log(`\n🔄 Processing batch ${Math.floor(offset / BATCH_SIZE) + 1}/${Math.ceil(totalProducts / BATCH_SIZE)} (${products.length} products)`);
 
-    // Build search documents
-    const searchDocs = products.map(product => buildSearchDoc(product as any));
+      // Build search documents - ensure all products have valid search docs
+      const searchDocs: string[] = [];
+      const validProducts: typeof products = [];
+      
+      for (const product of products) {
+        if (!product) continue;
+        const searchDoc = buildSearchDoc(product as any);
+        if (searchDoc && searchDoc.trim().length > 0) {
+          searchDocs.push(searchDoc);
+          validProducts.push(product);
+        }
+      }
+
+      if (validProducts.length === 0) {
+        console.log('⚠️ No valid products in this batch, skipping...');
+        continue;
+      }
 
     try {
       // Generate embeddings
-      console.log(`🧠 Generating embeddings...`);
+      console.log(`🧠 Generating embeddings for ${validProducts.length} products...`);
       const embeddings = await generateEmbeddings(searchDocs);
+
+      if (embeddings.length !== validProducts.length || embeddings.length !== searchDocs.length) {
+        throw new Error(`Mismatch: ${validProducts.length} products, ${searchDocs.length} docs, ${embeddings.length} embeddings`);
+      }
 
       // Update products with embeddings
       console.log(`💾 Updating products with embeddings...`);
       
-      for (let i = 0; i < products.length; i++) {
-        const product = products[i];
+      for (let i = 0; i < validProducts.length; i++) {
+        const product = validProducts[i];
         const embedding = embeddings[i];
         const searchDoc = searchDocs[i];
+
+        if (!product || !embedding || !searchDoc) {
+          console.error(`❌ Missing data for product at index ${i}`);
+          errors++;
+          continue;
+        }
 
         try {
           // Update searchDoc first
           await prisma.product.update({
             where: { id: product.id },
             data: {
-              searchDoc,
+              searchDoc: searchDoc,
               embeddingModel: EMBEDDING_MODEL,
               embeddingDim: EMBEDDING_DIM,
               embeddingAt: new Date(),
@@ -199,7 +217,7 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 
           updated++;
         } catch (err: any) {
-          console.error(`❌ Error updating product ${product.handleId}: ${err.message}`);
+          console.error(`❌ Error updating product ${product.id}: ${err.message}`);
           errors++;
         }
       }

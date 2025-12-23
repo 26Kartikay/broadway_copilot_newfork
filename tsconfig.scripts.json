@@ -1,10 +1,18 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "scripts",
-    "outDir": "dist/scripts"
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist/scripts",
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
-  "include": ["scripts/**/*.ts"],
-  "exclude": ["node_modules", "dist", "functions"]
+  "include": ["scripts/generateEmbeddings.ts", "scripts/importProducts.ts", "scripts/deleteProducts.ts"],
+  "exclude": ["node_modules", "dist", "functions", "src", "scripts/addAdmin.ts"]
 }
 
