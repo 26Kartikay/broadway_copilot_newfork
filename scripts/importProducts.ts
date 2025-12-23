@@ -21,6 +21,7 @@
  * Optional columns:
  *   - id: Auto-generated ID (ignored)
  *   - tagged_at: Timestamp (ignored)
+ *   - description: Product description (included in embeddings)
  */
 
 import 'dotenv/config';
@@ -137,6 +138,7 @@ interface ProductData {
   componentTags: Record<string, string | string[]>;
   imageUrl: string;
   productLink: string;
+  description?: string;
 }
 
 /**
@@ -164,6 +166,11 @@ function buildSearchDoc(product: ProductData): string {
   }
   if (product.occasions.length > 0) {
     parts.push(`Occasions: ${product.occasions.join(', ')}`);
+  }
+
+  // Add description if available
+  if (product.description && product.description.trim()) {
+    parts.push(`Description: ${product.description.trim()}`);
   }
 
   // Add any additional tags from componentTags
@@ -267,6 +274,7 @@ interface RawProduct {
   tagged_at?: string;        // New: optional timestamp
   images: string;            // Changed: was image_url
   product_url: string;       // Changed: was product_link
+  description?: string;      // Product description
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
@@ -315,12 +323,15 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       const seenHandleIds = new Set<string>(); // Track duplicates within batch
       
       for (const raw of batch) {
-        // Skip if missing required fields
-        if (!raw.handle_id || !raw.article_name || !raw.brand) {
+        // Skip if missing required fields (handle_id and article_name are required)
+        if (!raw.handle_id || !raw.article_name) {
           console.warn(`⚠️ Skipping product with missing required fields: ${raw.handle_id || 'unknown'}`);
           skipped++;
           continue;
         }
+        
+        // Use default brand if missing
+        const brand = raw.brand?.trim() || 'Unknown';
 
         // Check for duplicates within the batch
         if (seenHandleIds.has(raw.handle_id)) {
@@ -353,7 +364,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
           handleId: raw.handle_id,
           barcode: raw.barcode || undefined,
           name: raw.article_name,
-          brand: raw.brand,
+          brand: brand,
           category,
           generalTag: raw.general_tags || 'Unknown',
           style: parsed.style,
@@ -364,6 +375,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
           componentTags: parsed.allTags,
           imageUrl: raw.images || '',
           productLink: raw.product_url || '',
+          description: raw.description?.trim() || undefined,
         });
       }
 

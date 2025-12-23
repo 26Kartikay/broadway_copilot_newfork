@@ -1,57 +1,163 @@
-Broadway Bot - Request Bodies Cheatsheet (for Postman)
+Broadway Bot - API Contract Documentation (for Postman)
 =====================================================
 
-Use these to hit the local/prod backend without guessing payloads. Each section includes BOTH:
-- /api/chat (JSON) — no Twilio required
-- /twilio/ (x-www-form-urlencoded) — Twilio-shaped body for the webhook
+This document provides the complete API contract for the Broadway Bot chat API endpoint.
+Use these payloads to test the backend without guessing the structure.
 
-Notes
-- Replace placeholders like YOUR_HOST, user_123, and image URLs.
-- messageId may be omitted in /api/chat (the server generates one). For /twilio/, MessageSid is required.
-- Add X-Twilio-Signature header for /twilio/ (any value if TWILIO_VALIDATE_WEBHOOK=false).
+Endpoint: POST /api/chat
+Content-Type: application/json
 
 --------------------------------------------------------------------
+Request Structure (ChatRequest)
+--------------------------------------------------------------------
+
+Required Fields:
+- userId: string - Unique identifier for the user (REQUIRED)
+
+Optional Fields:
+- text: string - Text content of the message
+- media: MediaAttachment[] - Array of media attachments
+  - url: string - URL to the media file (REQUIRED)
+  - contentType?: string - MIME type (e.g., 'image/jpeg')
+- button: ButtonInput - Button interaction data
+  - text?: string - Display text of the button
+  - payload?: string - Payload/identifier of the button
+  - type?: string - Type of button (e.g., 'quick_reply')
+- profileName?: string - User's display name
+- messageId?: string - Optional client-provided message ID (server generates one if omitted)
+
+Notes:
+- At least one of 'text', 'media', or 'button' should be provided
+- Multiple media attachments are supported (up to 10)
+- messageId is optional; server will generate one if not provided
+
+--------------------------------------------------------------------
+Response Structure (ChatResponse)
+--------------------------------------------------------------------
+
+{
+  "replies": Reply[],  // Array of reply objects
+  "pending": string | null  // Pending action type, if any
+}
+
+Reply Types:
+1. Text Reply:
+   {
+     "reply_type": "text",
+     "reply_text": "Your message text here"
+   }
+
+2. Quick Reply (with buttons):
+   {
+     "reply_type": "quick_reply",
+     "reply_text": "Choose an option:",
+     "buttons": [
+       {
+         "text": "Option 1",
+         "id": "option_1"
+       },
+       {
+         "text": "Option 2",
+         "id": "option_2"
+       }
+     ]
+   }
+
+3. List Picker:
+   {
+     "reply_type": "list_picker",
+     "reply_text": "Select from list:",
+     "buttons": [
+       {
+         "text": "Item 1",
+         "id": "item_1"
+       }
+     ]
+   }
+
+4. Image Reply:
+   {
+     "reply_type": "image",
+     "media_url": "https://example.com/image.png",
+     "reply_text": "Optional caption text"
+   }
+
+5. Product Card:
+   {
+     "reply_type": "product_card",
+     "products": [
+       {
+         "name": "Product Name",
+         "brand": "Brand Name",
+         "imageUrl": "https://example.com/product.jpg",
+         "productLink": "https://example.com/product",
+         "reason": "Why this product was recommended"
+       }
+     ],
+     "reply_text": "Optional text message"
+   }
+
+--------------------------------------------------------------------
+Request Examples
+--------------------------------------------------------------------
+
 1. General: Greeting / Chat
 --------------------------------------------------------------------
 
-[APP] /api/chat JSON
+POST /api/chat
 {
   "userId": "user_123",
   "profileName": "Alex",
   "text": "Hello!"
 }
 
-[Twilio] /twilio/ form fields
-WaId=15551234567
-&MessageSid=msg_general_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=Hello!
-&NumMedia=0
+Expected Response:
+{
+  "replies": [
+    {
+      "reply_type": "text",
+      "reply_text": "Hi Alex! How can I help you today?"
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
-2. Menu navigation (General -> Menu)
+2. Menu Navigation
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "menu"
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_menu_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=menu
-&NumMedia=0
+Expected Response (example):
+{
+  "replies": [
+    {
+      "reply_type": "quick_reply",
+      "reply_text": "Here's what I can help you with:",
+      "buttons": [
+        {
+          "text": "Style Studio",
+          "id": "style_studio"
+        },
+        {
+          "text": "Vibe Check",
+          "id": "vibe_check"
+        }
+      ]
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
 3. Vibe Check (Tonality selection via button)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "button": {
@@ -61,63 +167,81 @@ WaId=15551234567
   }
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_vibe_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=
-&NumMedia=0
-&ButtonText=Hype%20BFF
-&ButtonPayload=tonality_hype_bff
-&MessageType=button
+Expected Response (example):
+{
+  "replies": [
+    {
+      "reply_type": "text",
+      "reply_text": "Perfect! I'll chat with you like your hype BFF! 🔥"
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
 4. Color Analysis (with one selfie/image)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "color analysis",
   "media": [
-    { "url": "https://example.com/selfie.jpg", "contentType": "image/jpeg" }
+    {
+      "url": "https://example.com/selfie.jpg",
+      "contentType": "image/jpeg"
+    }
   ]
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_color_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=color%20analysis
-&NumMedia=1
-&MediaUrl0=https://example.com/selfie.jpg
-&MediaContentType0=image/jpeg
+Expected Response (example):
+{
+  "replies": [
+    {
+      "reply_type": "image",
+      "media_url": "https://your-server.com/uploads/user_123/color_analysis_1234567890.png",
+      "reply_text": "Here's your personalized color analysis!"
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
 5. Style Studio: General
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "Style Studio"
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_ss_general_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=Style%20Studio
-&NumMedia=0
+Expected Response (example):
+{
+  "replies": [
+    {
+      "reply_type": "quick_reply",
+      "reply_text": "Welcome to Style Studio! What would you like to explore?",
+      "buttons": [
+        {
+          "text": "Style for any occasion",
+          "id": "style_studio_occasion"
+        },
+        {
+          "text": "Vacation looks",
+          "id": "style_studio_vacation"
+        }
+      ]
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
 6. Style Studio: Occasion (button tap)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "button": {
@@ -127,22 +251,35 @@ WaId=15551234567
   }
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_ss_occasion_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=
-&NumMedia=0
-&ButtonText=Style%20for%20any%20occasion
-&ButtonPayload=style_studio_occasion
-&MessageType=button
+Expected Response (example - may include product cards):
+{
+  "replies": [
+    {
+      "reply_type": "text",
+      "reply_text": "Let me suggest some great outfit options for your occasion!"
+    },
+    {
+      "reply_type": "product_card",
+      "products": [
+        {
+          "name": "Classic White Shirt",
+          "brand": "Fashion Brand",
+          "imageUrl": "https://example.com/shirt.jpg",
+          "productLink": "https://example.com/product/123",
+          "reason": "Perfect for any formal occasion"
+        }
+      ],
+      "reply_text": "Here are some recommendations:"
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
 7. Style Studio: Vacation (button tap)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "button": {
@@ -152,107 +289,98 @@ WaId=15551234567
   }
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_ss_vacation_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=
-&NumMedia=0
-&ButtonText=Vacation%20looks
-&ButtonPayload=style_studio_vacation
-&MessageType=button
+Expected Response: Similar structure to Style Studio Occasion
 
 --------------------------------------------------------------------
-8. Styling: Suggest outfits (free text)
+8. Styling: Suggest Outfits (free text)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "Suggest outfits for a dinner date"
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_styling_suggest_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=Suggest%20outfits%20for%20a%20dinner%20date
-&NumMedia=0
+Expected Response (example):
+{
+  "replies": [
+    {
+      "reply_type": "text",
+      "reply_text": "I've got some perfect outfit suggestions for your dinner date!"
+    },
+    {
+      "reply_type": "product_card",
+      "products": [
+        {
+          "name": "Elegant Dress",
+          "brand": "Style Co",
+          "imageUrl": "https://example.com/dress.jpg",
+          "productLink": "https://example.com/product/456",
+          "reason": "Perfect for a romantic dinner"
+        }
+      ]
+    }
+  ],
+  "pending": null
+}
 
 --------------------------------------------------------------------
 9. Styling: Pairing (free text)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "How to style white sneakers with jeans?"
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_styling_pairing_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=How%20to%20style%20white%20sneakers%20with%20jeans%3F
-&NumMedia=0
+Expected Response: Text reply with styling advice
 
 --------------------------------------------------------------------
-10. This or That: Compare two images
+10. This or That: Compare Two Images
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "this or that",
   "media": [
-    { "url": "https://example.com/lookA.jpg", "contentType": "image/jpeg" },
-    { "url": "https://example.com/lookB.jpg", "contentType": "image/jpeg" }
+    {
+      "url": "https://example.com/lookA.jpg",
+      "contentType": "image/jpeg"
+    },
+    {
+      "url": "https://example.com/lookB.jpg",
+      "contentType": "image/jpeg"
+    }
   ]
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_thisorthat_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=this%20or%20that
-&NumMedia=2
-&MediaUrl0=https://example.com/lookA.jpg
-&MediaContentType0=image/jpeg
-&MediaUrl1=https://example.com/lookB.jpg
-&MediaContentType1=image/jpeg
+Expected Response: Text reply with comparison analysis
 
 --------------------------------------------------------------------
 11. Skin Lab (image-based skin analysis)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "skin lab",
   "media": [
-    { "url": "https://example.com/face.jpg", "contentType": "image/jpeg" }
+    {
+      "url": "https://example.com/face.jpg",
+      "contentType": "image/jpeg"
+    }
   ]
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_skinlab_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=skin%20lab
-&NumMedia=1
-&MediaUrl0=https://example.com/face.jpg
-&MediaContentType0=image/jpeg
+Expected Response: Text reply with skin analysis
 
 --------------------------------------------------------------------
-12. Quick-reply follow-up (generic button tap)
+12. Quick Reply Follow-up (generic button tap)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "button": {
@@ -262,93 +390,143 @@ WaId=15551234567
   }
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_button_more_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=
-&NumMedia=0
-&ButtonText=Yes
-&ButtonPayload=more_yes
-&MessageType=button
+Expected Response: Varies based on context
 
 --------------------------------------------------------------------
-13. Location (if supported by your flows)
+13. Error Handling Examples
 --------------------------------------------------------------------
 
-[Twilio] (send coordinates)
-WaId=15551234567
-&MessageSid=msg_location_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=location
-&NumMedia=0
-&Latitude=37.7749
-&Longitude=-122.4194
-&Address=San%20Francisco
-&Label=SF
+Missing userId (400 Bad Request):
+POST /api/chat
+{
+  "text": "Hello"
+}
 
-(/api/chat has no special fields for location; pass as text for now.)
+Response:
+{
+  "error": "userId is required"
+}
 
---------------------------------------------------------------------
-14. Error handling test (empty text, no media)
---------------------------------------------------------------------
-
-[APP]
+Empty text, no media, no button:
+POST /api/chat
 {
   "userId": "user_123",
   "text": ""
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_empty_1
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=
-&NumMedia=0
+Expected Response: Bot will handle gracefully (may ask for clarification)
 
 --------------------------------------------------------------------
-15. Custom messageId (idempotency testing)
+14. Custom messageId (idempotency testing)
 --------------------------------------------------------------------
 
-[APP]
+POST /api/chat
 {
   "userId": "user_123",
   "text": "hello",
   "messageId": "msg_custom_0001"
 }
 
-[Twilio]
-WaId=15551234567
-&MessageSid=msg_custom_0001
-&From=whatsapp:+15551234567
-&To=whatsapp:+14155238886
-&Body=hello
-&NumMedia=0
+Expected Response: Normal response, with the provided messageId used for tracking
 
 --------------------------------------------------------------------
-Curl templates
+15. Multiple Media Attachments
 --------------------------------------------------------------------
 
-# APP (JSON) example
-curl -X POST http://YOUR_HOST/api/chat \
+POST /api/chat
+{
+  "userId": "user_123",
+  "text": "analyze these looks",
+  "media": [
+    {
+      "url": "https://example.com/image1.jpg",
+      "contentType": "image/jpeg"
+    },
+    {
+      "url": "https://example.com/image2.jpg",
+      "contentType": "image/jpeg"
+    },
+    {
+      "url": "https://example.com/image3.jpg",
+      "contentType": "image/jpeg"
+    }
+  ]
+}
+
+Expected Response: Bot will process all images
+
+--------------------------------------------------------------------
+cURL Templates
+--------------------------------------------------------------------
+
+# Basic text message
+curl -X POST http://localhost:8080/api/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "userId":"user_123",
-    "text":"Hello"
+    "userId": "user_123",
+    "text": "Hello"
   }'
 
-# Twilio (form-encoded) example
-curl -X POST http://YOUR_HOST/twilio/ \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "X-Twilio-Signature: dummy" \
-  --data-urlencode "WaId=15551234567" \
-  --data-urlencode "MessageSid=msg_abc" \
-  --data-urlencode "From=whatsapp:+15551234567" \
-  --data-urlencode "To=whatsapp:+14155238886" \
-  --data-urlencode "Body=Hello" \
-  --data-urlencode "NumMedia=0"
+# With media attachment
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "text": "color analysis",
+    "media": [
+      {
+        "url": "https://example.com/image.jpg",
+        "contentType": "image/jpeg"
+      }
+    ]
+  }'
 
+# With button interaction
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "button": {
+      "text": "Hype BFF",
+      "payload": "tonality_hype_bff",
+      "type": "quick_reply"
+    }
+  }'
 
+# With custom messageId
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "text": "Hello",
+    "messageId": "msg_custom_001"
+  }'
+
+# With profileName
+curl -X POST http://localhost:8080/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user_123",
+    "profileName": "Alex",
+    "text": "Hello!"
+  }'
+
+--------------------------------------------------------------------
+Response Status Codes
+--------------------------------------------------------------------
+
+200 OK - Request processed successfully
+400 Bad Request - Invalid request (e.g., missing userId)
+500 Internal Server Error - Server error occurred
+
+--------------------------------------------------------------------
+Notes
+--------------------------------------------------------------------
+
+- Replace placeholders like "user_123" and image URLs with actual values
+- The server generates a messageId if one is not provided
+- Media URLs must be publicly accessible
+- The bot supports up to 10 media attachments per request
+- Response may contain multiple replies in the replies array
+- The pending field indicates if the bot is waiting for user input
+- All timestamps and IDs use the format returned by the server
