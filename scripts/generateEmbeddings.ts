@@ -229,14 +229,28 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 }
 
 async function main() {
+  // Safety check: Only allow running in production or when explicitly allowed
+  const isProduction = process.env.NODE_ENV === 'production';
+  const allowLocal = process.env.ALLOW_LOCAL_EMBEDDING_GENERATION === 'true';
+  
+  if (!isProduction && !allowLocal) {
+    console.error('❌ This script is designed to run in production only.');
+    console.error('   To run locally (for testing), set ALLOW_LOCAL_EMBEDDING_GENERATION=true');
+    console.error('   Current NODE_ENV:', process.env.NODE_ENV || 'not set');
+    process.exit(1);
+  }
+
   const forceRegenerate = process.argv.includes('--force');
   
   if (forceRegenerate) {
     console.log('⚠️  Force mode enabled: Will regenerate embeddings for ALL active products\n');
   }
 
+  console.log(`🌍 Environment: ${isProduction ? 'PRODUCTION' : 'LOCAL (test mode)'}\n`);
+
   try {
     await generateEmbeddingsForProducts(forceRegenerate);
+    console.log('\n✅ Embedding generation completed successfully!');
   } catch (err) {
     console.error('❌ Fatal error:', err);
     process.exit(1);
