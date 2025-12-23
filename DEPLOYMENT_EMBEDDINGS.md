@@ -71,29 +71,40 @@ Cloud Run Jobs are perfect for one-off tasks like generating embeddings. Once se
 
 The Cloud Run Job uses the same Docker image as your main service, so make sure you've pushed and deployed your code first.
 
-**Step 2: Create the Cloud Run Job**
+**Step 2: Get the latest image tag from your Cloud Run service**
+
+First, get the image that's currently deployed to your Cloud Run service:
 
 ```bash
-# Make the setup script executable
-chmod +x scripts/setup-cloud-run-job.sh
+IMAGE=$(gcloud run services describe broadway-chatbot --region asia-south2 --format='value(spec.template.spec.containers[0].image)')
+echo $IMAGE
+```
 
-# Run the setup script
+**Step 3: Create the Cloud Run Job**
+
+```bash
+# Make the setup script executable (it will automatically get the latest image)
+chmod +x scripts/setup-cloud-run-job.sh
 ./scripts/setup-cloud-run-job.sh
 ```
 
-Or manually create it:
+Or manually create it (using the IMAGE variable from step 2):
 
 ```bash
+# First, get the latest deployed image
+IMAGE=$(gcloud run services describe broadway-chatbot --region asia-south2 --format='value(spec.template.spec.containers[0].image)')
+
+# Then create the job
 gcloud run jobs create generate-embeddings \
-  --image asia-south2-docker.pkg.dev/broadway-chatbot/broadway-chatbot/broadway-chatbot:latest \
+  --image $IMAGE \
   --region asia-south2 \
   --task-timeout 3600 \
   --max-retries 1 \
-  --task-service-account github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com \
+  --service-account github-actions-deploy@broadway-chatbot.iam.gserviceaccount.com \
   --set-env-vars NODE_ENV=production \
   --set-secrets DATABASE_URL=PRIVATE_DATABASE_URL:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest \
-  --vpc-network chatbot-vpc \
-  --vpc-subnet chatbot-subnet \
+  --network chatbot-vpc \
+  --subnet chatbot-subnet \
   --vpc-egress private-ranges-only \
   --memory 4Gi \
   --cpu 2 \
@@ -125,13 +136,25 @@ gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=ge
 After you deploy new code, update the job to use the latest image:
 
 ```bash
-# Get the latest image tag from your latest deployment
-LATEST_IMAGE=$(gcloud run services describe broadway-chatbot --region asia-south2 --format='value(spec.template.spec.containers[0].image)')
+# Option 1: Use the update script
+chmod +x scripts/update-cloud-run-job.sh
+./scripts/update-cloud-run-job.sh
 
-# Update the job
-gcloud run jobs update generate-embeddings \
-  --image=$LATEST_IMAGE \
-  --region asia-south2
+# Option 2: Manually update
+IMAGE=$(gcloud run services describe broadway-chatbot --region asia-south2 --format='value(spec.template.spec.containers[0].image)')
+gcloud run jobs update generate-embeddings --image=$IMAGE --region asia-south2
+```
+
+### Delete and Recreate Job (If Needed)
+
+If you need to recreate the job with different settings:
+
+```bash
+# Delete existing job
+gcloud run jobs delete generate-embeddings --region asia-south2
+
+# Then recreate using the setup script
+./scripts/setup-cloud-run-job.sh
 ```
 
 ### Benefits of Cloud Run Jobs

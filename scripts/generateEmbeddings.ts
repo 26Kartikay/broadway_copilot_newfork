@@ -103,17 +103,22 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
   console.log('🚀 Starting embedding generation for products...\n');
 
   // Find products that need embeddings
-  const whereClause = forceRegenerate 
-    ? { isActive: true } 
-    : { 
-        isActive: true,
-        OR: [
-          { embedding: null },
-          { embeddingModel: { not: EMBEDDING_MODEL } },
-        ],
-      };
-
-  const totalProducts = await prisma.product.count({ where: whereClause });
+  // Note: embedding field is Unsupported("vector") so we can't filter by it directly in Prisma
+  // We'll use raw SQL for counting
+  let totalProducts: number;
+  
+  if (forceRegenerate) {
+    totalProducts = await prisma.product.count({ where: { isActive: true } });
+  } else {
+    // Use raw SQL to count products without embeddings or with wrong model
+    const result = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) as count FROM "Product" 
+       WHERE "isActive" = true 
+       AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)`,
+      EMBEDDING_MODEL
+    );
+    totalProducts = Number(result[0].count);
+  }
   
   if (totalProducts === 0) {
     console.log('✅ All products already have embeddings!');
@@ -128,25 +133,56 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 
   // Process in batches
   for (let offset = 0; offset < totalProducts; offset += BATCH_SIZE) {
-      const products = await prisma.product.findMany({
-      where: whereClause,
-      take: BATCH_SIZE,
-      skip: offset,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        name: true,
-        brand: true,
-        category: true,
-        generalTag: true,
-        style: true,
-        fit: true,
-        colors: true,
-        patterns: true,
-        occasions: true,
-        componentTags: true,
-      },
-    });
+      // Use raw SQL to query products (embedding field is Unsupported type, can't filter with Prisma)
+      let products: Array<{
+        id: string;
+        name: string;
+        brand: string;
+        category: string;
+        generalTag: string;
+        style: string | null;
+        fit: string | null;
+        colors: string[];
+        patterns: string | null;
+        occasions: string[];
+        componentTags: any;
+      }>;
+
+      if (forceRegenerate) {
+        // Get all active products using Prisma
+        products = await prisma.product.findMany({
+          where: { isActive: true },
+          take: BATCH_SIZE,
+          skip: offset,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            category: true,
+            generalTag: true,
+            style: true,
+            fit: true,
+            colors: true,
+            patterns: true,
+            occasions: true,
+            componentTags: true,
+          },
+        });
+      } else {
+        // Use raw SQL to get products without embeddings or with wrong model
+        products = await prisma.$queryRawUnsafe<typeof products>(
+          `SELECT id, name, brand, category, "generalTag", style, fit, colors, patterns, occasions, "componentTags"
+           FROM "Product"
+           WHERE "isActive" = true 
+           AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+           ORDER BY "createdAt" DESC
+           LIMIT $2 OFFSET $3`,
+          EMBEDDING_MODEL,
+          BATCH_SIZE,
+          offset
+        );
+      }
 
     if (products.length === 0) {
       break;
