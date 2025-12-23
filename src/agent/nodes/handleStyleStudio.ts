@@ -12,19 +12,6 @@ import { searchProducts, fetchColorAnalysis } from '../tools';
 
 const StyleStudioOutputSchema = z.object({
   reply_text: z.string().min(1, 'Reply text is required'),
-  product_recommendations: z
-    .array(
-      z.object({
-        name: z.string().min(1, 'Product name is required'),
-        brand: z.string().min(1, 'Brand is required'),
-        imageUrl: z.string().describe('Product image URL'),
-        productLink: z.string().min(1, 'Product link is required'),
-        reason: z.string().optional().describe('Brief reason why this product is recommended'),
-      }),
-    )
-    .max(10, 'Maximum 10 product recommendations allowed')
-    .optional()
-    .describe('Products from our catalog to recommend to the user'),
 });
 
 const styleStudioMenuButtons = [
@@ -95,14 +82,16 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
     const tools = [searchProducts(), fetchColorAnalysis(userId)];
 
     // Use OpenAI for Style Studio when tools are needed, as it handles tool calling more reliably than Groq
+    // Use gpt-4o for better tool calling reliability and instruction following
     // Create a text-only OpenAI instance (without vision/reasoning features) for better tool compatibility
     const textLLMWithTools = new ChatOpenAI({
-      model: 'gpt-4o-mini', // Fast and cost-effective for text + tools
+      model: 'gpt-4o', // Better tool calling and instruction following than gpt-4o-mini
+      temperature: 0.7, // Slightly creative but still reliable
     });
 
-    let result;
+    let executorResult;
     try {
-      result = await agentExecutor(
+      executorResult = await agentExecutor(
         textLLMWithTools,
         systemPrompt,
         historyForLLM,
@@ -136,6 +125,9 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       return { ...state, assistantReply: errorReplies, pending: PendingType.NONE };
     }
 
+    const result = executorResult.output;
+    const toolResults = executorResult.toolResults;
+
     // Ensure reply_text exists
     if (!result.reply_text) {
       logger.warn({ userId, subIntent, result }, 'Missing reply_text in Style Studio result');
@@ -146,64 +138,122 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       { reply_type: 'text', reply_text: result.reply_text },
     ];
 
-    // Add product card if recommendations were made
-    if (result.product_recommendations && result.product_recommendations.length > 0) {
-      // Filter out invalid products (placeholders, example.com, etc.)
-      const validProducts = result.product_recommendations.filter((p) => {
-        if (!p.name || !p.brand || !p.productLink) {
-          return false;
+    // Extract products directly from searchProducts tool results
+    const productResults = toolResults.filter(tr => tr.name === 'searchProducts');
+    
+    logger.debug(
+      { userId, subIntent, productResultsCount: productResults.length, productResults },
+      'Extracting products from tool results',
+    );
+
+    const allProducts: Array<{
+      name: string;
+      brand: string;
+      imageUrl: string;
+      productLink: string;
+    }> = [];
+
+    for (const toolResult of productResults) {
+      logger.debug(
+        { 
+          userId, 
+          toolName: toolResult.name, 
+          resultType: typeof toolResult.result, 
+          isArray: Array.isArray(toolResult.result),
+          resultLength: Array.isArray(toolResult.result) ? toolResult.result.length : 'N/A',
+          resultPreview: Array.isArray(toolResult.result) && toolResult.result.length > 0 
+            ? toolResult.result[0] 
+            : toolResult.result,
+        },
+        'Processing tool result',
+      );
+
+      // Tool results are returned as arrays of product objects
+      if (Array.isArray(toolResult.result)) {
+        // Skip empty arrays
+        if (toolResult.result.length === 0) {
+          logger.debug({ userId }, 'Tool returned empty array, skipping');
+          continue;
         }
 
-        const placeholderPatterns = [
-          'image_url',
-          'product_link',
-          'product_url',
-          'imageurl',
-          'productlink',
-          'example.com',
-          'placeholder',
-          'url_here',
-          'link_here',
-          'unknown',
-        ];
+        const products = toolResult.result.filter((p: any) => {
+          // Filter out invalid products
+          if (!p || typeof p !== 'object') return false;
+          if (!p.name || !p.brand || !p.productLink) return false;
+          
+          const productLinkLower = (p.productLink || '').toLowerCase().trim();
+          const imageUrlLower = (p.imageUrl || '').toLowerCase().trim();
 
-        const productLinkLower = (p.productLink || '').toLowerCase().trim();
-        const imageUrlLower = (p.imageUrl || '').toLowerCase().trim();
+          // Skip placeholder URLs
+          const placeholderPatterns = [
+            'example.com',
+            'placeholder',
+            'url_here',
+            'link_here',
+            'unknown',
+          ];
 
-        if (
-          placeholderPatterns.some(
-            (pattern) =>
-              productLinkLower === pattern ||
-              productLinkLower.includes(pattern) ||
-              imageUrlLower === pattern ||
-              imageUrlLower.includes(pattern),
-          )
-        ) {
-          return false;
+          if (
+            placeholderPatterns.some(pattern => 
+              productLinkLower.includes(pattern) || imageUrlLower.includes(pattern)
+            )
+          ) {
+            return false;
+          }
+
+          // Must have valid http(s) URL for product link
+          if (!productLinkLower.startsWith('http://') && !productLinkLower.startsWith('https://')) {
+            return false;
+          }
+
+          return true;
+        });
+
+        allProducts.push(...products.map((p: any) => ({
+          name: p.name,
+          brand: p.brand,
+          imageUrl: p.imageUrl || '',
+          productLink: p.productLink,
+        })));
+        
+        logger.debug(
+          { userId, productsFound: products.length, totalProducts: allProducts.length },
+          'Products extracted from array result',
+        );
+      } else if (typeof toolResult.result === 'string') {
+        // If tool returned error message string, skip it
+        try {
+          const parsed = JSON.parse(toolResult.result);
+          if (Array.isArray(parsed)) {
+            allProducts.push(...parsed.filter((p: any) => p.name && p.brand && p.productLink));
+          }
+        } catch {
+          // Not JSON, skip
         }
-
-        if (!productLinkLower.startsWith('http://') && !productLinkLower.startsWith('https://')) {
-          return false;
-        }
-
-        if (p.imageUrl && imageUrlLower && !imageUrlLower.startsWith('http://') && !imageUrlLower.startsWith('https://')) {
-          return false;
-        }
-        return true;
-      });
-
-      if (validProducts.length > 0) {
-        replies.push({
-          reply_type: 'product_card' as const,
-          products: validProducts.map((p) => ({
-            name: p.name,
-            brand: p.brand,
-            imageUrl: p.imageUrl || '',
-            productLink: p.productLink,
-            reason: p.reason || 'Recommended for your style needs',
-          })),
-        } as any);
       }
+    }
+
+    logger.debug(
+      { userId, totalProductsExtracted: allProducts.length },
+      'Finished extracting products from tool results',
+    );
+
+    // Add product card if we have valid products (limit to 10)
+    if (allProducts.length > 0) {
+      const uniqueProducts = Array.from(
+        new Map(allProducts.map(p => [p.productLink, p])).values()
+      ).slice(0, 10);
+
+      replies.push({
+        reply_type: 'product_card' as const,
+        products: uniqueProducts.map((p) => ({
+          name: p.name,
+          brand: p.brand,
+          imageUrl: p.imageUrl,
+          productLink: p.productLink,
+          reason: 'Recommended for your style needs',
+        })),
+      } as any);
     }
 
     logger.debug({ userId, subIntent, replies }, 'Generated Style Studio reply');

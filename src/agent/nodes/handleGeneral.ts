@@ -94,7 +94,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
       const tools = [fetchRelevantMemories(userId)];
       const systemPrompt = new SystemMessage(systemPromptText);
 
-      const finalResponse = await agentExecutor(
+      const { output: finalResponse } = await agentExecutor(
         getTextLLM(),
         systemPrompt,
         conversationHistoryTextOnly,

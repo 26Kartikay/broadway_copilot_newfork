@@ -468,23 +468,42 @@ export function searchProducts(): Tool {
         }
 
         if (filters?.style) {
-          params.push(filters.style.toLowerCase());
-          conditions.push(`LOWER("style") = $${paramIndex++}`);
+          // Use LIKE for partial matching to be more lenient
+          params.push(`%${filters.style.toLowerCase()}%`);
+          conditions.push(`LOWER("style") LIKE $${paramIndex++}`);
         }
 
         if (filters?.fit) {
-          params.push(filters.fit.toLowerCase());
-          conditions.push(`LOWER("fit") = $${paramIndex++}`);
+          // Use LIKE for partial matching to be more lenient
+          params.push(`%${filters.fit.toLowerCase()}%`);
+          conditions.push(`LOWER("fit") LIKE $${paramIndex++}`);
         }
 
         if (filters?.color) {
-          params.push(filters.color.toLowerCase());
-          conditions.push(`$${paramIndex++} = ANY(LOWER("colors"::text)::text[])`);
+          // Use LIKE for partial matching on colors array
+          params.push(`%${filters.color.toLowerCase()}%`);
+          conditions.push(
+            `EXISTS (
+              SELECT 1 FROM unnest("colors") AS col 
+              WHERE LOWER(col::text) LIKE $${paramIndex}
+            )`
+          );
+          paramIndex++;
         }
 
         if (filters?.occasion) {
-          params.push(filters.occasion.toLowerCase());
-          conditions.push(`$${paramIndex++} = ANY(LOWER("occasions"::text)::text[])`);
+          // Handle compound occasions like "office casual party" by checking if any
+          // occasion in the product's occasions array appears as a substring in the filter.
+          // This allows "office casual party" to match products tagged with "Casual" or "Party"
+          const occasionLower = filters.occasion.toLowerCase();
+          params.push(occasionLower);
+          conditions.push(
+            `EXISTS (
+              SELECT 1 FROM unnest("occasions") AS occ 
+              WHERE $${paramIndex} LIKE '%' || LOWER(occ::text) || '%'
+            )`
+          );
+          paramIndex++;
         }
 
         if (filters?.brand) {
@@ -604,8 +623,184 @@ const resultsMap = new Map<
             productLink: result.item.productLink,
           }));
 
+        // If no results found with filters, try again without optional filters (fallback to lenient search)
+        if (sortedResults.length === 0 && (filters?.style || filters?.fit || filters?.color || filters?.occasion || filters?.brand)) {
+          logger.debug({ query, filters }, 'No results with filters, trying without optional filters');
+          
+          // Build lenient conditions (only category filter, if provided)
+          const lenientConditions: string[] = ['"isActive" = true'];
+          const lenientParams: (string | number)[] = [];
+          let lenientParamIndex = 1;
+
+          // Only keep category filter as it's more important
+          if (filters?.category) {
+            lenientParams.push(filters.category);
+            lenientConditions.push(`"category"::text = $${lenientParamIndex++}`);
+          }
+
+          const lenientWhereClause = lenientConditions.join(' AND ');
+          const lenientResultsMap = new Map<
+            string,
+            { item: ProductRow; score: number; sources: string[] }
+          >();
+
+          // Try semantic search without strict filters
+          const embeddingCount = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+            'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL AND "isActive" = true',
+          );
+
+          if (Number(embeddingCount[0].count) > 0) {
+            const embedded = await model.embedQuery(query);
+            const vector = JSON.stringify(embedded);
+
+            const lenientSemanticQuery = `
+              SELECT id, "handleId", name, brand, category, "generalTag", 
+                     style, fit, colors, patterns, occasions,
+                     "imageUrl", "productLink", "searchDoc",
+                     ("embedding" <=> $${lenientParamIndex}::vector) as distance
+              FROM "Product"
+              WHERE "embedding" IS NOT NULL AND ${lenientWhereClause}
+              ORDER BY "embedding" <=> $${lenientParamIndex}::vector
+              LIMIT ${Math.min(limit * 3, 30)}
+            `;
+
+            const lenientSemanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
+              lenientSemanticQuery,
+              ...lenientParams,
+              vector,
+            );
+
+            for (const item of lenientSemanticResults) {
+              const { distance, ...itemData } = item;
+              const score = Math.max(0, 1 - distance);
+              lenientResultsMap.set(item.id, {
+                item: itemData,
+                score: score * 0.7,
+                sources: ['semantic'],
+              });
+            }
+          }
+
+          // Try text search without strict filters
+          const searchTerms = query
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((term) => term.length > 2);
+
+          if (searchTerms.length > 0) {
+            const textConditions = searchTerms.map(
+              (_, i) =>
+                `(LOWER(name) LIKE $${lenientParamIndex + i} OR LOWER("searchDoc") LIKE $${lenientParamIndex + i} OR LOWER(brand) LIKE $${lenientParamIndex + i})`,
+            );
+            const textParams = searchTerms.map((term) => `%${term}%`);
+
+            const lenientTextQuery = `
+              SELECT id, "handleId", name, brand, category, "generalTag",
+                     style, fit, colors, patterns, occasions,
+                     "imageUrl", "productLink", "searchDoc"
+              FROM "Product"
+              WHERE ${lenientWhereClause} AND (${textConditions.join(' OR ')})
+              LIMIT ${Math.min(limit * 2, 20)}
+            `;
+
+            const lenientTextResults = await prisma.$queryRawUnsafe<ProductRow[]>(
+              lenientTextQuery,
+              ...lenientParams,
+              ...textParams,
+            );
+
+            for (const item of lenientTextResults) {
+              const nameMatches = searchTerms.filter(
+                (term) =>
+                  item.name.toLowerCase().includes(term) ||
+                  item.brand.toLowerCase().includes(term) ||
+                  (item.searchDoc && item.searchDoc.toLowerCase().includes(term)),
+              ).length;
+
+              const score = Math.min(1, nameMatches / searchTerms.length);
+
+              const existing = lenientResultsMap.get(item.id);
+              if (existing) {
+                existing.score += score * 0.3;
+                existing.sources.push('text');
+              } else {
+                lenientResultsMap.set(item.id, {
+                  item,
+                  score: score * 0.3,
+                  sources: ['text'],
+                });
+              }
+            }
+          }
+
+          // Get results from lenient search
+          const lenientSortedResults = Array.from(lenientResultsMap.values())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, limit)
+            .map((result) => ({
+              name: result.item.name,
+              brand: result.item.brand,
+              type: result.item.generalTag,
+              style: result.item.style,
+              fit: result.item.fit,
+              colors: result.item.colors,
+              occasions: result.item.occasions,
+              imageUrl: result.item.imageUrl,
+              productLink: result.item.productLink,
+            }));
+
+          if (lenientSortedResults.length > 0) {
+            logger.info(
+              { query, filters, resultCount: lenientSortedResults.length },
+              'Product search completed (lenient fallback)',
+            );
+            return lenientSortedResults;
+          }
+        }
+
+        // Final fallback: if still no results after all attempts, return recent active products
+        // This ensures we always return products
         if (sortedResults.length === 0) {
-          return 'No products found matching your criteria. Try broadening your search or removing some filters.';
+          logger.debug({ query, filters }, 'No results found after all searches, returning fallback products');
+          
+          const fallbackQuery = `
+            SELECT id, "handleId", name, brand, category, "generalTag",
+                   style, fit, colors, patterns, occasions,
+                   "imageUrl", "productLink", "searchDoc"
+            FROM "Product"
+            WHERE "isActive" = true
+              AND "imageUrl" IS NOT NULL 
+              AND "productLink" IS NOT NULL
+              AND "imageUrl" != ''
+              AND "productLink" != ''
+            ORDER BY "createdAt" DESC
+            LIMIT ${limit}
+          `;
+
+          const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery);
+
+          if (fallbackResults.length > 0) {
+            logger.info(
+              { query, filters, resultCount: fallbackResults.length },
+              'Product search completed (fallback to recent products)',
+            );
+
+            return fallbackResults.map((item) => ({
+              name: item.name,
+              brand: item.brand,
+              type: item.generalTag,
+              style: item.style,
+              fit: item.fit,
+              colors: item.colors,
+              occasions: item.occasions,
+              imageUrl: item.imageUrl,
+              productLink: item.productLink,
+            }));
+          }
+
+          // If even fallback returns no results, return empty array (shouldn't happen in practice)
+          logger.warn({ query, filters }, 'Fallback search returned no products - database may be empty');
+          return [];
         }
 
         logger.info(

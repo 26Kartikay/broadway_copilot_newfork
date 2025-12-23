@@ -202,7 +202,7 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
         { type: 'image_url', image_url: { url: combinedImageDataUrl } },
       ]);
 
-      const finalResponse = await agentExecutor(
+      const { output: finalResponse } = await agentExecutor(
         getVisionLLM(),
         systemPrompt,
         [userCombinedImageMessage],

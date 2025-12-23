@@ -42,7 +42,7 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
     const systemPromptText = await loadPrompt(`handlers/styling/handle_${stylingIntent}.txt`);
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    const finalResponse = await agentExecutor(
+    const { output: finalResponse } = await agentExecutor(
       getTextLLM(),
       systemPrompt,
       conversationHistoryTextOnly,

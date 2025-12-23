@@ -43,7 +43,7 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
     const systemPrompt = new SystemMessage(systemPromptText);
 
     // Run LLM with structured output
-    const finalResponse = await agentExecutor(
+    const { output: finalResponse } = await agentExecutor(
       getTextLLM(),
       systemPrompt,
       conversationHistoryTextOnly,

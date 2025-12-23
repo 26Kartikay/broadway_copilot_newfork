@@ -38,8 +38,11 @@ async function getFinalStructuredOutput<T extends ZodType>(
   // If the last message is an assistant's message, use it for parsing.
   if (lastMessage instanceof AssistantMessage) {
     const customPrompt = new SystemMessage(
-      'Parse the user message which contains the output from a previous step into a JSON object ' +
+      'You are parsing an assistant message that was generated in response to a user query. ' +
+        'Extract the relevant information from the assistant\'s response and format it as a JSON object ' +
         'that strictly adheres to the provided schema. ' +
+        'The assistant message contains styling advice, product recommendations, or similar content. ' +
+        'Parse only the assistant\'s output, NOT the user\'s input. ' +
         'Do not add any extra commentary or change any of the values.',
     );
 
@@ -48,7 +51,8 @@ async function getFinalStructuredOutput<T extends ZodType>(
       .map((p) => p.text)
       .join('');
 
-    const parsingConversation: BaseMessage[] = [new UserMessage(textContent)];
+    // Use AssistantMessage instead of UserMessage to avoid confusion
+    const parsingConversation: BaseMessage[] = [new AssistantMessage(textContent)];
 
     const structuredRunner = runner.withStructuredOutput(outputSchema);
     return await structuredRunner.run(customPrompt, parsingConversation, traceBuffer, nodeName);
@@ -109,7 +113,10 @@ export async function agentExecutor<T extends ZodType>(
   },
   traceBuffer: TraceBuffer,
   maxLoops: number = MAX_ITERATIONS,
-): Promise<T['_output']> {
+): Promise<{ output: T['_output']; toolResults: Array<{ name: string; result: unknown }> }> {
+  // IMPORTANT: Don't use structured output during tool execution phase
+  // Structured output forces tool_choice to only call the output tool, preventing other tools
+  // We'll parse the final output manually after tools are done
   const runnerWithTools = runner.bind(options.tools);
 
   // Tool information is available in traceBuffer for debugging if needed
@@ -118,6 +125,8 @@ export async function agentExecutor<T extends ZodType>(
 
   const seenToolCallIds = new Set<string>();
   let maxLoopStop = false;
+  let toolsWereCalled = false;
+  const toolResultsList: Array<{ name: string; result: unknown }> = [];
 
   for (let i = 0; i < maxLoops; i++) {
     const { assistant, toolCalls } = await runnerWithTools.run(
@@ -127,14 +136,54 @@ export async function agentExecutor<T extends ZodType>(
       options.nodeName,
     );
 
+    logger.debug(
+      { nodeName: options.nodeName, iteration: i, toolCallsCount: toolCalls.length, toolNames: toolCalls.map(tc => tc.name) },
+      'agentExecutor: LLM response received',
+    );
+
     conversation.push(assistant);
 
-    if (toolCalls.length === 0) {
+    // Filter out structured output tool calls from the regular tool execution
+    const regularToolCalls = toolCalls.filter(tc => {
+      // Skip structured output tool calls during the tool execution phase
+      const isStructuredOutput = tc.name === (runner as any).structuredOutputToolName || 
+                                 tc.name === 'structured_output' || 
+                                 tc.name === 'json';
+      if (isStructuredOutput) {
+        logger.debug({ nodeName: options.nodeName, toolName: tc.name }, 'agentExecutor: Skipping structured output tool call during execution phase');
+        return false;
+      }
+      return true;
+    });
+
+    if (regularToolCalls.length > 0) {
+      toolsWereCalled = true;
+    }
+
+    if (regularToolCalls.length === 0) {
+      // Check if this is the first iteration and we have tools but none were called
+      // This might indicate the model skipped tools - check if structured output tool was called instead
+      const structuredOutputCalled = toolCalls.some(tc => {
+        const name = tc.name.toLowerCase();
+        return name.includes('structured') || name === 'json' || name === options.nodeName.toLowerCase();
+      });
+      
+      if (i === 0 && !toolsWereCalled && structuredOutputCalled && options.tools.length > 0) {
+        logger.warn(
+          { nodeName: options.nodeName, toolsAvailable: options.tools.map(t => t.name) },
+          'agentExecutor: Structured output tool called before regular tools - model may have skipped required tools',
+        );
+        // Force at least one more iteration by injecting a message asking to use tools
+        conversation.push(new UserMessage('Please use the available tools before providing your final response. The tools are required to complete this task.'));
+        continue;
+      }
+      
+      logger.debug({ nodeName: options.nodeName, iteration: i, toolsWereCalled }, 'agentExecutor: No regular tool calls, breaking loop');
       break;
     }
 
     const toolResults = await Promise.all(
-      toolCalls
+      regularToolCalls
         .filter((toolCall) => !seenToolCallIds.has(toolCall.id))
         .map(async (toolCall) => {
           seenToolCallIds.add(toolCall.id);
@@ -150,6 +199,8 @@ export async function agentExecutor<T extends ZodType>(
           try {
             const parsedArgs = toolDef.schema.parse(toolCall.arguments);
             const result = await Promise.resolve(toolDef.func(parsedArgs));
+            // Track tool results for later extraction
+            toolResultsList.push({ name: toolDef.name, result });
             return {
               id: toolCall.id,
               name: toolDef.name,
@@ -201,11 +252,13 @@ export async function agentExecutor<T extends ZodType>(
     conversation.push(assistant);
   }
 
-  return await getFinalStructuredOutput(
+  const output = await getFinalStructuredOutput(
     runner,
     conversation,
     options.outputSchema,
     traceBuffer,
     options.nodeName,
   );
+
+  return { output, toolResults: toolResultsList };
 }
