@@ -23,14 +23,46 @@ This is the easiest method since you can upload your CSV file directly.
 
 #### Step 1: Get your secrets from Google Secret Manager
 
+**Important:** Cloud Shell cannot directly access private Cloud SQL IPs. You have two options:
+
+**Option A: Use Cloud SQL Proxy (Recommended for Cloud Shell)**
+
 ```bash
-# Get DATABASE_URL (private connection string)
-export DATABASE_URL=$(gcloud secrets versions access latest --secret="PRIVATE_DATABASE_URL")
+# 1. Get the instance connection name
+INSTANCE=$(gcloud sql instances describe broadway-db --format='value(connectionName)')
+echo "Instance: $INSTANCE"
 
-# Get OPENAI_API_KEY
+# 2. Download and start Cloud SQL Proxy
+wget https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64 -O cloud-sql-proxy
+chmod +x cloud-sql-proxy
+
+# 3. Start proxy in background (runs on localhost:5432)
+./cloud-sql-proxy $INSTANCE --port 5432 &
+
+# 4. Get database credentials and build connection string
+DB_USER=$(gcloud secrets versions access latest --secret="DB_USER" 2>/dev/null || echo "postgres")
+DB_PASS=$(gcloud secrets versions access latest --secret="DB_PASSWORD" 2>/dev/null || echo "")
+DB_NAME=$(gcloud secrets versions access latest --secret="DB_NAME" 2>/dev/null || echo "broadway")
+
+# Build connection string using localhost (proxy)
+export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}?schema=public"
+
+# Get other secrets
 export OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY")
+export NODE_ENV=production
+```
 
-# Set production environment
+**Option B: Use Cloud Run Job (No Proxy Needed)**
+
+If you prefer not to use the proxy, use Cloud Run Jobs instead (see Part 2, Option 2 below). Cloud Run Jobs have VPC access configured automatically.
+
+**Option C: Get Public IP Connection (If Available)**
+
+```bash
+# Try to get public connection string (if your instance has public IP enabled)
+export DATABASE_URL=$(gcloud secrets versions access latest --secret="PRIVATE_DATABASE_URL")
+# Replace private IP with public IP if needed
+export OPENAI_API_KEY=$(gcloud secrets versions access latest --secret="OPENAI_API_KEY")
 export NODE_ENV=production
 ```
 
