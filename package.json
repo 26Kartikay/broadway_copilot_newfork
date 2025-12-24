@@ -13,9 +13,9 @@
     "prune": "ts-prune",
     "format": "prettier --write \"src/**/*.ts\"",
     "lint": "eslint \"src/**/*.ts\"",
-    "prisma:generate": "./node_modules/.bin/prisma generate",
-    "prisma:migrate": "./node_modules/.bin/prisma migrate",
-    "prisma:studio": "./node_modules/.bin/prisma studio"
+    "prisma:generate": "npx prisma@^6.15.0 generate",
+    "prisma:migrate": "npx prisma@^6.15.0 migrate",
+    "prisma:studio": "npx prisma@^6.15.0 studio"
   },
   "keywords": [],
   "author": "",
