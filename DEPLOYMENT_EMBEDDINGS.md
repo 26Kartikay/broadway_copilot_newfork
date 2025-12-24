@@ -21,9 +21,38 @@ The import script automatically generates embeddings for all imported products, 
 
 This is the easiest method since you can upload your CSV file directly.
 
-#### Step 1: Get your secrets from Google Secret Manager
+#### Step 1: Setup Cloud SQL Proxy (Required for Cloud Shell)
 
-**Important:** Cloud Shell cannot directly access private Cloud SQL IPs. You have two options:
+**Important:** Cloud Shell cannot directly access private Cloud SQL IPs. You MUST use Cloud SQL Proxy.
+
+**Quick Setup Script:**
+```bash
+# Run the setup script
+chmod +x scripts/setup-proxy-and-import.sh
+./scripts/setup-proxy-and-import.sh
+```
+
+**Manual Setup:**
+```bash
+# 1. Get your Cloud SQL instance connection name
+# Check your DATABASE_URL secret or list instances
+gcloud sql instances list
+
+# 2. Download Cloud SQL Proxy
+wget https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64 -O cloud-sql-proxy
+chmod +x cloud-sql-proxy
+
+# 3. Start proxy (replace INSTANCE_CONNECTION with your instance)
+# Format: PROJECT_ID:REGION:INSTANCE_NAME
+./cloud-sql-proxy PROJECT_ID:asia-south2:INSTANCE_NAME --port 5432 &
+
+# 4. Wait a few seconds for proxy to start
+sleep 3
+```
+
+#### Step 2: Get your secrets and configure DATABASE_URL
+
+**Important:** You need to use `127.0.0.1:5432` (localhost) instead of the private IP when using the proxy.
 
 **Option A: Use Cloud SQL Proxy (Recommended for Cloud Shell)**
 

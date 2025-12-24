@@ -6,7 +6,7 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
-import { fetchRelevantMemories } from '../tools';
+import { fetchRelevantMemories, searchProducts } from '../tools';
 
 /**
  * LLM output schema for Skin Lab service.
@@ -38,18 +38,44 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
     // Load the system prompt for Skin Lab
     const systemPromptText = await loadPrompt('handlers/skin_lab/skin_lab_prompt.txt');
 
-    // Use relevant user memories as supporting context
+    // Count user messages in conversation to determine if we should recommend products
+    // Only recommend products after at least 2-3 exchanges (after initial discussion)
+    const userMessageCount = conversationHistoryTextOnly.filter(
+      msg => msg.role === 'user'
+    ).length;
+    
+    // Count assistant messages to understand conversation depth
+    const assistantMessageCount = conversationHistoryTextOnly.filter(
+      msg => msg.role === 'assistant'
+    ).length;
+    
+    // Only enable product search after 2+ user messages (meaning we've had at least 2 exchanges)
+    // This ensures we discuss the issue first before recommending products
+    const shouldRecommendProducts = userMessageCount >= 2;
+    
+    logger.debug(
+      { userId, userMessageCount, assistantMessageCount, shouldRecommendProducts },
+      'Skin Lab: Conversation depth analysis',
+    );
+
+    // Use relevant user memories and conditionally include product search
     const tools = [fetchRelevantMemories(userId)];
+    if (shouldRecommendProducts) {
+      tools.push(searchProducts());
+    }
     const systemPrompt = new SystemMessage(systemPromptText);
 
     // Run LLM with structured output
-    const { output: finalResponse } = await agentExecutor(
+    const executorResult = await agentExecutor(
       getTextLLM(),
       systemPrompt,
       conversationHistoryTextOnly,
       { tools, outputSchema: LLMOutputSchema, nodeName: 'handleSkinLab' },
       traceBuffer,
     );
+
+    const finalResponse = executorResult.output;
+    const toolResults = executorResult.toolResults;
 
     // Format the LLM messages
     const formattedMessage1 = formatLLMOutput(finalResponse.message1_text);
@@ -61,6 +87,124 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
     const replies: Replies = [{ reply_type: 'text', reply_text: formattedMessage1 }];
     if (formattedMessage2) {
       replies.push({ reply_type: 'text', reply_text: formattedMessage2 });
+    }
+
+    // Extract products directly from searchProducts tool results
+    // Only extract products if we're in the recommendation phase (after initial discussion)
+    const productResults = shouldRecommendProducts 
+      ? toolResults.filter(tr => tr.name === 'searchProducts')
+      : [];
+    
+    logger.debug(
+      { userId, messageId, shouldRecommendProducts, productResultsCount: productResults.length, productResults },
+      'Extracting products from tool results',
+    );
+
+    const allProducts: Array<{
+      name: string;
+      brand: string;
+      imageUrl: string;
+      productLink: string;
+    }> = [];
+
+    for (const toolResult of productResults) {
+      logger.debug(
+        { 
+          userId, 
+          toolName: toolResult.name, 
+          resultType: typeof toolResult.result, 
+          isArray: Array.isArray(toolResult.result),
+          resultLength: Array.isArray(toolResult.result) ? toolResult.result.length : 'N/A',
+        },
+        'Processing tool result',
+      );
+
+      // Tool results are returned as arrays of product objects
+      if (Array.isArray(toolResult.result)) {
+        // Skip empty arrays
+        if (toolResult.result.length === 0) {
+          logger.debug({ userId }, 'Tool returned empty array, skipping');
+          continue;
+        }
+
+        const products = toolResult.result.filter((p: any) => {
+          // Filter out invalid products
+          if (!p || typeof p !== 'object') return false;
+          if (!p.name || !p.brand || !p.productLink) return false;
+          
+          const productLinkLower = (p.productLink || '').toLowerCase().trim();
+          const imageUrlLower = (p.imageUrl || '').toLowerCase().trim();
+
+          // Skip placeholder URLs
+          const placeholderPatterns = [
+            'example.com',
+            'placeholder',
+            'url_here',
+            'link_here',
+            'unknown',
+          ];
+
+          if (
+            placeholderPatterns.some(pattern => 
+              productLinkLower.includes(pattern) || imageUrlLower.includes(pattern)
+            )
+          ) {
+            return false;
+          }
+
+          // Must have valid http(s) URL for product link
+          if (!productLinkLower.startsWith('http://') && !productLinkLower.startsWith('https://')) {
+            return false;
+          }
+
+          return true;
+        });
+
+        allProducts.push(...products.map((p: any) => ({
+          name: p.name,
+          brand: p.brand,
+          imageUrl: p.imageUrl || '',
+          productLink: p.productLink,
+        })));
+        
+        logger.debug(
+          { userId, productsFound: products.length, totalProducts: allProducts.length },
+          'Products extracted from array result',
+        );
+      } else if (typeof toolResult.result === 'string') {
+        // If tool returned error message string, skip it
+        try {
+          const parsed = JSON.parse(toolResult.result);
+          if (Array.isArray(parsed)) {
+            allProducts.push(...parsed.filter((p: any) => p.name && p.brand && p.productLink));
+          }
+        } catch {
+          // Not JSON, skip
+        }
+      }
+    }
+
+    logger.debug(
+      { userId, totalProductsExtracted: allProducts.length },
+      'Finished extracting products from tool results',
+    );
+
+    // Add product card if we have valid products (limit to 10)
+    if (allProducts.length > 0) {
+      const uniqueProducts = Array.from(
+        new Map(allProducts.map(p => [p.productLink, p])).values()
+      ).slice(0, 10);
+
+      replies.push({
+        reply_type: 'product_card' as const,
+        products: uniqueProducts.map((p) => ({
+          name: p.name,
+          brand: p.brand,
+          imageUrl: p.imageUrl,
+          productLink: p.productLink,
+          reason: 'Recommended for your skincare needs',
+        })),
+      } as any);
     }
 
     logger.info(
