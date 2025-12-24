@@ -120,6 +120,16 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
     totalProducts = Number(result[0].count);
   }
   
+  // Check if there are any products at all
+  const totalProductsInDb = await prisma.product.count({ where: { isActive: true } });
+  
+  if (totalProductsInDb === 0) {
+    console.log('⚠️  No products found in database!');
+    console.log('   You need to import products first using:');
+    console.log('   npx ts-node scripts/importProducts.ts --file=products.csv');
+    return;
+  }
+  
   if (totalProducts === 0) {
     console.log('✅ All products already have embeddings!');
     return;

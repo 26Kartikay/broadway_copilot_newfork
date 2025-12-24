@@ -504,6 +504,15 @@ async function main() {
   const args = process.argv.slice(2);
   const fileArg = args.find(arg => arg.startsWith('--file='));
   const clearFlag = args.includes('--clear');
+  const allowLocal = process.env.ALLOW_LOCAL_PRODUCT_IMPORT === 'true';
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // Safety check: Warn if running in production without explicit flag
+  if (isProduction && !allowLocal) {
+    console.log('⚠️  Running in PRODUCTION mode');
+    console.log('   Make sure you have the correct DATABASE_URL and OPENAI_API_KEY set');
+    console.log('   To suppress this warning, set ALLOW_LOCAL_PRODUCT_IMPORT=true\n');
+  }
 
   if (!fileArg) {
     console.error('Usage: npx ts-node scripts/importProducts.ts --file=products.csv [--clear]');
