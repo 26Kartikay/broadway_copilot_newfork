@@ -55,7 +55,8 @@ npm install --legacy-peer-deps
 #### Step 4: Generate Prisma Client
 
 ```bash
-npx prisma generate
+# Use npm script to ensure correct Prisma version (avoids Prisma 7 compatibility issues)
+npm run prisma:generate
 ```
 
 #### Step 5: Upload your CSV file

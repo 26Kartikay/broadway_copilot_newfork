@@ -19,8 +19,8 @@ cd broadway_copilot_newfork
 # 3. Install dependencies
 npm install --legacy-peer-deps
 
-# 4. Generate Prisma client
-npx prisma generate
+# 4. Generate Prisma client (use npm script to ensure correct version)
+npm run prisma:generate
 
 # 5. Run the script (will only work because NODE_ENV=production)
 npx ts-node scripts/generateEmbeddings.ts

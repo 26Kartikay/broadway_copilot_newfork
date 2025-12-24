@@ -12,7 +12,10 @@
     "graph": "ts-node-dev --transpile-only scripts/visualizeGraph.ts",
     "prune": "ts-prune",
     "format": "prettier --write \"src/**/*.ts\"",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "prisma:generate": "./node_modules/.bin/prisma generate",
+    "prisma:migrate": "./node_modules/.bin/prisma migrate",
+    "prisma:studio": "./node_modules/.bin/prisma studio"
   },
   "keywords": [],
   "author": "",
