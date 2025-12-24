@@ -278,7 +278,19 @@ interface RawProduct {
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
-  console.log(`📦 Starting product import from: ${filePath}`);
+  // Ensure we are looking in the right place
+  const absolutePath = path.isAbsolute(filePath) 
+    ? filePath 
+    : path.resolve(__dirname, filePath);
+
+  console.log(`📦 Attempting to load file from: ${absolutePath}`);
+  
+  if (!fs.existsSync(absolutePath)) {
+    // Fallback check for production structure
+    const fallbackPath = path.resolve(process.cwd(), filePath);
+    console.log(`trying fallback: ${fallbackPath}`);
+    if(!fs.existsSync(fallbackPath)) throw new Error(`File not found at ${absolutePath} or ${fallbackPath}`);
+  }
   
   // Clear existing products if requested
   if (clearExisting) {
@@ -287,11 +299,6 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
     console.log(`✅ Deleted ${deleted.count} existing products`);
   }
 
-  // Read file
-  const absolutePath = path.resolve(filePath);
-  if (!fs.existsSync(absolutePath)) {
-    throw new Error(`File not found: ${absolutePath}`);
-  }
 
   const content = fs.readFileSync(absolutePath, 'utf-8');
   
@@ -505,7 +512,13 @@ async function main() {
     process.exit(1);
   }
 
-  const filePath = fileArg.replace('--file=', '');
+  let filePath = fileArg.replace('--file=', '');
+
+// If the path isn't absolute, resolve it relative to the script's directory
+if (!path.isAbsolute(filePath)) {
+  // This helps the function find the file whether it's running in /src or /dist
+  filePath = path.resolve(__dirname, '..', filePath); 
+}
 
   if (clearFlag) {
     console.log('⚠️  WARNING: --clear flag detected. All existing products will be deleted!');
