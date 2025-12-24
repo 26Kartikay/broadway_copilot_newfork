@@ -6,8 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "start": "functions-framework --source=dist --target=${FUNCTION_TARGET} --port=${PORT:-8080}",
-    "build": "npm run prisma:generate && tsc && cp products.csv dist/",
-    "prisma:generate": "prisma generate",
+    "build": "prisma generate && tsc && cp products.csv dist/",    "prisma:generate": "prisma generate",
     "postinstall": "npm run prisma:generate",
     "prestart": "npm run build",
     "test:imageUpload": "npm run build && functions-framework --source=dist --target=imageUpload --port=8080",
