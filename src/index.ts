@@ -11,6 +11,8 @@ import { connectRedis } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
+import { ProductSearchService } from './services/productSearchService';
+import { ProductSearchIntentSchema } from './types/productSearch';
 
 const app = express();
 app.set('trust proxy', true);
@@ -65,6 +67,35 @@ app.use(express.static('public'));
  */
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+/**
+ * Product search endpoint using new structured search approach
+ * Optional endpoint for testing and external integrations
+ */
+app.post('/api/products/search', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const searchIntent = ProductSearchIntentSchema.parse(req.body);
+
+    const productSearchService = new ProductSearchService();
+    const result = await productSearchService.searchProducts(searchIntent);
+
+    res.status(200).json(result);
+  } catch (error) {
+    logger.error({
+      error: error instanceof Error ? error.message : String(error),
+      body: req.body
+    }, 'Product search API error');
+
+    if (error instanceof Error && error.name === 'ZodError') {
+      return res.status(400).json({
+        error: 'Invalid search intent format',
+        details: error.message
+      });
+    }
+
+    return next(error);
+  }
 });
 
 /**
