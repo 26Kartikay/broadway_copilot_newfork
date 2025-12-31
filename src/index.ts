@@ -69,15 +69,48 @@ app.get('/health', (_req: Request, res: Response) => {
 
 /**
  * Main chat endpoint for the app.
- * Accepts messages and returns AI responses in the HTTP response.
+ *
+ * Request format: Send ChatRequest with userId and one of: text, media, or button
+ * Response format: ChatResponse with replies array and optional metadata
+ *
+ * Frontend should render each reply based on reply_type:
+ * - 'text_only': Simple text message bubble
+ * - 'text_with_buttons': Text with button grid below
+ * - 'buttons_only': Quick reply buttons (floating/suggested)
+ * - 'image_with_caption': Media message with caption
+ *
+ * @example
+ * POST /api/chat
+ * {
+ *   "userId": "user123",
+ *   "text": "Hello, I need styling advice"
+ * }
+ *
+ * Response:
+ * {
+ *   "replies": [{
+ *     "reply_type": "text_only",
+ *     "reply_text": "Hi! I'd love to help with styling...",
+ *     "expected_action": "input_required"
+ *   }],
+ *   "pending": null,
+ *   "metadata": {
+ *     "session_state": "active",
+ *     "conversation_id": "conv_123"
+ *   }
+ * }
  */
 app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const chatRequest = req.body as ChatRequest;
     const { userId, messageId } = chatRequest;
 
+    // Basic validation
     if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+      return res.status(400).json({
+        error: 'userId is required',
+        code: 'MISSING_USER_ID'
+      });
     }
 
     const sid = String(messageId || `msg_${randomUUID()}`);
@@ -88,8 +121,25 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     logger.info({ userId, messageId: sid }, 'Received chat message');
 
     const { replies, pending } = await runAgentForHttp(String(userId), sid, messageInput);
-    return res.status(200).json({ replies, pending });
+
+    // Enhanced response with metadata
+    const response = {
+      replies,
+      pending,
+      metadata: {
+        session_state: pending ? 'awaiting_input' : 'active',
+        conversation_id: `conv_${userId}`,
+        timestamp: new Date().toISOString(),
+        is_streaming: false
+      }
+    };
+
+    return res.status(200).json(response);
   } catch (err: unknown) {
+    logger.error({
+      err: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined
+    }, 'Chat endpoint error');
     return next(err);
   }
 });

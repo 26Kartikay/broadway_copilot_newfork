@@ -118,27 +118,61 @@ export interface QuickReplyButton {
 }
 
 /**
- * Union type for different reply formats.
+ * Union type for different reply formats with clear UI expectations.
+ *
+ * Each reply type indicates exactly what the frontend should render:
+ * - 'text_only': Plain text message
+ * - 'text_with_buttons': Text message with action buttons below
+ * - 'buttons_only': Just buttons (no text), implies quick reply interface
+ * - 'image_with_caption': Image with optional caption text
+ * - 'carousel': Multiple items/cards (for future use)
  */
 export type Reply =
   | {
-      reply_type: 'text';
+      /** Plain text message - render as simple text bubble */
+      reply_type: 'text_only';
+      /** The text content to display */
       reply_text: string;
+      /** Expected user action: 'continue' | 'wait' | 'input_required' */
+      expected_action?: 'continue' | 'wait' | 'input_required';
     }
   | {
-      reply_type: 'quick_reply';
+      /** Text with interactive buttons - render text above button row */
+      reply_type: 'text_with_buttons';
+      /** Main message text */
       reply_text: string;
+      /** Action buttons for user interaction */
       buttons: QuickReplyButton[];
+      /** Expected user action: 'button_click' | 'input_required' */
+      expected_action?: 'button_click' | 'input_required';
     }
   | {
-      reply_type: 'list_picker';
-      reply_text: string;
-      buttons: QuickReplyButton[];
-    }
-  | {
-      reply_type: 'image';
-      media_url: string;
+      /** Quick reply buttons only - render as floating/quick reply buttons */
+      reply_type: 'buttons_only';
+      /** No text content (buttons imply the message) */
       reply_text?: string;
+      /** Quick reply buttons */
+      buttons: QuickReplyButton[];
+      /** Expected user action: 'button_click' */
+      expected_action?: 'button_click';
+    }
+  | {
+      /** Image with optional caption - render as media message */
+      reply_type: 'image_with_caption';
+      /** Image URL */
+      media_url: string;
+      /** Optional caption text below image */
+      reply_text?: string;
+      /** Expected user action: 'continue' | 'feedback' */
+      expected_action?: 'continue' | 'feedback';
+    }
+  | {
+      /** Multiple items carousel - for future use */
+      reply_type: 'carousel';
+      /** Carousel items (structure TBD) */
+      items: any[];
+      /** Expected user action: 'item_select' */
+      expected_action?: 'item_select';
     };
 
 /**
@@ -147,14 +181,173 @@ export type Reply =
 export type Replies = Reply[];
 
 /**
+ * Response metadata providing context about the conversation state.
+ */
+export interface ResponseMetadata {
+  /** Current conversation session state */
+  session_state?: 'initial' | 'active' | 'awaiting_input' | 'completed';
+  /** Whether the bot is still processing (streaming responses) */
+  is_streaming?: boolean;
+  /** Estimated processing time remaining in seconds */
+  processing_time_remaining?: number;
+  /** Unique conversation ID for tracking */
+  conversation_id?: string;
+  /** Timestamp of the response */
+  timestamp?: string;
+}
+
+/**
  * Response structure for the /api/chat endpoint.
+ *
+ * Frontend should handle each reply based on its reply_type:
+ * - text_only: Simple text display
+ * - text_with_buttons: Text + button grid below
+ * - buttons_only: Quick reply buttons (floating/suggested)
+ * - image_with_caption: Media display with caption
  */
 export interface ChatResponse {
-  /** Array of reply messages */
+  /** Array of reply messages with clear UI expectations */
   replies: Replies;
-  /** Pending action type, if any */
+  /** Pending action type, if any (legacy - use metadata.session_state) */
   pending: string | null;
+  /** Additional response context and metadata */
+  metadata?: ResponseMetadata;
 }
+
+// ================================
+// Validation & Examples
+// ================================
+
+/**
+ * Validates a ChatRequest for common issues.
+ *
+ * @param request - The request to validate
+ * @returns Array of validation error messages (empty if valid)
+ */
+export function validateChatRequest(request: ChatRequest): string[] {
+  const errors: string[] = [];
+
+  if (!request.userId || typeof request.userId !== 'string') {
+    errors.push('userId is required and must be a string');
+  }
+
+  // Check mutually exclusive fields
+  const hasText = request.text && request.text.trim().length > 0;
+  const hasMedia = request.media && request.media.length > 0;
+  const hasButton = request.button;
+
+  if (!hasText && !hasMedia && !hasButton) {
+    errors.push('Request must contain at least one of: text, media, or button');
+  }
+
+  // Validate media attachments
+  if (request.media) {
+    request.media.forEach((media, index) => {
+      if (!media.url || typeof media.url !== 'string') {
+        errors.push(`Media attachment ${index} must have a valid url`);
+      }
+    });
+  }
+
+  // Validate button interaction
+  if (request.button) {
+    if (request.button.payload && !request.button.text) {
+      errors.push('Button interaction with payload should include text');
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Type guard to check if a reply is text-only.
+ */
+export function isTextOnlyReply(reply: Reply): reply is Extract<Reply, { reply_type: 'text_only' }> {
+  return reply.reply_type === 'text_only';
+}
+
+/**
+ * Type guard to check if a reply has buttons.
+ */
+export function isButtonReply(reply: Reply): reply is Extract<Reply, { buttons: QuickReplyButton[] }> {
+  return 'buttons' in reply && Array.isArray(reply.buttons);
+}
+
+/**
+ * Type guard to check if a reply has media.
+ */
+export function isMediaReply(reply: Reply): reply is Extract<Reply, { media_url: string }> {
+  return 'media_url' in reply;
+}
+
+// ================================
+// Examples & Documentation
+// ================================
+
+/**
+ * Example ChatRequest for sending a text message.
+ */
+export const EXAMPLE_TEXT_REQUEST: ChatRequest = {
+  userId: 'user123',
+  text: 'Hello, I need styling advice',
+  messageId: 'msg_001'
+};
+
+/**
+ * Example ChatRequest for sending media.
+ */
+export const EXAMPLE_MEDIA_REQUEST: ChatRequest = {
+  userId: 'user123',
+  text: 'What do you think of this outfit?',
+  media: [{
+    url: 'https://example.com/image.jpg',
+    contentType: 'image/jpeg'
+  }],
+  messageId: 'msg_002'
+};
+
+/**
+ * Example ChatRequest for button interaction.
+ */
+export const EXAMPLE_BUTTON_REQUEST: ChatRequest = {
+  userId: 'user123',
+  button: {
+    text: 'Yes, show me more',
+    payload: 'confirm_more_styles',
+    type: 'quick_reply'
+  },
+  messageId: 'msg_003'
+};
+
+/**
+ * Example ChatResponse with different reply types.
+ */
+export const EXAMPLE_CHAT_RESPONSE: ChatResponse = {
+  replies: [
+    // Text-only greeting
+    {
+      reply_type: 'text_only',
+      reply_text: 'Hello! I\'m your personal stylist. What can I help you with today?',
+      expected_action: 'input_required'
+    },
+    // Quick reply buttons
+    {
+      reply_type: 'buttons_only',
+      buttons: [
+        { text: 'Find outfit ideas', id: 'outfit_ideas' },
+        { text: 'Style my photo', id: 'style_photo' },
+        { text: 'Color analysis', id: 'color_analysis' }
+      ],
+      expected_action: 'button_click'
+    }
+  ],
+  pending: null,
+  metadata: {
+    session_state: 'initial',
+    conversation_id: 'conv_123',
+    timestamp: new Date().toISOString()
+  }
+};
 
 // ================================
 // Helper Functions
@@ -214,4 +407,3 @@ export function chatRequestToMessageInput(
 
   return input;
 }
-
