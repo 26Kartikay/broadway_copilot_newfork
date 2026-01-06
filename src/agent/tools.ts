@@ -464,12 +464,14 @@ export function searchProducts(): Tool {
         const searchIntent = await intentGenerator.generateIntent(query);
 
         // 2. Apply any additional filters from the tool schema
+        const { brand: toolBrand, color: toolColor, ...otherFilters } = filters;
         const combinedIntent = {
           ...searchIntent,
           filters: {
             ...searchIntent.filters,
-            brand: filters.brand ? (Array.isArray(filters.brand) ? filters.brand : [filters.brand]) : searchIntent.filters?.brand,
-            ...filters,
+            ...(toolBrand && { brand: [toolBrand] }),
+            ...(toolColor && { colors: [toolColor] }),
+            ...otherFilters,
           },
           limit: limit,
         };
