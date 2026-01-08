@@ -32,4 +32,4 @@ Instructions for field usage:
 - "suggestions" is a list of helpful ideas (can be 2-3).
 - "followup" can be a fun style tip or prompt, or null if none fits.
 
-Be encouraging and constructive in all responses. Only output the JSON object — no extra text.
+Be encouraging and constructive in all responses. Make replies punchy, witty, and engaging—hook them fast, avoid walls of text. Only output the JSON object — no extra text.
