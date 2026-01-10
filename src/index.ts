@@ -71,7 +71,7 @@ app.get('/health', (_req: Request, res: Response) => {
  * Main chat endpoint for the app.
  *
  * Request format: Send ChatRequest with userId and one of: text, media, or button
- * Response format: ChatResponse with replies array and optional metadata
+ * Response format: ChatResponse with replies array
  *
  * Frontend should render each reply based on reply_type:
  * - 'text_only': Simple text message bubble
@@ -93,11 +93,7 @@ app.get('/health', (_req: Request, res: Response) => {
  *     "reply_text": "Hi! I'd love to help with styling...",
  *     "expected_action": "input_required"
  *   }],
- *   "pending": null,
- *   "metadata": {
- *     "session_state": "active",
- *     "conversation_id": "conv_123"
- *   }
+ *   "pending": null
  * }
  */
 app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
@@ -122,16 +118,10 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
 
     const { replies, pending } = await runAgentForHttp(String(userId), sid, messageInput);
 
-    // Enhanced response with metadata
+    // Response without metadata
     const response = {
       replies,
-      pending,
-      metadata: {
-        session_state: pending ? 'awaiting_input' : 'active',
-        conversation_id: `conv_${userId}`,
-        timestamp: new Date().toISOString(),
-        is_streaming: false
-      }
+      pending
     };
 
     return res.status(200).json(response);
