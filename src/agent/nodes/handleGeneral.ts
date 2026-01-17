@@ -42,6 +42,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
             { text: 'Vibe check', id: 'vibe_check' },
             { text: 'Color analysis', id: 'color_analysis' },
             { text: 'Style Studio', id: 'style_studio' },
+            { text: 'Fashion Charades', id: 'fashion_quiz' },
             { text: 'This or That', id: 'this_or_that' },
             { text: 'Skin Lab', id: 'skin_lab' },
           ],
@@ -61,6 +62,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
         { text: 'Vibe check', id: 'vibe_check' },
         { text: 'Color analysis', id: 'color_analysis' },
         { text: 'Style Studio', id: 'style_studio' },
+        { text: 'Fashion Charades', id: 'fashion_quiz' },
         { text: 'This or That', id: 'this_or_that' },
         { text: 'Skin Lab', id: 'skin_lab' },
       ];

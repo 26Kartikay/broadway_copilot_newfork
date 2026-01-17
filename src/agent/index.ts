@@ -40,6 +40,46 @@ export async function initializeAgent(): Promise<void> {
   }
 }
 
+async function loadPreviousConversationState(conversationId: string): Promise<Partial<GraphState> | null> {
+  try {
+    // Get the last successful graph run for this conversation
+    const lastSuccessfulRun = await prisma.graphRun.findFirst({
+      where: {
+        conversationId,
+        status: 'COMPLETED',
+      },
+      orderBy: {
+        endTime: 'desc',
+      },
+    });
+
+    if (!lastSuccessfulRun?.finalState) {
+      return null;
+    }
+
+    // Return the final state, but exclude traceBuffer and httpResponse as they're not needed
+    const state = lastSuccessfulRun.finalState as Partial<GraphState>;
+    delete state.traceBuffer;
+    delete state.httpResponse;
+
+    // Reconstruct Date objects from serialized state (they come back as strings from JSON)
+    if (state.user) {
+      if (typeof state.user.lastVibeCheckAt === 'string') {
+        state.user.lastVibeCheckAt = new Date(state.user.lastVibeCheckAt);
+      }
+      if (typeof state.user.lastColorAnalysisAt === 'string') {
+        state.user.lastColorAnalysisAt = new Date(state.user.lastColorAnalysisAt);
+      }
+    }
+
+    logger.debug({ conversationId, hasPreviousState: !!state.quizQuestions }, 'Loaded previous conversation state');
+    return state;
+  } catch (err: unknown) {
+    logger.error({ err, conversationId }, 'Failed to load previous conversation state');
+    return null;
+  }
+}
+
 async function logGraphResult(
   graphRunId: string,
   status: GraphRunStatus,
@@ -153,23 +193,58 @@ export async function runAgentForHttp(
     );
     conversation = _conversation;
 
+    // Load previous conversation state
+    const previousState = await loadPreviousConversationState(conversation.id);
+
+    // Create serializable initial state (exclude non-serializable properties)
+    const serializablePreviousState = previousState ? {
+      quizQuestions: previousState.quizQuestions,
+      quizAnswers: previousState.quizAnswers,
+      currentQuestionIndex: previousState.currentQuestionIndex,
+      pending: previousState.pending,
+      selectedTonality: previousState.selectedTonality,
+      intent: previousState.intent,
+      subIntent: previousState.subIntent,
+      assistantReply: previousState.assistantReply,
+    } : {};
+
     await prisma.graphRun.create({
       data: {
         id: graphRunId,
         userId: user.id,
         conversationId: conversation.id,
-        initialState: { input, user },
+        initialState: { input, user, ...serializablePreviousState } as Prisma.InputJsonValue,
       },
     });
 
+    // Create initial state with input, merging only persistent data from previous state
+    const initialState: GraphState = {
+      input,
+      user,
+      graphRunId,
+      conversationId: conversation.id,
+      traceBuffer: { nodeRuns: [], llmTraces: [] },
+      // Required properties with defaults
+      conversationHistoryWithImages: [],
+      conversationHistoryTextOnly: [],
+      intent: null,
+      stylingIntent: null,
+      generalIntent: null,
+      missingProfileField: null,
+      availableServices: [],
+      assistantReply: null,
+      pending: null,
+      selectedTonality: null,
+      // Only merge persistent game state, not routing decisions
+      ...(previousState ? {
+        quizQuestions: previousState.quizQuestions,
+        quizAnswers: previousState.quizAnswers,
+        currentQuestionIndex: previousState.currentQuestionIndex,
+      } : {}),
+    };
+
     finalState = await compiledApp.invoke(
-      {
-        input,
-        user,
-        graphRunId,
-        conversationId: conversation.id,
-        traceBuffer: { nodeRuns: [], llmTraces: [] },
-      },
+      initialState,
       { signal: controller.signal, runId: graphRunId },
     );
     logGraphResult(graphRunId, 'COMPLETED', finalState);

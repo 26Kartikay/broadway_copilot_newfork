@@ -9,10 +9,10 @@ import { GraphState, IntentLabel } from '../state';
 import { logger } from '../../utils/logger';
 
 const validTonalities = ['friendly', 'savage', 'hype_bff'];
-const otherValid = ['general', 'vibe_check', 'color_analysis', 'suggest', 'this_or_that','skin_lab'];
+const otherValid = ['general', 'vibe_check', 'color_analysis', 'suggest', 'this_or_that','skin_lab', 'fashion_quiz'];
 
 const LLMOutputSchema = z.object({
-  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'style_studio', 'this_or_that','skin_lab']),
+  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'style_studio', 'this_or_that','skin_lab', 'fashion_quiz']),
   missingProfileField: z.enum(['gender', 'age_group']).nullable(),
 });
 
@@ -35,6 +35,35 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   // 1️⃣ Priority 1: Handle explicit button payloads
   // ------------------------------
   if (buttonPayload) {
+    // Fashion Quiz/Charades buttons (a, b, c, d, hint) - stay in quiz flow
+    if (['a', 'b', 'c', 'd', 'hint'].includes(buttonPayload.toLowerCase())) {
+      // Check if we're in a fashion quiz/charades pending state
+      const quizPendingStates = [
+        'FASHION_QUIZ_START',
+        'FASHION_QUIZ_QUESTION_1',
+        'FASHION_QUIZ_QUESTION_2',
+        'FASHION_QUIZ_QUESTION_3',
+        'FASHION_QUIZ_QUESTION_4',
+        'FASHION_QUIZ_QUESTION_5',
+        'FASHION_QUIZ_QUESTION_6',
+        'FASHION_QUIZ_QUESTION_7',
+        'FASHION_QUIZ_QUESTION_8',
+        'FASHION_QUIZ_QUESTION_9',
+        'FASHION_QUIZ_QUESTION_10',
+        'FASHION_QUIZ_RESULTS'
+      ];
+      const isQuizPending = pending && quizPendingStates.includes(pending.toString());
+      logger.debug({ buttonPayload, pending, isQuizPending }, 'Checking quiz button routing');
+      if (isQuizPending) {
+        logger.debug({ buttonPayload, pending }, 'Fashion quiz/charades button clicked - staying in quiz flow');
+        return {
+          ...state,
+          intent: 'fashion_quiz',
+          missingProfileField: null,
+        };
+      }
+    }
+
     // Style Studio root → opens List Picker
     if (buttonPayload === 'style_studio' || buttonPayload === 'stylestudio') {
       return {
@@ -66,6 +95,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     // Handle other service payloads
     if (otherValid.includes(buttonPayload)) {
       const intent = buttonPayload as IntentLabel;
+      logger.debug({ buttonPayload, intent }, 'Routing to service intent');
 
       // vibe_check → triggers quick reply tonality options
       if (intent === 'vibe_check') {
@@ -85,6 +115,17 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
           ...state,
           intent: 'color_analysis',
           pending: PendingType.COLOR_ANALYSIS_IMAGE,
+          missingProfileField: null,
+        };
+      }
+
+      // fashion_quiz → start charades game
+      if (intent === 'fashion_quiz') {
+        logger.debug({ buttonPayload }, 'Starting fashion charades game');
+        return {
+          ...state,
+          intent: 'fashion_quiz',
+          pending: PendingType.FASHION_QUIZ_START,
           missingProfileField: null,
         };
       }
@@ -127,6 +168,17 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       ...state,
       intent: 'vibe_check',
       pending: PendingType.TONALITY_SELECTION,
+      missingProfileField: null,
+    };
+  }
+
+  if (userMessage === 'fashion_quiz' || userMessage === 'fashion quiz' || userMessage === 'quiz' ||
+      userMessage === 'fashion_charades' || userMessage === 'fashion charades' || userMessage === 'charades') {
+    logger.debug({ userId }, 'Explicit text match: fashion charades.');
+    return {
+      ...state,
+      intent: 'fashion_quiz',
+      pending: PendingType.FASHION_QUIZ_START,
       missingProfileField: null,
     };
   }

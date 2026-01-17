@@ -70,6 +70,11 @@ export interface GraphState {
 
   /** Replies returned in the HTTP response */
   httpResponse?: Replies;
+
+  /** Fashion quiz state */
+  quizQuestions?: any[] | undefined; // Will be properly typed with QuizQuestionSchema
+  quizAnswers?: string[] | undefined;
+  currentQuestionIndex?: number | undefined;
 }
 
 // ============================================================================
@@ -87,7 +92,8 @@ export type IntentLabel =
   | 'style_studio'
   | 'styling'
   | 'this_or_that'
-  | 'skin_lab';
+  | 'skin_lab'
+  | 'fashion_quiz';
 
 /**
  * Specific styling intents for fashion/styling related requests.

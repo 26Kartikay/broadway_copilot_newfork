@@ -4,6 +4,7 @@ import {
   askUserInfo,
   colorAnalysis,
   dailyFact,
+  handleFashionCharades,
   handleFeedback,
   handleGeneral,
   handleStyleStudio,
@@ -36,6 +37,7 @@ export function buildAgentGraph() {
     .addNode('routeStyleStudio', routeStyleStudio)
     .addNode('handleStyleStudio', handleStyleStudio)
     .addNode('dailyFact', dailyFact)
+    .addNode('handleFashionCharades', handleFashionCharades)
     .addNode('handleSkinLab', handleSkinLab)
     .addNode('handleThisOrThat', handleThisOrThat)
     .addEdge(START, 'ingestMessage')
@@ -62,6 +64,8 @@ export function buildAgentGraph() {
             return 'handleSkinLab';
           case 'this_or_that':
             return 'handleThisOrThat';
+          case 'fashion_quiz':
+            return 'handleFashionCharades';
           default:
             return s.intent || 'general';
         }
@@ -73,8 +77,9 @@ export function buildAgentGraph() {
         color_analysis: 'colorAnalysis',
         styling: 'routeStyleStudio',
         style_studio: 'routeStyleStudio',
-        handleSkinLab: 'handleSkinLab',  
+        handleSkinLab: 'handleSkinLab',
     handleThisOrThat: 'handleThisOrThat',
+    handleFashionCharades: 'handleFashionCharades',
       },
     )
     .addEdge('routeGeneral', 'handleGeneral')
@@ -106,6 +111,7 @@ export function buildAgentGraph() {
     .addEdge('colorAnalysis', 'sendReply')
     .addEdge('handleGeneral', 'sendReply')
     .addEdge('handleFeedback', 'sendReply')
+    .addEdge('handleFashionCharades', 'sendReply')
     .addEdge('handleSkinLab', 'sendReply')
     .addEdge('handleThisOrThat', 'sendReply')
     .addEdge('sendReply', END);
