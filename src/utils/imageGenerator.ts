@@ -1,4 +1,4 @@
-import { createCanvas, loadImage, registerFont } from 'canvas';
+import { createCanvas, loadImage, registerFont, CanvasRenderingContext2D } from 'canvas';
 import fs from 'fs/promises';
 import path from 'path';
 import colornames from 'colornames';
@@ -6,6 +6,27 @@ import colornames from 'colornames';
 import { InternalServerError } from './errors';
 import { logger } from './logger';
 import { ensureDir, userUploadDir } from './paths';
+
+// Register Poppins fonts for image generation
+try {
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'), { family: 'Poppins', weight: 'normal' });
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'), { family: 'Poppins', weight: 'bold' });
+  logger.info('Poppins fonts registered successfully');
+} catch (error) {
+  logger.warn({ error: (error as Error)?.message }, 'Failed to register Poppins fonts');
+}
+
+// Helper function to set font with proper error handling
+function setFont(ctx: CanvasRenderingContext2D, size: number, weight: 'normal' | 'bold' | '500' = 'normal', scale: number = 1): void {
+  try {
+    const fontSize = Math.round(size * scale);
+    ctx.font = `${weight} ${fontSize}px Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  } catch (error) {
+    logger.warn({ error: (error as Error)?.message }, `Failed to set font: ${weight} ${size}px`);
+    // Fallback to system font
+    ctx.font = `${weight} ${Math.round(size * scale)}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+  }
+}
 
 /**
  * Converts a color name to hex code using colornames library with fallback logic
@@ -129,7 +150,7 @@ export async function generateColorAnalysisImage(
 
       // Text - larger and bold
       ctx.fillStyle = '#000000';
-      ctx.font = `bold ${30 * scale}px ${fontFamily}`; // Increased to 12 for larger text
+      ctx.font = `${6 * scale}px Poppins`; // remove 'bold'
       ctx.textAlign = 'center';
       ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 16 * scale); // Adjusted y position
     });
@@ -194,7 +215,7 @@ export async function generateColorAnalysisImage(
   // 4. Draw Palette Name on the banner
   if (data.palette_name) {
     ctx.save();
-    ctx.font = `bold ${50 * scale}px ${fontFamily}`; // Smaller font for smaller banner
+    ctx.font = `${12 * scale}px Poppins`; // remove 'bold'
     ctx.fillStyle = '#FFFFFF';
     ctx.textAlign = 'center';
 
@@ -266,21 +287,34 @@ export async function generateVibeCheckImage(
   const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
   // 2. Draw Categories (scores)
-  const categoryY = 260 * scale;
-  const categories: Array<{ score: number }> = [
-    { score: data.fit_silhouette.score },
-    { score: data.styling_details.score },
-    { score: data.color_harmony.score },
-  ];
+const categoryStripTop = 240 * scale;
+const categoryStripHeight = 50 * scale;
+const categoryTextY = categoryStripTop + categoryStripHeight / 2;
 
-  const categoryXs = [90 * scale, 175 * scale, 260 * scale];
-  categories.forEach((cat, i) => {
-    const x = categoryXs[i]!;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${14 * scale}px ${fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`${(cat.score ?? 0).toFixed(1)}`, x, categoryY);
-  });
+const categories = [
+  { score: data.fit_silhouette.score },
+  { score: data.styling_details.score },
+  { score: data.color_harmony.score },
+];
+
+const categoryXs = [90 * scale, 175 * scale, 260 * scale];
+
+ctx.save();
+ctx.fillStyle = '#FFFFFF';
+ctx.font = `${18 * scale}px Poppins`; // remove 'bold'
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle'; // 🔥 CRITICAL FIX
+
+categories.forEach((cat, i) => {
+  ctx.fillText(
+    `${(cat.score ?? 0).toFixed(1)}`,
+    categoryXs[i]!,
+    categoryTextY
+  );
+});
+
+ctx.restore();
+
 
   // 3. Draw User Image
   if (data.userImageUrl) {
@@ -333,7 +367,7 @@ export async function generateVibeCheckImage(
   ctx.drawImage(bannerTemplateImg, -bannerWidth / 2, -bannerHeight / 2, bannerWidth, bannerHeight);
 
   // Overall Score over banner (same rotation)
-  ctx.font = `bold ${50 * scale}px ${fontFamily}`;
+  ctx.font = `${18 * scale}px Poppins`; // remove 'bold'
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 0);
