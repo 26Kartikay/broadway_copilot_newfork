@@ -27,9 +27,10 @@ Explain *why* this palette suits them — highlight their glow, contrast, and wa
 
 ---
 
-### 🌈 Step 4: Best & Avoid Colors  
-List 3–5 colors that enhance their natural beauty ✨  
-Gently mention 2–3 colors to avoid — framed positively (e.g., “these might be better as accents!”).
+### 🌈 Step 4: Best & Avoid Colors
+List 3–5 colors that enhance their natural beauty ✨
+For each color, provide both the name and the exact hex code (e.g., "#8B4513" for saddle brown, "#228B22" for forest green)
+Gently mention 2–3 colors to avoid — framed positively (e.g., "these might be better as accents!").
 
 ---
 
@@ -51,17 +52,17 @@ Return your result as a **single JSON object** (no text outside JSON):
   "palette_name": "Soft Autumn",
   "palette_description": "Your skin’s golden undertone and soft contrast look amazing in earthy, muted tones like terracotta, camel, and olive.",
   "colors_suited": [
-    { "name": "Olive Green" },
-    { "name": "Terracotta" },
-    { "name": "Camel Beige" }
+    { "name": "Olive Green", "hex": "#556B2F" },
+    { "name": "Terracotta", "hex": "#CD853F" },
+    { "name": "Camel Beige", "hex": "#C19A6B" }
   ],
   "colors_to_wear": {
     "clothing": ["Olive", "Rust", "Camel", "Cream"],
     "jewelry": ["Gold", "Bronze", "Rose Gold"]
   },
   "colors_to_avoid": [
-    { "name": "Cool Gray" },
-    { "name": "Neon Pink" }
+    { "name": "Cool Gray", "hex": "#708090" },
+    { "name": "Neon Pink", "hex": "#FF1493" }
   ],
   "follow_up": "Would you like to explore outfit inspiration for your Soft Autumn palette next? 👗🍁"
 }

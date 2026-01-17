@@ -63,19 +63,25 @@ export async function generateColorAnalysisImage(
   whatsappId: string,
   data: {
     palette_name: string | null;
-    colors_suited: Array<{ name: string }>;
+    colors_suited: Array<{ name: string; hex: string }>;
     colors_to_wear: { clothing: string[]; jewelry: string[] };
-    colors_to_avoid: Array<{ name: string }>;
+    colors_to_avoid: Array<{ name: string; hex: string }>;
     userImageUrl?: string | null;
   },
 ): Promise<string> {
-  const templatePath = path.join(process.cwd(), 'templates', 'color_analysis_template.svg');
-  const templateBuffer = await fs.readFile(templatePath);
-  const templateImg = await loadImage(templateBuffer);
+  // Load base template
+  const baseTemplatePath = path.join(process.cwd(), 'templates', 'Color_Analysis.svg');
+  const baseTemplateBuffer = await fs.readFile(baseTemplatePath);
+  const baseTemplateImg = await loadImage(baseTemplateBuffer);
+
+  // Load banner template
+  const bannerTemplatePath = path.join(process.cwd(), 'templates', 'Color_Analysis_banner.svg');
+  const bannerTemplateBuffer = await fs.readFile(bannerTemplatePath);
+  const bannerTemplateImg = await loadImage(bannerTemplateBuffer);
 
   const scale = 2;
-  const width = templateImg.width * scale;
-  const height = templateImg.height * scale;
+  const width = baseTemplateImg.width * scale;
+  const height = baseTemplateImg.height * scale;
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -84,103 +90,125 @@ export async function generateColorAnalysisImage(
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, width, height);
 
-  // 1. Draw Template Background
-  ctx.drawImage(templateImg, 0, 0, width, height);
+  // 1. Draw Base Template
+  ctx.drawImage(baseTemplateImg, 0, 0, width, height);
 
-  const fontFamily = 'Nuething Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   const globalTiltAngle = -0.04; // Used for text in banner
 
-  // 2. Draw User Image INSIDE the black circular part of the template
+  // 2. Draw Color Swatches on top of base template
+  const swatchSize = 20 * scale;
+  const swatchSpacing = 17 * scale; // Slightly decreased spacing between swatches
+  const swatchesPerRow = 4; // 4 swatches total instead of 6
+
+  const drawSwatches = (colors: any[], startX: number, startY: number) => {
+    ctx.save();
+    // No ctx.rotate() here so they appear straight
+    colors.slice(0, 4).forEach((color, index) => { // Limit to 4 swatches
+      if (!color || !color.name || !color.hex) {
+        logger.warn({ color, index }, 'Skipping color swatch due to missing data');
+        return; // Skip if missing data
+      }
+
+      const row = Math.floor(index / swatchesPerRow);
+      const col = index % swatchesPerRow;
+
+      const x = startX + col * (swatchSize + swatchSpacing);
+      const y = startY + row * (swatchSize + 22 * scale);
+
+      logger.debug({ color: color.name, hex: color.hex, x, y, swatchSize }, 'Drawing color swatch');
+
+      // Rounded rectangle swatch - no border
+      const radius = 6 * scale; // Rounded corners
+      ctx.fillStyle = color.hex;
+
+      // Draw rounded rectangle
+      ctx.beginPath();
+      ctx.roundRect(x, y, swatchSize, swatchSize, radius);
+      ctx.fill();
+
+      // Text - larger and bold
+      ctx.fillStyle = '#000000';
+      ctx.font = `bold ${30 * scale}px ${fontFamily}`; // Increased to 12 for larger text
+      ctx.textAlign = 'center';
+      ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 16 * scale); // Adjusted y position
+    });
+    ctx.restore();
+  };
+
+  // Suited Colors Position - 220px from top, 28px from left
+  drawSwatches(data.colors_suited, 28 * scale, 210 * scale);
+
+  // Avoid Colors Position - 220px from top, 200px from left
+  drawSwatches(data.colors_to_avoid, 200 * scale, 210 * scale);
+
+  // 3. Draw User Image as full-width rectangle at left-top
   if (data.userImageUrl) {
     try {
       const userImg = await loadImage(data.userImageUrl);
-      // Coordinates adjusted to center within the black circle of the template
-      const imageSize = 180 * scale; 
-      const centerX = width / 2;
-      const centerY = 135 * scale; // Positioned within the black top area
+      const imageWidth = 358 * scale; // Full template width
+      const imageHeight = 180 * scale; // 300 pixels from top
+      const imageX = 0; // Left aligned
+      const imageY = 0; // Top aligned
 
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY, imageSize / 2, 0, Math.PI * 2);
+      ctx.rect(imageX, imageY, imageWidth, imageHeight);
       ctx.clip();
-      
-      // Aspect ratio correction (Center Crop)
+
+      // Cover/fit logic for rectangular area
       const aspect = userImg.width / userImg.height;
-      let drawW = imageSize;
-      let drawH = imageSize;
+      let drawW = imageWidth;
+      let drawH = imageHeight;
       let offsetX = 0;
       let offsetY = 0;
 
-      if (aspect > 1) {
-          drawW = imageSize * aspect;
-          offsetX = (imageSize - drawW) / 2;
+      if (aspect > imageWidth / imageHeight) {
+        // Image is wider than target area - fit height, crop width
+        drawH = imageHeight;
+        drawW = imageHeight * aspect;
+        offsetX = (imageWidth - drawW) / 2;
       } else {
-          drawH = imageSize / aspect;
-          offsetY = (imageSize - drawH) / 2;
+        // Image is taller than target area - fit width, crop height
+        drawW = imageWidth;
+        drawH = imageWidth / aspect;
+        offsetY = (imageHeight - drawH) / 2;
       }
 
-      ctx.drawImage(userImg, centerX - imageSize / 2 + offsetX, centerY - imageSize / 2 + offsetY, drawW, drawH);
+      ctx.drawImage(userImg, imageX + offsetX, imageY + offsetY, drawW, drawH);
       ctx.restore();
     } catch (err) {
       logger.warn({ err: (err as Error)?.message }, 'Failed to load user image');
     }
   }
 
-  // 3. Draw Palette Name in Purple Banner (Tilted)
+  // 3. Draw Banner Template on top (scaled to 1/4 size, centered, at 155 height)
+  const bannerScale = 0.75; // 1/4 size
+  const bannerWidth = bannerTemplateImg.width * scale * bannerScale;
+  const bannerHeight = bannerTemplateImg.height * scale * bannerScale;
+  const bannerX = (width - bannerWidth) / 2; // Centered horizontally
+  const bannerY = 152 * scale; 
+
+  ctx.drawImage(bannerTemplateImg, bannerX, bannerY, bannerWidth, bannerHeight);
+
+  // 4. Draw Palette Name on the banner
   if (data.palette_name) {
     ctx.save();
-    ctx.font = `bold ${22 * scale}px ${fontFamily}`;
+    ctx.font = `bold ${50 * scale}px ${fontFamily}`; // Smaller font for smaller banner
     ctx.fillStyle = '#FFFFFF';
     ctx.textAlign = 'center';
-    
-    // Positioned in the purple banner area
-    const bannerX = width / 2;
-    const bannerY = 275 * scale; 
-    
-    ctx.translate(bannerX, bannerY);
+
+    // Positioned at the center of the banner
+    const textX = bannerX + bannerWidth / 2;
+    const textY = bannerY + bannerHeight / 2 + 6 * scale; // Center vertically with slight offset
+
+    ctx.translate(textX, textY);
     ctx.rotate(globalTiltAngle); // Tilt the text to match the banner
     ctx.fillText(data.palette_name.toUpperCase(), 0, 0);
     ctx.restore();
   }
 
-  // 4. Draw Color Swatches (Normal / Not Tilted)
-  const swatchSize = 18 * scale;
-  const swatchSpacing = 10 * scale;
-  const swatchesPerRow = 3;
 
-  const drawSwatches = (colors: any[], startX: number, startY: number) => {
-    ctx.save();
-    // No ctx.rotate() here so they appear straight
-    colors.slice(0, 6).forEach((color, index) => {
-      const row = Math.floor(index / swatchesPerRow);
-      const col = index % swatchesPerRow;
-      
-      const x = startX + col * (swatchSize + swatchSpacing);
-      const y = startY + row * (swatchSize + 22 * scale);
-
-      // Swatch Box
-      ctx.fillStyle = colorNameToHex(color.name);
-      ctx.fillRect(x, y, swatchSize, swatchSize);
-      
-      // Border
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1 * scale;
-      ctx.strokeRect(x, y, swatchSize, swatchSize);
-      
-      // Text
-      ctx.fillStyle = '#000000';
-      ctx.font = `bold ${8 * scale}px ${fontFamily}`;
-      ctx.textAlign = 'center';
-      ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 12 * scale);
-    });
-    ctx.restore();
-  };
-
-  // Suited Colors Position
-  drawSwatches(data.colors_suited, 55 * scale, 360 * scale);
-  
-  // Avoid Colors Position
-  drawSwatches(data.colors_to_avoid, 215 * scale, 360 * scale);
 
   // 5. Save and Return
   const userDir = userUploadDir(whatsappId);
@@ -210,18 +238,32 @@ export async function generateVibeCheckImage(
     context_confidence: { score: number; explanation: string };
   },
 ): Promise<string> {
-  const templatePath = path.join(process.cwd(), 'templates', 'vibe_check_template.svg');
-  const templateBuffer = await fs.readFile(templatePath);
-  const templateImg = await loadImage(templateBuffer);
-  
+  // Load base template
+  const baseTemplatePath = path.join(process.cwd(), 'templates', 'Vibe_check.svg');
+  const baseTemplateBuffer = await fs.readFile(baseTemplatePath);
+  const baseTemplateImg = await loadImage(baseTemplateBuffer);
+
+  // Load banner template
+  const bannerTemplatePath = path.join(process.cwd(), 'templates', 'Vibe_Check_Banner.svg');
+  const bannerTemplateBuffer = await fs.readFile(bannerTemplatePath);
+  const bannerTemplateImg = await loadImage(bannerTemplateBuffer);
+
   const scale = 2;
-  const width = templateImg.width * scale;
-  const height = templateImg.height * scale;
-  
+  const width = baseTemplateImg.width * scale;
+  const height = baseTemplateImg.height * scale;
+
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
-  
-  ctx.drawImage(templateImg, 0, 0, width, height);
+
+  // Fill background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, width, height);
+
+  // 1. Draw Base Template
+  ctx.drawImage(baseTemplateImg, 0, 0, width, height);
+
+  // 2. Draw Banner Template on top
+  ctx.drawImage(bannerTemplateImg, 0, 0, width, height);
   
   const fontFamily = 'Nuething Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   

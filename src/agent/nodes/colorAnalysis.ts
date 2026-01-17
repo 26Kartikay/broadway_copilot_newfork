@@ -13,12 +13,16 @@ import { PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
 
 /**
- * Schema for a color object with name.
+ * Schema for a color object with name and hex code.
  */
 const ColorObjectSchema = z.object({
   name: z
     .string()
     .describe("A concise, shopper-friendly color name (e.g., 'Warm Ivory', 'Deep Espresso')."),
+  hex: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/)
+    .describe("The exact hex code for this color (e.g., '#8B4513', '#228B22')."),
 });
 
 /**
@@ -101,6 +105,13 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     const output = await getVisionLLM()
       .withStructuredOutput(LLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryWithImages, state.traceBuffer, 'colorAnalysis');
+
+    // Log the colors returned from LLM for debugging
+    logger.debug({
+      userId,
+      colors_suited: output.colors_suited,
+      colors_to_avoid: output.colors_to_avoid
+    }, 'Color analysis LLM output');
 
     // Save results to DB (excluding follow-up)
     const [, user] = await prisma.$transaction([
