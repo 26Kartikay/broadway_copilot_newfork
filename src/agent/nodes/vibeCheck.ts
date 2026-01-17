@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { logger } from '../../utils/logger';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
+import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { queueWardrobeIndex } from '../../lib/tasks';
 import type { QuickReplyButton } from '../../lib/chat/types';
@@ -154,6 +154,17 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     queueWardrobeIndex(userId, latestMessageId);
 
+    // Extract user image URL from the latest message
+    let userImageUrl: string | null = null;
+    if (latestMessage && latestMessage.content && Array.isArray(latestMessage.content)) {
+      const imagePart = latestMessage.content.find(
+        (part): part is ImagePart => part.type === 'image_url' && 'image_url' in part
+      );
+      if (imagePart && imagePart.image_url?.url) {
+        userImageUrl = imagePart.image_url.url;
+      }
+    }
+
     // Generate image
     let imageUrl: string | undefined;
     try {
@@ -163,6 +174,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         color_harmony: result.color_harmony,
         styling_details: result.styling_details,
         context_confidence: result.context_confidence,
+        userImageUrl,
       });
     } catch (err: unknown) {
       logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate vibe check image');

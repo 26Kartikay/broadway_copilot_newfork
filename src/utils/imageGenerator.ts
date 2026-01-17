@@ -236,6 +236,7 @@ export async function generateVibeCheckImage(
     color_harmony: { score: number; explanation: string };
     styling_details: { score: number; explanation: string };
     context_confidence: { score: number; explanation: string };
+    userImageUrl?: string | null;
   },
 ): Promise<string> {
   // Load base template
@@ -262,37 +263,81 @@ export async function generateVibeCheckImage(
   // 1. Draw Base Template
   ctx.drawImage(baseTemplateImg, 0, 0, width, height);
 
-  // 2. Draw Banner Template on top
-  ctx.drawImage(bannerTemplateImg, 0, 0, width, height);
-  
-  const fontFamily = 'Nuething Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  
-  // Overall Score
-  const barCenterX = 72 * scale;
-  const barCenterY = 188 * scale;
-  ctx.font = `bold ${20 * scale}px ${fontFamily}`;
+  const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+  // 2. Draw Categories (scores)
+  const categoryY = 260 * scale;
+  const categories: Array<{ score: number }> = [
+    { score: data.fit_silhouette.score },
+    { score: data.styling_details.score },
+    { score: data.color_harmony.score },
+  ];
+
+  const categoryXs = [90 * scale, 175 * scale, 260 * scale];
+  categories.forEach((cat, i) => {
+    const x = categoryXs[i]!;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${14 * scale}px ${fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${(cat.score ?? 0).toFixed(1)}`, x, categoryY);
+  });
+
+  // 3. Draw User Image
+  if (data.userImageUrl) {
+    try {
+      const userImg = await loadImage(data.userImageUrl);
+      const imageWidth = 358 * scale;
+      const imageHeight = 220 * scale;
+      const imageX = 0;
+      const imageY = 0;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(imageX, imageY, imageWidth, imageHeight);
+      ctx.clip();
+
+      // Cover/fit logic
+      const aspect = userImg.width / userImg.height;
+      let drawW = imageWidth;
+      let drawH = imageHeight;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (aspect > imageWidth / imageHeight) {
+        drawH = imageHeight;
+        drawW = imageHeight * aspect;
+        offsetX = (imageWidth - drawW) / 2;
+      } else {
+        drawW = imageWidth;
+        drawH = imageWidth / aspect;
+        offsetY = (imageHeight - drawH) / 2;
+      }
+
+      ctx.drawImage(userImg, imageX + offsetX, imageY + offsetY, drawW, drawH);
+      ctx.restore();
+    } catch (err) {
+      logger.warn({ err: (err as Error)?.message }, 'Failed to load user image');
+    }
+  }
+
+  // 4. Draw Banner Template
+  const bannerScale = 0.75;
+  const bannerWidth = bannerTemplateImg.width * scale * bannerScale;
+  const bannerHeight = bannerTemplateImg.height * scale * bannerScale;
+  const bannerX = 15 * scale;
+  const bannerY = 120 * scale;
+
+  ctx.save();
+  ctx.translate(bannerX + bannerWidth / 2, bannerY + bannerHeight / 2);
+  ctx.rotate(-0.1); // Slight tilt to the left
+  ctx.drawImage(bannerTemplateImg, -bannerWidth / 2, -bannerHeight / 2, bannerWidth, bannerHeight);
+
+  // Overall Score over banner (same rotation)
+  ctx.font = `bold ${50 * scale}px ${fontFamily}`;
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
-  ctx.fillText(`${data.overall_score.toFixed(1)}/10`, barCenterX, barCenterY);
-  
-  // Categories
-  const categoryY = 245 * scale;
-  const categories = [
-    { label: 'Fit', score: data.fit_silhouette.score },
-    { label: 'Hair & Skin', score: data.color_harmony.score },
-    { label: 'Accessories', score: data.styling_details.score },
-    { label: 'Colors', score: data.context_confidence.score },
-  ];
-  
-  const categoryWidth = width / 4;
-  categories.forEach((cat, i) => {
-    const x = i * categoryWidth + categoryWidth / 2;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${10 * scale}px ${fontFamily}`;
-    ctx.fillText(cat.label, x, categoryY);
-    ctx.font = `bold ${14 * scale}px ${fontFamily}`;
-    ctx.fillText(`${cat.score.toFixed(1)}`, x, categoryY + 18 * scale);
-  });
+  ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 0);
+  ctx.restore();
   
   const userDir = userUploadDir(whatsappId);
   await ensureDir(userDir);
