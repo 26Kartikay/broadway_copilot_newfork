@@ -148,20 +148,30 @@ export async function generateColorAnalysisImage(
       ctx.roundRect(x, y, swatchSize, swatchSize, radius);
       ctx.fill();
 
-      // Text - larger and bold
+      // Text - larger and bold, handle multi-line for names with more than 2 words
       ctx.fillStyle = '#000000';
       ctx.font = `${6 * scale}px Poppins`; // remove 'bold'
       ctx.textAlign = 'center';
-      ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 16 * scale); // Adjusted y position
+
+      const words = color.name.split(' ');
+      if (words.length > 1) {
+        // More than 1 word: first word on first line, remaining words on second line
+        const firstLine = words[0];
+        const secondLine = words.slice(1).join(' ');
+        ctx.fillText(firstLine, x + swatchSize / 2, y + swatchSize + 12 * scale);
+        ctx.fillText(secondLine, x + swatchSize / 2, y + swatchSize + 20 * scale);
+      } else {
+        ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 16 * scale); // Adjusted y position
+      }
     });
     ctx.restore();
   };
 
-  // Suited Colors Position - 220px from top, 28px from left
-  drawSwatches(data.colors_suited, 28 * scale, 210 * scale);
+  // Suited Colors Position - 222px from top, 28px from left
+  drawSwatches(data.colors_suited, 28 * scale, 212 * scale);
 
-  // Avoid Colors Position - 220px from top, 200px from left
-  drawSwatches(data.colors_to_avoid, 200 * scale, 210 * scale);
+  // Avoid Colors Position - 222px from top, 200px from left
+  drawSwatches(data.colors_to_avoid, 200 * scale, 212 * scale);
 
   // 3. Draw User Image as full-width rectangle at left-top
   if (data.userImageUrl) {
@@ -177,23 +187,23 @@ export async function generateColorAnalysisImage(
       ctx.rect(imageX, imageY, imageWidth, imageHeight);
       ctx.clip();
 
-      // Cover/fit logic for rectangular area
+      // Fit to frame logic - show entire image, centered
       const aspect = userImg.width / userImg.height;
-      let drawW = imageWidth;
-      let drawH = imageHeight;
-      let offsetX = 0;
-      let offsetY = 0;
+      const frameAspect = imageWidth / imageHeight;
+      let drawW, drawH, offsetX, offsetY;
 
-      if (aspect > imageWidth / imageHeight) {
-        // Image is wider than target area - fit height, crop width
+      if (aspect > frameAspect) {
+        // Image is wider - fit to width, center vertically
+        drawW = imageWidth;
+        drawH = imageWidth / aspect;
+        offsetX = 0;
+        offsetY = (imageHeight - drawH) / 2;
+      } else {
+        // Image is taller - fit to height, center horizontally
         drawH = imageHeight;
         drawW = imageHeight * aspect;
         offsetX = (imageWidth - drawW) / 2;
-      } else {
-        // Image is taller than target area - fit width, crop height
-        drawW = imageWidth;
-        drawH = imageWidth / aspect;
-        offsetY = (imageHeight - drawH) / 2;
+        offsetY = 0;
       }
 
       ctx.drawImage(userImg, imageX + offsetX, imageY + offsetY, drawW, drawH);
@@ -221,7 +231,7 @@ export async function generateColorAnalysisImage(
 
     // Positioned at the center of the banner
     const textX = bannerX + bannerWidth / 2;
-    const textY = bannerY + bannerHeight / 2 + 6 * scale; // Center vertically with slight offset
+    const textY = bannerY + bannerHeight / 2 + 10 * scale; // Center vertically with slight offset (moved 5 pixels down)
 
     ctx.translate(textX, textY);
     ctx.rotate(globalTiltAngle); // Tilt the text to match the banner
