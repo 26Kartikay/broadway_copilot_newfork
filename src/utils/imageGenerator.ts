@@ -425,7 +425,10 @@ ctx.restore();
   const filename = `vibe_check_${Date.now()}.png`;
   const filepath = path.join(userDir, filename);
   await fs.writeFile(filepath, canvas.toBuffer('image/png'));
-  
+
   const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
-  return `/uploads/${sanitizedId}/${filename}`;
+  const relativePath = `/uploads/${sanitizedId}/${filename}`;
+  const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '');
+
+  return (serverUrl && !serverUrl.includes('localhost')) ? `${serverUrl}${relativePath}` : relativePath;
 }
