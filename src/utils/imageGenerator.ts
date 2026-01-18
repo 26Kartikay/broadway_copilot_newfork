@@ -151,7 +151,7 @@ export async function generateColorAnalysisImage(
 
       // Text - bold font for all text, handle multi-line for names with more than 2 words
       ctx.fillStyle = '#000000';
-      ctx.font = `bold ${5 * scale}px Poppins`; // Bold font with larger size for readability
+      ctx.font = `bold ${6 * scale}px Poppins`; // Bold font with larger size for readability
       ctx.textAlign = 'center';
 
       const words = color.name.split(' ');
