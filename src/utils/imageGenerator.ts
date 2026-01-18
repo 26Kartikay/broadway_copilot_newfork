@@ -216,7 +216,7 @@ export async function generateColorAnalysisImage(
   if (data.palette_name) {
     ctx.save();
     ctx.font = `${12 * scale}px Poppins`; // remove 'bold'
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = '#000000';
     ctx.textAlign = 'center';
 
     // Positioned at the center of the banner
@@ -286,10 +286,10 @@ export async function generateVibeCheckImage(
 
   const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-  // 2. Draw Categories (scores)
+// 2. Draw Categories (scores)
 const categoryStripTop = 240 * scale;
 const categoryStripHeight = 50 * scale;
-const categoryTextY = categoryStripTop + categoryStripHeight / 2;
+const categoryTextY = categoryStripTop + categoryStripHeight / 2 - 14 * scale; // Move 6px up total
 
 const categories = [
   { score: data.fit_silhouette.score },
@@ -299,13 +299,15 @@ const categories = [
 
 const categoryXs = [90 * scale, 175 * scale, 260 * scale];
 
+const categoryColors = ['#eb92aa', '#75cfe7', '#a57bc4'];
+
 ctx.save();
-ctx.fillStyle = '#FFFFFF';
 ctx.font = `${18 * scale}px Poppins`; // remove 'bold'
 ctx.textAlign = 'center';
 ctx.textBaseline = 'middle'; // 🔥 CRITICAL FIX
 
 categories.forEach((cat, i) => {
+  ctx.fillStyle = categoryColors[i]!;
   ctx.fillText(
     `${(cat.score ?? 0).toFixed(1)}`,
     categoryXs[i]!,
@@ -330,21 +332,23 @@ ctx.restore();
       ctx.rect(imageX, imageY, imageWidth, imageHeight);
       ctx.clip();
 
-      // Cover/fit logic
+      // Fit to frame logic - show entire image, centered
       const aspect = userImg.width / userImg.height;
-      let drawW = imageWidth;
-      let drawH = imageHeight;
-      let offsetX = 0;
-      let offsetY = 0;
+      const frameAspect = imageWidth / imageHeight;
+      let drawW, drawH, offsetX, offsetY;
 
-      if (aspect > imageWidth / imageHeight) {
+      if (aspect > frameAspect) {
+        // Image is wider - fit to width, center vertically
+        drawW = imageWidth;
+        drawH = imageWidth / aspect;
+        offsetX = 0;
+        offsetY = (imageHeight - drawH) / 2;
+      } else {
+        // Image is taller - fit to height, center horizontally
         drawH = imageHeight;
         drawW = imageHeight * aspect;
         offsetX = (imageWidth - drawW) / 2;
-      } else {
-        drawW = imageWidth;
-        drawH = imageWidth / aspect;
-        offsetY = (imageHeight - drawH) / 2;
+        offsetY = 0;
       }
 
       ctx.drawImage(userImg, imageX + offsetX, imageY + offsetY, drawW, drawH);
@@ -355,7 +359,7 @@ ctx.restore();
   }
 
   // 4. Draw Banner Template
-  const bannerScale = 0.75;
+  const bannerScale = 1;
   const bannerWidth = bannerTemplateImg.width * scale * bannerScale;
   const bannerHeight = bannerTemplateImg.height * scale * bannerScale;
   const bannerX = 15 * scale;
@@ -367,10 +371,10 @@ ctx.restore();
   ctx.drawImage(bannerTemplateImg, -bannerWidth / 2, -bannerHeight / 2, bannerWidth, bannerHeight);
 
   // Overall Score over banner (same rotation)
-  ctx.font = `${18 * scale}px Poppins`; // remove 'bold'
+  ctx.font = `${20 * scale}px Poppins`; // remove 'bold'
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
-  ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 0);
+  ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 15 * scale); // Move 15px down total
   ctx.restore();
   
   const userDir = userUploadDir(whatsappId);
