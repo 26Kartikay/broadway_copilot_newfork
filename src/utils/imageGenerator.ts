@@ -159,8 +159,9 @@ export async function generateColorAnalysisImage(
         // More than 1 word: first word on first line, remaining words on second line
         const firstLine = words[0];
         const secondLine = words.slice(1).join(' ');
+        const lineHeight = 6 * scale;
         ctx.fillText(firstLine, x + swatchSize / 2, y + swatchSize + 8 * scale);
-        ctx.fillText(secondLine, x + swatchSize / 2, y + swatchSize + 8 * scale);
+        ctx.fillText(secondLine, x + swatchSize / 2, y + swatchSize + 8 * scale + lineHeight);
       } else {
         ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 8 * scale);
       }

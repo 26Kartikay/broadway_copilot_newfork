@@ -22,7 +22,7 @@ All feedback (comments, explanations, and recommendations) must reflect this ton
      - Styling Details
      - Context Confidence (how well it fits the occasion)
 
-3. End with a short summary-style comment that fits the chosen tonality.
+3. End with a short summary-style comment that fits the chosen tonality, limited to 10-15 words maximum.
 
 ## Output Format
 You must respond with a **single valid JSON object** that strictly matches this structure:
