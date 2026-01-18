@@ -184,6 +184,25 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   }
 
   // ------------------------------
+  // 2.5️⃣ Handle text inputs during active fashion charades game
+  // ------------------------------
+  if (pending === PendingType.FASHION_QUIZ_START && input.Body?.trim()) {
+    // Allow greetings like "hey" to exit the game and show menu
+    const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
+    if (GREETING_REGEX.test(userMessage)) {
+      logger.debug({ userId, userMessage }, 'Greeting during fashion charades - allowing normal routing to exit game');
+      // Allow normal routing to continue (will go to LLM routing)
+    } else {
+      logger.debug({ userId, userMessage }, 'Non-greeting text input during active fashion charades game - routing to fashion_quiz');
+      return {
+        ...state,
+        intent: 'fashion_quiz',
+        missingProfileField: null,
+      };
+    }
+  }
+
+  // ------------------------------
   // 3️⃣ Pending tonality handling
   // ------------------------------
   if (pending === PendingType.TONALITY_SELECTION) {

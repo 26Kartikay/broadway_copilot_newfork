@@ -10,7 +10,8 @@ import { ensureDir, userUploadDir } from './paths';
 // Register Poppins fonts for image generation
 try {
   registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'), { family: 'Poppins', weight: 'normal' });
-  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'), { family: 'Poppins', weight: 'bold' });
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Medium.ttf'), { family: 'Poppins', weight: '500' });
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Bold.ttf'), { family: 'Poppins', weight: 'bold' });
   logger.info('Poppins fonts registered successfully');
 } catch (error) {
   logger.warn({ error: (error as Error)?.message }, 'Failed to register Poppins fonts');
@@ -118,8 +119,8 @@ export async function generateColorAnalysisImage(
   const globalTiltAngle = -0.04; // Used for text in banner
 
   // 2. Draw Color Swatches on top of base template
-  const swatchSize = 20 * scale;
-  const swatchSpacing = 17 * scale; // Slightly decreased spacing between swatches
+  const swatchSize = 15 * scale; // Half the previous size (was 20 * scale)
+  const swatchSpacing = 15 * scale; // Decreased spacing (was 17 * scale)
   const swatchesPerRow = 4; // 4 swatches total instead of 6
 
   const drawSwatches = (colors: any[], startX: number, startY: number) => {
@@ -135,12 +136,12 @@ export async function generateColorAnalysisImage(
       const col = index % swatchesPerRow;
 
       const x = startX + col * (swatchSize + swatchSpacing);
-      const y = startY + row * (swatchSize + 22 * scale);
+      const y = startY + row * (swatchSize + 15 * scale); // Increased spacing between rows
 
       logger.debug({ color: color.name, hex: color.hex, x, y, swatchSize }, 'Drawing color swatch');
 
       // Rounded rectangle swatch - no border
-      const radius = 6 * scale; // Rounded corners
+      const radius = 3 * scale; // Smaller rounded corners for smaller swatches
       ctx.fillStyle = color.hex;
 
       // Draw rounded rectangle
@@ -148,9 +149,9 @@ export async function generateColorAnalysisImage(
       ctx.roundRect(x, y, swatchSize, swatchSize, radius);
       ctx.fill();
 
-      // Text - larger and bold, handle multi-line for names with more than 2 words
+      // Text - bold font for all text, handle multi-line for names with more than 2 words
       ctx.fillStyle = '#000000';
-      ctx.font = `${6 * scale}px Poppins`; // remove 'bold'
+      ctx.font = `bold ${5 * scale}px Poppins`; // Bold font with larger size for readability
       ctx.textAlign = 'center';
 
       const words = color.name.split(' ');
@@ -158,29 +159,29 @@ export async function generateColorAnalysisImage(
         // More than 1 word: first word on first line, remaining words on second line
         const firstLine = words[0];
         const secondLine = words.slice(1).join(' ');
-        ctx.fillText(firstLine, x + swatchSize / 2, y + swatchSize + 12 * scale);
-        ctx.fillText(secondLine, x + swatchSize / 2, y + swatchSize + 20 * scale);
+        ctx.fillText(firstLine, x + swatchSize / 2, y + swatchSize + 8 * scale);
+        ctx.fillText(secondLine, x + swatchSize / 2, y + swatchSize + 8 * scale);
       } else {
-        ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 16 * scale); // Adjusted y position
+        ctx.fillText(color.name, x + swatchSize / 2, y + swatchSize + 8 * scale);
       }
     });
     ctx.restore();
   };
 
-  // Suited Colors Position - 222px from top, 28px from left
-  drawSwatches(data.colors_suited, 28 * scale, 212 * scale);
+  // Suited Colors Position - Updated to 30, 300 from template
+  drawSwatches(data.colors_suited, 30 * scale, 290 * scale);
 
-  // Avoid Colors Position - 222px from top, 200px from left
-  drawSwatches(data.colors_to_avoid, 200 * scale, 212 * scale);
+  // Avoid Colors Position - Updated to 180, 300 from template
+  drawSwatches(data.colors_to_avoid, 180 * scale, 290 * scale);
 
-  // 3. Draw User Image as full-width rectangle at left-top
+  // 3. Draw User Image centered according to new template
   if (data.userImageUrl) {
     try {
       const userImg = await loadImage(data.userImageUrl);
-      const imageWidth = 358 * scale; // Full template width
-      const imageHeight = 180 * scale; // 300 pixels from top
-      const imageX = 0; // Left aligned
-      const imageY = 0; // Top aligned
+      const imageWidth = 293 * scale; // Template width (293px)
+      const imageHeight = 200 * scale; // Appropriate height for centering
+      const imageX = (width - imageWidth) / 2; // Centered horizontally
+      const imageY = 50 * scale; // Positioned from top
 
       ctx.save();
       ctx.beginPath();
@@ -213,19 +214,19 @@ export async function generateColorAnalysisImage(
     }
   }
 
-  // 3. Draw Banner Template on top (scaled to 1/4 size, centered, at 155 height)
+  // 3. Draw Banner Template on top (centered horizontally at 260px Y position)
   const bannerScale = 0.75; // 1/4 size
   const bannerWidth = bannerTemplateImg.width * scale * bannerScale;
   const bannerHeight = bannerTemplateImg.height * scale * bannerScale;
-  const bannerX = (width - bannerWidth) / 2; // Centered horizontally
-  const bannerY = 152 * scale; 
+  const bannerX = (293 / 2 - bannerTemplateImg.width * bannerScale / 2) * scale; // Center horizontally (293px template width)
+  const bannerY = 235 * scale; // Updated Y position
 
   ctx.drawImage(bannerTemplateImg, bannerX, bannerY, bannerWidth, bannerHeight);
 
   // 4. Draw Palette Name on the banner
   if (data.palette_name) {
     ctx.save();
-    ctx.font = `${12 * scale}px Poppins`; // remove 'bold'
+    ctx.font = `bold ${12 * scale}px Poppins`; // Bold font
     ctx.fillStyle = '#000000';
     ctx.textAlign = 'center';
 
@@ -312,7 +313,7 @@ const categoryXs = [90 * scale, 175 * scale, 260 * scale];
 const categoryColors = ['#eb92aa', '#75cfe7', '#a57bc4'];
 
 ctx.save();
-ctx.font = `${18 * scale}px Poppins`; // remove 'bold'
+ctx.font = `bold ${18 * scale}px Poppins`; // Bold font
 ctx.textAlign = 'center';
 ctx.textBaseline = 'middle'; // 🔥 CRITICAL FIX
 
@@ -381,7 +382,7 @@ ctx.restore();
   ctx.drawImage(bannerTemplateImg, -bannerWidth / 2, -bannerHeight / 2, bannerWidth, bannerHeight);
 
   // Overall Score over banner (same rotation)
-  ctx.font = `${20 * scale}px Poppins`; // remove 'bold'
+  ctx.font = `bold ${20 * scale}px Poppins`; // Bold font
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 15 * scale); // Move 15px down total
