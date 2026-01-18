@@ -269,6 +269,7 @@ export async function generateVibeCheckImage(
     styling_details: { score: number; explanation: string };
     context_confidence: { score: number; explanation: string };
     userImageUrl?: string | null;
+    comment?: string;
   },
 ): Promise<string> {
   // Load base template
@@ -297,10 +298,8 @@ export async function generateVibeCheckImage(
 
   const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-// 2. Draw Categories (scores)
-const categoryStripTop = 240 * scale;
-const categoryStripHeight = 50 * scale;
-const categoryTextY = categoryStripTop + categoryStripHeight / 2 - 14 * scale; // Move 6px up total
+// 2. Draw Categories (scores) - positioned at 190px scaled Y coordinate
+const categoryTextY = 190 * scale; // Position at 190px scaled
 
 const categories = [
   { score: data.fit_silhouette.score },
@@ -308,7 +307,7 @@ const categories = [
   { score: data.color_harmony.score },
 ];
 
-const categoryXs = [90 * scale, 175 * scale, 260 * scale];
+const categoryXs = [72 * scale, 130 * scale, 200 * scale];
 
 const categoryColors = ['#eb92aa', '#75cfe7', '#a57bc4'];
 
@@ -329,14 +328,14 @@ categories.forEach((cat, i) => {
 ctx.restore();
 
 
-  // 3. Draw User Image
+  // 3. Draw User Image centered according to template - cropped to 80% height to show scores
   if (data.userImageUrl) {
     try {
       const userImg = await loadImage(data.userImageUrl);
-      const imageWidth = 358 * scale;
-      const imageHeight = 220 * scale;
-      const imageX = 0;
-      const imageY = 0;
+      const imageWidth = 286 * scale; // Template black rectangle width
+      const imageHeight = 167 * scale; // Template height reduced by 5% (176 * 0.95 ≈ 167)
+      const imageX = (293 / 2 - 286 / 2) * scale; // Center horizontally in 293px template
+      const imageY = 0; // Start from top like template
 
       ctx.save();
       ctx.beginPath();
@@ -369,12 +368,44 @@ ctx.restore();
     }
   }
 
-  // 4. Draw Banner Template
-  const bannerScale = 1;
+  // 4. Draw Comment on top left (on top layer)
+  if (data.comment) {
+    ctx.save();
+    ctx.font = `500 ${10 * scale}px Poppins`; // Medium weight, smaller font
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+
+    const maxWidth = 120 * scale; // Max width for text wrapping
+    const lineHeight = 12 * scale;
+    const x = 20 * scale; // Top left position
+    const y = 20 * scale;
+
+    // Simple text wrapping
+    const words = data.comment.split(' ');
+    let line = '';
+    let currentY = y;
+
+    for (const word of words) {
+      const testLine = line + word + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && line !== '') {
+        ctx.fillText(line.trim(), x, currentY);
+        line = word + ' ';
+        currentY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line.trim(), x, currentY);
+    ctx.restore();
+  }
+
+  // 5. Draw Banner Template
+  const bannerScale = 0.75; // Scaled to 0.75 of overall rating
   const bannerWidth = bannerTemplateImg.width * scale * bannerScale;
   const bannerHeight = bannerTemplateImg.height * scale * bannerScale;
   const bannerX = 15 * scale;
-  const bannerY = 120 * scale;
+  const bannerY = 100 * scale;
 
   ctx.save();
   ctx.translate(bannerX + bannerWidth / 2, bannerY + bannerHeight / 2);
@@ -382,7 +413,7 @@ ctx.restore();
   ctx.drawImage(bannerTemplateImg, -bannerWidth / 2, -bannerHeight / 2, bannerWidth, bannerHeight);
 
   // Overall Score over banner (same rotation)
-  ctx.font = `bold ${20 * scale}px Poppins`; // Bold font
+  ctx.font = `bold ${17 * scale}px Poppins`; // Bold font
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 15 * scale); // Move 15px down total

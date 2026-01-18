@@ -175,6 +175,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         styling_details: result.styling_details,
         context_confidence: result.context_confidence,
         userImageUrl,
+        comment: result.comment,
       });
     } catch (err: unknown) {
       logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate vibe check image');
