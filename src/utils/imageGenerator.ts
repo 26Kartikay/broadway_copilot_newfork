@@ -108,10 +108,6 @@ export async function generateColorAnalysisImage(
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  // Fill background
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, width, height);
-
   // 1. Draw Base Template
   ctx.drawImage(baseTemplateImg, 0, 0, width, height);
 
@@ -289,10 +285,6 @@ export async function generateVibeCheckImage(
 
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
-
-  // Fill background
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, width, height);
 
   // 1. Draw Base Template
   ctx.drawImage(baseTemplateImg, 0, 0, width, height);
