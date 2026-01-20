@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getTextLLM } from '../../lib/ai';
+import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { InternalServerError } from '../../utils/errors';
@@ -63,16 +63,51 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
     if (shouldRecommendProducts) {
       tools.push(searchProducts());
     }
+
+    // Use OpenAI for Skin Lab when tools are needed, as it handles tool calling more reliably than Groq
+    // Use gpt-4o for better tool calling reliability and instruction following
+    // Create a text-only OpenAI instance (without vision/reasoning features) for better tool compatibility
+    const textLLMWithTools = new ChatOpenAI({
+      model: 'gpt-4o', // Better tool calling and instruction following than gpt-4o-mini
+      temperature: 0.7, // Slightly creative but still reliable
+    });
+
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    // Run LLM with structured output
-    const executorResult = await agentExecutor(
-      getTextLLM(),
-      systemPrompt,
-      conversationHistoryTextOnly,
-      { tools, outputSchema: LLMOutputSchema, nodeName: 'handleSkinLab' },
-      traceBuffer,
-    );
+    let executorResult;
+    try {
+      executorResult = await agentExecutor(
+        textLLMWithTools,
+        systemPrompt,
+        conversationHistoryTextOnly,
+        {
+          tools,
+          outputSchema: LLMOutputSchema,
+          nodeName: 'handleSkinLab',
+        },
+        traceBuffer,
+      );
+    } catch (schemaError: any) {
+      // If schema validation fails, log the error and return a graceful error message
+      logger.error(
+        {
+          userId,
+          error: schemaError.message,
+          data: schemaError.cause?.message || 'Unknown error',
+        },
+        'Schema validation failed in handleSkinLab',
+      );
+
+      // Return a helpful error message to the user
+      const errorReplies: Replies = [
+        {
+          reply_type: 'text',
+          reply_text:
+            "I'm having trouble processing that request right now. Could you try rephrasing your question or try again in a moment?",
+        },
+      ];
+      return { ...state, assistantReply: errorReplies };
+    }
 
     const finalResponse = executorResult.output;
     const toolResults = executorResult.toolResults;
