@@ -49,6 +49,16 @@ const NoImageLLMOutputSchema = z.object({
     .describe('The text to send to the user explaining they need to send an image.'),
 });
 
+// Shuffle arrays to ensure variety in presentation
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 /**
  * Performs color analysis from a portrait and returns a WhatsApp-friendly text reply; logs and persists results.
  * @param state The current agent state.
@@ -137,9 +147,9 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         reply_type: 'color_analysis_card',
         palette_name: paletteName,
         description: paletteData.description,
-        top_colors: paletteData.topColors,
-        two_color_combos: paletteData.twoColorCombos,
-        three_color_combos: paletteData.threeColorCombos,
+        top_colors: shuffleArray(paletteData.topColors),
+        two_color_combos: shuffleArray(paletteData.twoColorCombos),
+        three_color_combos: shuffleArray(paletteData.threeColorCombos),
       },
     ];
 
