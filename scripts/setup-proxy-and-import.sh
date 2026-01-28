@@ -81,3 +81,4 @@ echo "  npx ts-node scripts/importProducts.ts --file=products.csv"
 echo ""
 echo "To stop the proxy later, run: kill $PROXY_PID"
 
+

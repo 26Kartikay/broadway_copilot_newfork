@@ -2,6 +2,7 @@ import { PendingType, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai';
 import { MessageInput, QuickReplyButton } from '../lib/chat/types';
+import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
 import { TraceBuffer } from './tracing';
 
 // ============================================================================
@@ -162,6 +163,14 @@ type Reply =
       reply_type: 'product_card';
       products: ProductRecommendation[];
       reply_text?: string;
+    }
+  | {
+      reply_type: 'color_analysis_card';
+      palette_name: SeasonalPalette;
+      description: string;
+      top_colors: ColorWithHex[];
+      two_color_combos: string[];
+      three_color_combos: string[];
     };
 
 /**

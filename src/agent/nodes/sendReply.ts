@@ -56,6 +56,13 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
         text: `[Product Recommendations: ${r.products.map((p) => p.name).join(', ')}]`,
       });
     }
+    if (r.reply_type === 'color_analysis_card' && 'palette_name' in r) {
+      // Store color analysis card as a special text marker for history
+      parts.push({
+        type: 'text',
+        text: `[Color Analysis: ${r.palette_name} palette]`,
+      });
+    }
     return parts;
   });
 
