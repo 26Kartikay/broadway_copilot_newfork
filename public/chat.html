@@ -907,7 +907,7 @@
       document.getElementById('imagePreview').classList.remove('visible');
     }
 
-    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null, colorAnalysisCard = null) {
+    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null, colorAnalysisCard = null, pdfUrl = null) {
       const container = document.getElementById('messagesContainer');
       
       // Remove welcome message if present
@@ -921,6 +921,10 @@
       
       if (imageUrl) {
         bubbleContent += `<img src="${imageUrl}" alt="Image">`;
+      }
+      
+      if (pdfUrl) {
+        bubbleContent += `<iframe src="${pdfUrl}" width="100%" height="500px"></iframe>`;
       }
 
       messageDiv.innerHTML = `<div class="message-bubble">${bubbleContent}</div>`;
@@ -1154,6 +1158,8 @@
               addMessage(text, false, null, null, products);
             } else if (reply.reply_type === 'color_analysis_card') {
               addMessage('', false, null, null, null, colorAnalysisCard);
+            } else if (reply.reply_type === 'pdf') {
+              addMessage(text, false, buttons, imageUrl, null, null, reply.media_url);
             } else {
               addMessage(text, false, buttons, imageUrl, null);
             }
@@ -1211,6 +1217,8 @@
               addMessage(replyText, false, null, null, products);
             } else if (reply.reply_type === 'color_analysis_card') {
               addMessage('', false, null, null, null, colorAnalysisCard);
+            } else if (reply.reply_type === 'pdf') {
+              addMessage(replyText, false, buttons, imageUrl, null, null, reply.media_url);
             } else {
               addMessage(replyText, false, buttons, imageUrl, null);
             }

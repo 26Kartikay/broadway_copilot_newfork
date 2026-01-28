@@ -165,6 +165,10 @@ type Reply =
       reply_text?: string;
     }
   | {
+      reply_type: 'pdf';
+      media_url: string;
+    }
+  | {
       reply_type: 'color_analysis_card';
       palette_name: SeasonalPalette;
       description: string;

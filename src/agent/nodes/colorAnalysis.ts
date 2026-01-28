@@ -151,6 +151,10 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         two_color_combos: shuffleArray(paletteData.twoColorCombos),
         three_color_combos: shuffleArray(paletteData.threeColorCombos),
       },
+      {
+        reply_type: 'pdf',
+        media_url: paletteData.pdfPath,
+      },
     ];
 
     logger.debug({ userId, messageId, paletteName }, 'Color analysis completed successfully');

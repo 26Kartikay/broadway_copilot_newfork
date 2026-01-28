@@ -33,6 +33,7 @@ export interface PaletteData {
   topColors: ColorWithHex[];
   twoColorCombos: string[];
   threeColorCombos: string[];
+  pdfPath: string;
 }
 
 export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
@@ -84,6 +85,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Peach, Lavender & Camel',
       'Apricot, Aqua & Olive',
     ],
+    pdfPath: 'palettes/LIGHT_SPRING.pdf',
   },
 
   WARM_SPRING: {
@@ -134,6 +136,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Coral, Olive & Camel',
       'Amber, Brown & Peacock',
     ],
+    pdfPath: 'palettes/WARM_SPRING.pdf',
   },
 
   CLEAR_SPRING: {
@@ -184,6 +187,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Hot Pink, Kelly Green & White',
       'Bright Blue, Orange & Lime',
     ],
+    pdfPath: 'palettes/CLEAR_SPRING.pdf',
   },
 
   LIGHT_SUMMER: {
@@ -234,6 +238,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Sky Blue, Lilac & Beige',
       'Aqua, Lavender & Gray',
     ],
+    pdfPath: 'palettes/LIGHT_SUMMER.pdf',
   },
 
   COOL_SUMMER: {
@@ -284,6 +289,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Lavender, Steel Blue & Beige',
       'Seafoam, Plum & Gray',
     ],
+    pdfPath: 'palettes/COOL_SUMMER.pdf',
   },
 
   SOFT_SUMMER: {
@@ -334,6 +340,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Muted Blue, Sage & Rose',
       'Lavender, Blue-Green & Taupe',
     ],
+    pdfPath: 'palettes/SOFT_SUMMER.pdf',
   },
 
   SOFT_AUTUMN: {
@@ -384,6 +391,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Terracotta, Turquoise & Beige',
       'Brown, Moss & Gold',
     ],
+    pdfPath: 'palettes/SOFT_AUTUMN.pdf',
   },
 
   WARM_AUTUMN: {
@@ -434,6 +442,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Rust, Forest Green & Khaki',
       'Burnt Orange, Teal & Tan',
     ],
+    pdfPath: 'palettes/WARM_AUTUMN.pdf',
   },
 
   DEEP_AUTUMN: {
@@ -484,6 +493,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Rust, Hunter Green & Bronze',
       'Brick, Olive & Beige',
     ],
+    pdfPath: 'palettes/DEEP_AUTUMN.pdf',
   },
 
   COOL_WINTER: {
@@ -534,6 +544,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Black, Plum & Icy Blue',
       'Royal Blue, Pine & White',
     ],
+    pdfPath: 'palettes/COOL_WINTER.pdf',
   },
 
   CLEAR_WINTER: {
@@ -584,6 +595,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Kelly Green, Magenta & Gray',
       'Electric Blue, Fuchsia & Green',
     ],
+    pdfPath: 'palettes/CLEAR_WINTER.pdf',
   },
 
   DEEP_WINTER: {
@@ -634,6 +646,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Midnight, Plum & White',
       'Navy, Pine & Magenta',
     ],
+    pdfPath: 'palettes/DEEP_WINTER.pdf',
   },
 };
 
