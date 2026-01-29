@@ -50,6 +50,8 @@ enum PendingType {
   FASHION_QUIZ_QUESTION_9
   FASHION_QUIZ_QUESTION_10
   FASHION_QUIZ_RESULTS
+  SAVE_COLOR_ANALYSIS
+  CONFIRM_PRODUCT_RECOMMENDATION
 }
 enum TaskType {
   SEND_FEEDBACK_REQUEST
@@ -96,6 +98,13 @@ enum Tonality {
   friendly
   hype_bff
 }
+
+enum Fit {
+  SLIM
+  REGULAR
+  OVERSIZED
+}
+
 // --- CORE ---
 
 model User {
@@ -107,6 +116,7 @@ model User {
   inferredAgeGroup  AgeGroup?
   confirmedGender   Gender?
   confirmedAgeGroup AgeGroup?
+  fitPreference     Fit?
 
   lastVibeCheckAt     DateTime?
   lastColorAnalysisAt DateTime?

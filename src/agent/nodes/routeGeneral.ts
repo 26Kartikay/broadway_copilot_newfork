@@ -24,39 +24,44 @@ const LLMOutputSchema = z.object({
 export async function routeGeneral(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
-  const lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
-  const lastMessage = lastMessageContent ? extractTextContent(lastMessageContent) : '';
+  let lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
+  let lastMessage = lastMessageContent ? extractTextContent(lastMessageContent) : '';
+  const buttonPayload = state.input.ButtonPayload; // Get button payload
 
-  logger.debug({ userId, messageId, lastMessage }, 'Routing general intent');
+  logger.debug({ userId, messageId, lastMessage, buttonPayload }, 'Routing general intent');
 
-  try {
-    // Regex routing for common cases
-    if (GREETING_REGEX.test(lastMessage)) {
-      logger.debug({ userId }, 'General intent routed to "greeting" by regex');
-      return { ...state, generalIntent: 'greeting' as GeneralIntent };
-    }
-    if (MENU_REGEX.test(lastMessage)) {
-      logger.debug({ userId }, 'General intent routed to "menu" by regex');
-      return { ...state, generalIntent: 'menu' as GeneralIntent };
-    }
+  // Handle button payloads first
+  if (buttonPayload) {
+      if (buttonPayload === 'main_menu' || buttonPayload === 'refresh_conversation_starters') {
+          logger.debug({ userId }, `General intent routed to "menu" by button payload: ${buttonPayload}`);
+          return { ...state, generalIntent: 'menu' as GeneralIntent };
+      }
+      if (buttonPayload.startsWith('conversation_starter_')) {
+          // Extract original text from the button ID.
+          // Example: 'conversation_starter_my_top_colors' -> 'My top colors?'
+          // The ID is generated from text like "What's your style?", so we need to reverse the transformation
+          const extractedText = buttonPayload.replace('conversation_starter_', '').replace(/_/g, ' ');
+          const originalStarterText = extractedText.charAt(0).toUpperCase() + extractedText.slice(1) + '?'; // Capitalize first letter and add '?'
 
-    // LLM routing for other cases
-    const systemPromptText = await loadPrompt('routing/route_general.txt');
-    const systemPrompt = new SystemMessage(systemPromptText);
+          logger.debug({ userId, originalStarterText }, 'Conversation starter button clicked, routing to chat.');
+          
+          // Overwrite the message body for the LLM to process this as a chat.
+          // Update both text-only and with-images history to ensure consistency for the LLM.
+          state.input.Body = originalStarterText;
+          if (state.conversationHistoryTextOnly.length > 0) {
+            state.conversationHistoryTextOnly[state.conversationHistoryTextOnly.length - 1].content = [{type: 'text', text: originalStarterText}];
+          }
+          if (state.conversationHistoryWithImages.length > 0) {
+            state.conversationHistoryWithImages[state.conversationHistoryWithImages.length - 1].content = [{type: 'text', text: originalStarterText}];
+          }
 
-    const response = await getTextLLM()
-      .withStructuredOutput(LLMOutputSchema)
-      .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeGeneral');
+          return { ...state, generalIntent: 'chat' as GeneralIntent };
+      }
+  }
 
-    logger.debug(
-      { userId, generalIntent: response.generalIntent },
-      'General intent routed using LLM',
-    );
-    const { generalIntent } = response;
-    return { ...state, generalIntent };
-  } catch (err: unknown) {
-    throw new InternalServerError('Failed to route general intent', {
-      cause: err,
-    });
+  // Regex routing for common cases
+  if (GREETING_REGEX.test(lastMessage)) {
+    logger.debug({ userId }, 'General intent routed to "greeting" by regex');
+    return { ...state, generalIntent: 'greeting' as GeneralIntent };
   }
 }
