@@ -121,27 +121,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     // Get palette data from mapping
     const paletteData = getPaletteData(paletteName);
 
-    // Save results to DB
-    const [, user] = await prisma.$transaction([
-      prisma.colorAnalysis.create({
-        data: {
-          userId,
-          palette_name: paletteName,
-          colors_suited: paletteData.topColors,
-          colors_to_wear: {
-            two_color_combos: paletteData.twoColorCombos,
-            three_color_combos: paletteData.threeColorCombos,
-          },
-          colors_to_avoid: null, // Not used in new format
-        },
-      }),
-      prisma.user.update({
-        where: { id: state.user.id },
-        data: { lastColorAnalysisAt: new Date() },
-      }),
-    ]);
-
-    // Return color analysis card reply with full data
+    // Return color analysis card reply with a prompt to save the result.
     const replies: Replies = [
       {
         reply_type: 'color_analysis_card',
@@ -152,17 +132,22 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         three_color_combos: shuffleArray(paletteData.threeColorCombos),
       },
       {
-        reply_type: 'pdf',
-        media_url: paletteData.pdfPath,
+        reply_type: 'quick_reply',
+        reply_text: 'Do you want to save this color analysis result?',
+        buttons: [
+          { text: 'Yes', id: 'save_color_analysis_yes' },
+          { text: 'No', id: 'save_color_analysis_no' },
+        ],
       },
     ];
 
-    logger.debug({ userId, messageId, paletteName }, 'Color analysis completed successfully');
+    logger.debug({ userId, messageId, paletteName }, 'Color analysis completed, awaiting user confirmation to save.');
 
     return {
       ...state,
-      user,
       assistantReply: replies,
+      seasonalPaletteToSave: paletteName,
+      pendingAction: 'save_color_analysis',
       pending: PendingType.NONE,
     };
   } catch (err: unknown) {

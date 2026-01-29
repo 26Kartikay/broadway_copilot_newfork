@@ -69,6 +69,12 @@ export interface GraphState {
 
   thisOrThatFirstImageId?: string | undefined;
 
+  /** The seasonal palette to be saved, pending user confirmation. */
+  seasonalPaletteToSave?: string;
+
+  /** The pending action to be taken in the next step of the conversation. */
+  pendingAction?: 'save_color_analysis';
+
   /** Replies returned in the HTTP response */
   httpResponse?: Replies;
 

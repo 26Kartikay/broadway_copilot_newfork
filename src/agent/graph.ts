@@ -7,6 +7,7 @@ import {
   handleFashionCharades,
   handleFeedback,
   handleGeneral,
+  handleSaveColorAnalysis,
   handleStyleStudio,
   handleStyling,
   ingestMessage,
@@ -28,10 +29,11 @@ export function buildAgentGraph() {
     .addNode('routeIntent', routeIntent)
     .addNode('routeGeneral', routeGeneral)
     .addNode('askUserInfo', askUserInfo)
-    .addNode('handleStyling', handleStyling) 
+    .addNode('handleStyling', handleStyling)
     .addNode('handleFeedback', handleFeedback)
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
+    .addNode('handleSaveColorAnalysis', handleSaveColorAnalysis)
     .addNode('handleGeneral', handleGeneral)
     .addNode('sendReply', sendReply)
     .addNode('routeStyleStudio', routeStyleStudio)
@@ -58,6 +60,7 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'routeIntent',
       (s: GraphState) => {
+        if (s.pendingAction === 'save_color_analysis') return 'handleSaveColorAnalysis';
         if (s.missingProfileField) return 'askUserInfo';
         switch (s.intent) {
           case 'skin_lab':
@@ -71,6 +74,7 @@ export function buildAgentGraph() {
         }
       },
       {
+        handleSaveColorAnalysis: 'handleSaveColorAnalysis',
         askUserInfo: 'askUserInfo',
         general: 'routeGeneral',
         vibe_check: 'vibeCheck',
@@ -78,32 +82,32 @@ export function buildAgentGraph() {
         styling: 'routeStyleStudio',
         style_studio: 'routeStyleStudio',
         handleSkinLab: 'handleSkinLab',
-    handleThisOrThat: 'handleThisOrThat',
-    handleFashionCharades: 'handleFashionCharades',
+        handleThisOrThat: 'handleThisOrThat',
+        handleFashionCharades: 'handleFashionCharades',
       },
     )
     .addEdge('routeGeneral', 'handleGeneral')
     .addConditionalEdges(
-  'routeStyleStudio',
-  (s: GraphState) => {
-    // If user picked Style Studio from the list, show menu
-    if (s.input?.ButtonPayload === 'style_studio') return 'sendReply';
+      'routeStyleStudio',
+      (s: GraphState) => {
+        // If user picked Style Studio from the list, show menu
+        if (s.input?.ButtonPayload === 'style_studio') return 'sendReply';
 
-    // If a sub-intent was selected (occasion, vacation, etc.)
-    if (s.subIntent) return 'handleStyleStudio';
+        // If a sub-intent was selected (occasion, vacation, etc.)
+        if (s.subIntent) return 'handleStyleStudio';
 
-    // If there’s already a prepared reply, just send it
-    if (s.assistantReply && s.assistantReply.length > 0) return 'sendReply';
+        // If there’s already a prepared reply, just send it
+        if (s.assistantReply && s.assistantReply.length > 0) return 'sendReply';
 
-    // Default fallback
-    return 'routeGeneral';
-  },
-  {
-    sendReply: 'sendReply',
-    handleStyleStudio: 'handleStyleStudio',
-    routeGeneral: 'routeGeneral',
-  },
-)
+        // Default fallback
+        return 'routeGeneral';
+      },
+      {
+        sendReply: 'sendReply',
+        handleStyleStudio: 'handleStyleStudio',
+        routeGeneral: 'routeGeneral',
+      },
+    )
     .addEdge('vibeCheck', 'sendReply')
     .addEdge('askUserInfo', 'sendReply')
     .addEdge('handleStyleStudio', 'sendReply')
@@ -114,6 +118,7 @@ export function buildAgentGraph() {
     .addEdge('handleFashionCharades', 'sendReply')
     .addEdge('handleSkinLab', 'sendReply')
     .addEdge('handleThisOrThat', 'sendReply')
+    .addEdge('handleSaveColorAnalysis', 'sendReply')
     .addEdge('sendReply', END);
 
   return graph.compile();

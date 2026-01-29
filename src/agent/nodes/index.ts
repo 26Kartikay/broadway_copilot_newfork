@@ -16,3 +16,4 @@ export * from './vibeCheck';
 export * from './routeStyleStudio';
 export * from './handleSkinLab';
 export * from './handleThisOrThat';
+export * from './handleSaveColorAnalysis';
