@@ -73,6 +73,11 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       ? (state.selectedTonality as Tonality)
       : null;
 
+  const additionalKwargs = {
+    ...(state.productRecommendationContext && { productRecommendationContext: state.productRecommendationContext }),
+    ...(state.seasonalPaletteToSave && { seasonalPaletteToSave: state.seasonalPaletteToSave }),
+  };
+
   // Mark as delivered for HTTP mode
   logger.debug({ userId }, 'HTTP delivery mode: collecting replies for response');
   await redis.hSet(messageKey, { status: 'delivered' });
@@ -84,6 +89,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       content: formattedContent,
       pending: pendingToPersist,
       selectedTonality: selectedTonalityToPersality,
+      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : undefined,
     },
   });
 

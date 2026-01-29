@@ -7,6 +7,7 @@ import {
   handleFashionCharades,
   handleFeedback,
   handleGeneral,
+  handleProductRecommendationConfirmation,
   handleSaveColorAnalysis,
   handleStyleStudio,
   handleStyling,
@@ -34,6 +35,7 @@ export function buildAgentGraph() {
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
     .addNode('handleSaveColorAnalysis', handleSaveColorAnalysis)
+    .addNode('handleProductRecommendationConfirmation', handleProductRecommendationConfirmation)
     .addNode('handleGeneral', handleGeneral)
     .addNode('sendReply', sendReply)
     .addNode('routeStyleStudio', routeStyleStudio)
@@ -46,13 +48,24 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'ingestMessage',
       (s: GraphState) => {
-        if (s.pending === PendingType.ASK_USER_INFO) return 'recordUserInfo';
-        if (s.pending === PendingType.FEEDBACK) return 'handleFeedback';
-        return 'routeIntent';
+        switch (s.pending) {
+          case PendingType.ASK_USER_INFO:
+            return 'recordUserInfo';
+          case PendingType.FEEDBACK:
+            return 'handleFeedback';
+          case PendingType.SAVE_COLOR_ANALYSIS:
+            return 'handleSaveColorAnalysis';
+          case PendingType.CONFIRM_PRODUCT_RECOMMENDATION:
+            return 'handleProductRecommendationConfirmation';
+          default:
+            return 'routeIntent';
+        }
       },
       {
         recordUserInfo: 'recordUserInfo',
         handleFeedback: 'handleFeedback',
+        handleSaveColorAnalysis: 'handleSaveColorAnalysis',
+        handleProductRecommendationConfirmation: 'handleProductRecommendationConfirmation',
         routeIntent: 'routeIntent',
       },
     )
@@ -60,7 +73,6 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'routeIntent',
       (s: GraphState) => {
-        if (s.pendingAction === 'save_color_analysis') return 'handleSaveColorAnalysis';
         if (s.missingProfileField) return 'askUserInfo';
         switch (s.intent) {
           case 'skin_lab':
@@ -74,7 +86,6 @@ export function buildAgentGraph() {
         }
       },
       {
-        handleSaveColorAnalysis: 'handleSaveColorAnalysis',
         askUserInfo: 'askUserInfo',
         general: 'routeGeneral',
         vibe_check: 'vibeCheck',
@@ -119,6 +130,7 @@ export function buildAgentGraph() {
     .addEdge('handleSkinLab', 'sendReply')
     .addEdge('handleThisOrThat', 'sendReply')
     .addEdge('handleSaveColorAnalysis', 'sendReply')
+    .addEdge('handleProductRecommendationConfirmation', 'sendReply')
     .addEdge('sendReply', END);
 
   return graph.compile();

@@ -11,6 +11,8 @@ import { createCanvas, loadImage } from 'canvas';
 
 import { redis } from '../../lib/redis';
 
+import { getMainMenuReply } from './common';
+
 const REDIS_PREFIX = 'thisOrThat';
 
 const LLMOutputSchema = z.object({
@@ -245,7 +247,9 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
 
       await clearImageState(userId);
 
-      return { ...state, assistantReply: resultReplies };
+      const menuReply = getMainMenuReply();
+
+      return { ...state, assistantReply: [...resultReplies, ...menuReply] };
     }
 
     // --- 4. UNEXPECTED STATE FALLBACK ---

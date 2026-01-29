@@ -17,3 +17,4 @@ export * from './routeStyleStudio';
 export * from './handleSkinLab';
 export * from './handleThisOrThat';
 export * from './handleSaveColorAnalysis';
+export * from './handleProductRecommendationConfirmation';

@@ -72,8 +72,16 @@ export interface GraphState {
   /** The seasonal palette to be saved, pending user confirmation. */
   seasonalPaletteToSave?: string;
 
-  /** The pending action to be taken in the next step of the conversation. */
-  pendingAction?: 'save_color_analysis';
+  /** Context for product recommendations. */
+  productRecommendationContext?:
+    | {
+        type: 'color_palette';
+        paletteName: string;
+      }
+    | {
+        type: 'vibe_check';
+        recommendations: string[];
+      };
 
   /** Replies returned in the HTTP response */
   httpResponse?: Replies;
@@ -193,4 +201,4 @@ export type Replies = Reply[];
  * Missing profile fields that need to be collected from the user.
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
-export type MissingProfileField = 'gender' | 'age_group';
+export type MissingProfileField = 'gender' | 'age_group' | 'fitPreference';

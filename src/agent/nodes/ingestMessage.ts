@@ -53,6 +53,10 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     }
   }
 
+  // These will be populated inside the transaction
+  let productRecommendationContextFromDB: any;
+  let seasonalPaletteToSaveFromDB: any;
+
   const {
     savedMessage,
     messages,
@@ -76,6 +80,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           pending: true,
           selectedTonality: true,
           thisOrThatFirstImageId: true,
+          additionalKwargs: true,
         },
       }),
     ]);
@@ -84,6 +89,9 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
     const selectedTonalityDB = latestAssistantMessage?.selectedTonality ?? null;
     const thisOrThatFirstImageIdDB = latestAssistantMessage?.thisOrThatFirstImageId ?? undefined;
+    const additionalKwargs = latestAssistantMessage?.additionalKwargs as any;
+    productRecommendationContextFromDB = additionalKwargs?.productRecommendationContext;
+    seasonalPaletteToSaveFromDB = additionalKwargs?.seasonalPaletteToSave;
 
     let savedMessage;
     if (lastMessage && lastMessage.role === MessageRole.USER) {
@@ -219,6 +227,8 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     pending: state.pending ?? dbPending,
     selectedTonality: state.selectedTonality ?? dbSelectedTonality,
     thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId,
+    productRecommendationContext: state.productRecommendationContext ?? productRecommendationContextFromDB,
+    seasonalPaletteToSave: state.seasonalPaletteToSave ?? seasonalPaletteToSaveFromDB,
     user,
     input,
   };

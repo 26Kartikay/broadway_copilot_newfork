@@ -182,20 +182,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       // Continue without image if generation fails
     }
 
-    const replies: Replies = [];
-    
-    // Add image reply first if generated
-    if (imageUrl) {
-      replies.push({
-        reply_type: 'image',
-        media_url: imageUrl,
-      });
-    }
-    
-    // Add text reply
-    replies.push({
-      reply_type: 'text',
-      reply_text: `
+    const mainReplyText = `
 ✨ *Vibe Check Results* ✨
 
 ${result.comment}
@@ -216,16 +203,44 @@ _${result.context_confidence.explanation}_
 
 💡 *Recommendations*:  
 ${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
+      `.trim();
 
-${result.follow_up}  
-      `.trim(),
+    const replies: Replies = [];
+    
+    // Add image reply first if generated
+    if (imageUrl) {
+      replies.push({
+        reply_type: 'image',
+        media_url: imageUrl,
+      });
+    }
+    
+    // Add text reply
+    replies.push({
+      reply_type: 'text',
+      reply_text: mainReplyText,
     });
+
+    // Add the product recommendation question
+    const recommendationQuestion: Replies = [{
+      reply_type: 'quick_reply',
+      reply_text: `Based on that feedback, shall I recommend some products to complete the look?`,
+      buttons: [
+          { text: 'Yes, please!', id: 'product_recommendation_yes' },
+          { text: 'No, thanks', id: 'product_recommendation_no' },
+      ],
+    }];
+    replies.push(...recommendationQuestion);
 
     return {
       ...state,
       user,
       assistantReply: replies,
-      pending: PendingType.NONE,
+      pending: PendingType.CONFIRM_PRODUCT_RECOMMENDATION,
+      productRecommendationContext: {
+          type: 'vibe_check',
+          recommendations: result.recommendations,
+      },
     };
   } catch (err: unknown) {
     throw new InternalServerError('Vibe check failed', { cause: err });

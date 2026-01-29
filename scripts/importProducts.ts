@@ -278,16 +278,14 @@ interface RawProduct {
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
-  // Ensure we are looking in the right place
-  const absolutePath = path.isAbsolute(filePath) 
-    ? filePath 
-    : path.resolve(__dirname, filePath);
+  // The filePath is already resolved to an absolute path by the main function.
+  const absolutePath = filePath;
 
   console.log(`📦 Attempting to load file from: ${absolutePath}`);
   
   if (!fs.existsSync(absolutePath)) {
     // Fallback check for production structure
-    const fallbackPath = path.resolve(process.cwd(), filePath);
+    const fallbackPath = path.resolve(process.cwd(), filePath); // This fallback might still be useful
     console.log(`trying fallback: ${fallbackPath}`);
     if(!fs.existsSync(fallbackPath)) throw new Error(`File not found at ${absolutePath} or ${fallbackPath}`);
   }

@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { InternalServerError } from '../../utils/errors';
 import { GraphState, Replies } from '../state';
+import { getMainMenuReply } from './common';
 
 // Charades clue schema
 export const CharadesClueSchema = z.object({
@@ -31,6 +32,22 @@ export const HintGenerationSchema = z.object({
   hint_level: z.enum(['general', 'specific', 'revealing']),
   game_over: z.boolean(),
 });
+
+function gameOver(state: GraphState, message: string): GraphState {
+    state.quizQuestions = undefined;
+    state.currentQuestionIndex = undefined;
+    state.pending = PendingType.NONE;
+
+    const gameOverReply: Replies = [{
+        reply_type: 'text',
+        reply_text: message,
+    }];
+
+    const menuReply = getMainMenuReply();
+
+    state.assistantReply = [...gameOverReply, ...menuReply];
+    return state;
+}
 
 export async function handleFashionCharades(state: GraphState): Promise<GraphState> {
   const { user, pending, input } = state;
@@ -145,23 +162,8 @@ async function provideHint(state: GraphState): Promise<GraphState> {
   logger.debug({ hintsRemaining, clueAnswer: clue.answer }, 'Current hint state');
 
   if (hintsRemaining <= 0) {
-    // No hints left - reveal answer with playful message
     const gameOverMessage = `😅 **Oh no! All hints used up!**\n\nThe answer was **${clue.answer.toUpperCase()}**!\n\nDon't worry, fashion knowledge takes time! Want to try another round? 🎭`;
-
-    // Clear the game state
-    state.quizQuestions = undefined;
-    state.currentQuestionIndex = undefined;
-
-    const replies: Replies = [
-      {
-        reply_type: 'text',
-        reply_text: gameOverMessage,
-      },
-    ];
-
-    state.assistantReply = replies;
-    state.pending = PendingType.NONE;
-    return state;
+    return gameOver(state, gameOverMessage);
   }
 
   // Generate a hint using AI
@@ -196,21 +198,7 @@ Keep the hint encouraging and fun, but don't reveal the answer directly.`;
   // If lives reach 0, immediately reveal the answer
   if (newLives <= 0) {
     const gameOverMessage = `😅 **Oh no! All lives used up!**\n\nThe answer was **${clue.answer.toUpperCase()}**!\n\nDon't worry, fashion knowledge takes time! Want to try another round? 🎭`;
-
-    // Clear the game state
-    state.quizQuestions = undefined;
-    state.currentQuestionIndex = undefined;
-
-    const replies: Replies = [
-      {
-        reply_type: 'text',
-        reply_text: gameOverMessage,
-      },
-    ];
-
-    state.assistantReply = replies;
-    state.pending = PendingType.NONE;
-    return state;
+    return gameOver(state, gameOverMessage);
   }
 
   // Create response with hint and updated displays
@@ -258,18 +246,12 @@ async function evaluateCharadesGuess(state: GraphState, userGuess: string): Prom
     .withStructuredOutput(CharadesEvaluationSchema)
     .run(systemPrompt, [], state.traceBuffer, 'handleFashionCharades');
 
-  // Handle the evaluation result
-  if (evaluation.evaluation === 'exact') {
-    // Clear the game state for a new round
-    state.quizQuestions = undefined;
-    state.currentQuestionIndex = undefined;
-  } else if (!evaluation.should_continue) {
-    // User wants to stop
-    state.quizQuestions = undefined;
-    state.currentQuestionIndex = undefined;
+  // If the game is over (correct, wrong but no more tries, etc.), end it.
+  if (!evaluation.should_continue) {
+    return gameOver(state, evaluation.response);
   }
-  // If should_continue is true and it's not exact, keep the clue for another guess
 
+  // Otherwise, the game continues (e.g., a 'close' guess). Just send the AI's response.
   const replies: Replies = [
     {
       reply_type: 'text',
@@ -277,9 +259,8 @@ async function evaluateCharadesGuess(state: GraphState, userGuess: string): Prom
     },
   ];
 
-  // Update state
   state.assistantReply = replies;
-  state.pending = evaluation.should_continue ? PendingType.FASHION_QUIZ_START : PendingType.NONE;
+  state.pending = PendingType.FASHION_QUIZ_START; // Keep the game going
 
   return state;
 }

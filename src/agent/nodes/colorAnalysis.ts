@@ -147,8 +147,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       ...state,
       assistantReply: replies,
       seasonalPaletteToSave: paletteName,
-      pendingAction: 'save_color_analysis',
-      pending: PendingType.NONE,
+      pending: PendingType.SAVE_COLOR_ANALYSIS,
     };
   } catch (err: unknown) {
     throw new InternalServerError('Color analysis failed', { cause: err });

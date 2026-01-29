@@ -77,7 +77,8 @@ services:
       - .:/usr/src/app
       - node_modules:/usr/src/app/node_modules
       - dist:/usr/src/app/dist
-      - /usr/src/app/functions
+      - ./functions:/usr/src/app/functions
+
     # Enable better file watching in Docker
     stdin_open: true
     tty: true
