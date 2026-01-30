@@ -43,7 +43,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
 
   const formattedContent: MessageContent = orderedReplies.flatMap((r) => {
     const parts: MessageContentPart[] = [];
-    if (r.reply_text) {
+    if ('reply_text' in r && r.reply_text) {
       parts.push({ type: 'text', text: r.reply_text });
     }
     if (r.reply_type === 'image') {

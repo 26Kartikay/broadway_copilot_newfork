@@ -65,7 +65,7 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         ...state,
         assistantReply: replies,
         pending: PendingType.STYLE_STUDIO_MENU,
-        lastHandledPayload: null,
+        lastHandledPayload: undefined,
       };
     } else {
       // Possibly user repeated same menu state; do nothing

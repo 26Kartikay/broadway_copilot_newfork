@@ -1,4 +1,4 @@
-import { PendingType } from '@prisma/client';
+import { PendingType, Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { GraphState, Replies } from '../state';
 import { logger } from '../../utils/logger';
@@ -31,7 +31,7 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
           two_color_combos: paletteData.twoColorCombos,
           three_color_combos: paletteData.threeColorCombos,
         } as any,
-        colors_to_avoid: null,
+        colors_to_avoid: Prisma.JsonNull,
       },
     });
 
