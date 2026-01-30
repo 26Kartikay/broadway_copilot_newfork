@@ -34,13 +34,14 @@ export async function handleProductRecommendationConfirmation(state: GraphState)
   logger.debug({ userId: user.id }, 'User wants product recommendations, calling agent.');
   const tools = [searchProducts()];
   let systemPrompt: SystemMessage;
+  const gender = user.confirmedGender || user.inferredGender || 'unknown';
 
   if (productRecommendationContext?.type === 'color_palette') {
       const paletteData = getPaletteData(productRecommendationContext.paletteName);
       const colors = paletteData.topColors.map(c => c.name).slice(0, 3);
       const colorList = colors.join(', ');
 
-      const promptText = `You are a fashion product recommender. The user's color palette is ${productRecommendationContext.paletteName}.
+      const promptText = `You are a fashion product recommender. The user is ${gender} and their color palette is ${productRecommendationContext.paletteName}.
       Your task is to recommend products that match this palette by calling the 'searchProducts' tool.
       You **MUST** use the 'filters' argument to search for products. Set the 'color' filter to one of these colors: ${colorList}.
       After the tool call, provide a brief, friendly concluding message in your response like "Here are a few items in your palette that I found!".`;
@@ -48,7 +49,7 @@ export async function handleProductRecommendationConfirmation(state: GraphState)
 
   } else if (productRecommendationContext?.type === 'vibe_check') {
       const query = productRecommendationContext.recommendations.join(' ');
-      const promptText = `You are a fashion product recommender. The user received the following style advice: "${query}".
+      const promptText = `You are a fashion product recommender. The user, who is ${gender}, received the following style advice: "${query}".
       Your task is to recommend products based on this advice by calling the 'searchProducts' tool.
       Use a concise query based on the style advice.
       After the tool call, provide a brief, friendly concluding message like "To get you started, here are a few products that match that vibe!".`;

@@ -111,10 +111,15 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt');
     const tonalityInstructions =
       tonalityInstructionsMap[state.selectedTonality as keyof typeof tonalityInstructionsMap];
-    const systemPromptText = systemPromptTextRaw.replace(
+    
+    const gender = state.user.confirmedGender || state.user.inferredGender || 'unknown';
+
+    let systemPromptText = systemPromptTextRaw.replace(
       '{tonality_instructions}',
       tonalityInstructions,
     );
+    systemPromptText = systemPromptText.replace('{gender}', gender);
+
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const result = await getVisionLLM()
