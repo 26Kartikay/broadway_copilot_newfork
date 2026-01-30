@@ -154,82 +154,30 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     queueWardrobeIndex(userId, latestMessageId);
 
-    // Extract user image URL from the latest message
-    let userImageUrl: string | null = null;
-    if (latestMessage && latestMessage.content && Array.isArray(latestMessage.content)) {
-      const imagePart = latestMessage.content.find(
-        (part): part is ImagePart => part.type === 'image_url' && 'image_url' in part
-      );
-      if (imagePart && imagePart.image_url?.url) {
-        userImageUrl = imagePart.image_url.url;
-      }
-    }
-
-    // Generate image
-    let imageUrl: string | undefined;
-    try {
-      imageUrl = await generateVibeCheckImage(state.user.whatsappId, {
-        overall_score: result.overall_score,
+    const replies: Replies = [
+      {
+        reply_type: 'vibe_check_card',
+        comment: result.comment,
         fit_silhouette: result.fit_silhouette,
         color_harmony: result.color_harmony,
         styling_details: result.styling_details,
         context_confidence: result.context_confidence,
-        userImageUrl,
-        comment: result.comment,
-      });
-    } catch (err: unknown) {
-      logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate vibe check image');
-      // Continue without image if generation fails
-    }
-
-    const mainReplyText = `
-✨ *Vibe Check Results* ✨
-
-${result.comment}
-
-👕 *Fit & Silhouette*: ${result.fit_silhouette.score}/10  
-_${result.fit_silhouette.explanation}_
-
-🎨 *Color Harmony*: ${result.color_harmony.score}/10  
-_${result.color_harmony.explanation}_
-
-🧢 *Styling Details*: ${result.styling_details.score}/10  
-_${result.styling_details.explanation}_
-
-🎯 *Context Confidence*: ${result.context_confidence.score}/10  
-_${result.context_confidence.explanation}_
-
-⭐ *Overall Score*: *${result.overall_score.toFixed(1)}/10*
-
-💡 *Recommendations*:  
-${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
-      `.trim();
-
-    const replies: Replies = [];
-    
-    // Add image reply first if generated
-    if (imageUrl) {
-      replies.push({
-        reply_type: 'image',
-        media_url: imageUrl,
-      });
-    }
-    
-    // Add text reply
-    replies.push({
-      reply_type: 'text',
-      reply_text: mainReplyText,
-    });
+        overall_score: result.overall_score,
+        recommendations: result.recommendations,
+      },
+    ];
 
     // Add the product recommendation question
-    const recommendationQuestion: Replies = [{
-      reply_type: 'quick_reply',
-      reply_text: `Based on that feedback, shall I recommend some products to complete the look?`,
-      buttons: [
+    const recommendationQuestion: Replies = [
+      {
+        reply_type: 'quick_reply',
+        reply_text: `Based on that feedback, shall I recommend some products to complete the look?`,
+        buttons: [
           { text: 'Yes, please!', id: 'product_recommendation_yes' },
           { text: 'No, thanks', id: 'product_recommendation_no' },
-      ],
-    }];
+        ],
+      },
+    ];
     replies.push(...recommendationQuestion);
 
     return {

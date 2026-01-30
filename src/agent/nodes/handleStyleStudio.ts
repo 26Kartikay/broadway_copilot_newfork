@@ -6,6 +6,7 @@ import { SystemMessage, BaseMessage } from '../../lib/ai/core/messages';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { InternalServerError } from '../../utils/errors';
+import { isValidImageUrl } from '../../utils/urlValidation';
 import { GraphState, Replies } from '../state';
 import { PendingType } from '@prisma/client';
 import { searchProducts, fetchColorAnalysis } from '../tools';
@@ -209,10 +210,19 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
           return true;
         });
 
-        allProducts.push(...products.map((p: any) => ({
+        // Filter products: must have valid imageUrl
+        const validProducts = products.filter((p: any) => 
+          p && 
+          p.name && 
+          p.brand && 
+          p.productLink && 
+          isValidImageUrl(p.imageUrl)
+        );
+        
+        allProducts.push(...validProducts.map((p: any) => ({
           name: p.name,
           brand: p.brand,
-          imageUrl: p.imageUrl || '',
+          imageUrl: p.imageUrl,
           productLink: p.productLink,
         })));
         
@@ -244,16 +254,21 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         new Map(allProducts.map(p => [p.productLink, p])).values()
       ).slice(0, 10);
 
-      replies.push({
-        reply_type: 'product_card' as const,
-        products: uniqueProducts.map((p) => ({
-          name: p.name,
-          brand: p.brand,
-          imageUrl: p.imageUrl,
-          productLink: p.productLink,
-          reason: 'Recommended for your style needs',
-        })),
-      } as any);
+      // Filter out any products with invalid imageUrls one more time (safety check)
+      const productsWithValidUrls = uniqueProducts.filter((p) => isValidImageUrl(p.imageUrl));
+
+      if (productsWithValidUrls.length > 0) {
+        replies.push({
+          reply_type: 'product_card' as const,
+          products: productsWithValidUrls.map((p) => ({
+            name: p.name,
+            brand: p.brand,
+            imageUrl: p.imageUrl,
+            productLink: p.productLink,
+            reason: 'Recommended for your style needs',
+          })),
+        } as any);
+      }
     }
 
     logger.debug({ userId, subIntent, replies }, 'Generated Style Studio reply');

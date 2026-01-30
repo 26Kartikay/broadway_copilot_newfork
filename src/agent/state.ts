@@ -148,6 +148,10 @@ export interface ProductRecommendation {
   productLink: string;
   reason?: string;
 }
+export interface ScoringCategory {
+  score: number;
+  explanation: string;
+}
 
 /**
  * Standard reply structure for agent responses.
@@ -189,6 +193,16 @@ type Reply =
       top_colors: ColorWithHex[];
       two_color_combos: string[];
       three_color_combos: string[];
+    }
+  | {
+      reply_type: 'vibe_check_card';
+      comment: string;
+      fit_silhouette: ScoringCategory;
+      color_harmony: ScoringCategory;
+      styling_details: ScoringCategory;
+      context_confidence: ScoringCategory;
+      overall_score: number;
+      recommendations: string[];
     };
 
 /**

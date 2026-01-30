@@ -9,6 +9,7 @@ import { getTextLLM } from '../../lib/ai';
 import { logger } from '../../utils/logger';
 import { PendingType } from '@prisma/client';
 import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
+import { isValidImageUrl } from '../../utils/urlValidation';
 
 const LLMOutputSchema = z.object({
   conclusion_text: z.string().describe("A brief, friendly concluding text message to show before the product recommendations. For example: 'Based on your colors, I found a few items you might like!'"),
@@ -86,17 +87,24 @@ export async function handleProductRecommendationConfirmation(state: GraphState)
 
     for (const toolResult of productResults) {
         if (Array.isArray(toolResult.result)) {
-            const products = toolResult.result.filter((p: any) => p && p.name && p.brand && p.productLink);
+            // Filter products: must have name, brand, productLink, and valid imageUrl
+            const products = toolResult.result.filter((p: any) => 
+                p && 
+                p.name && 
+                p.brand && 
+                p.productLink && 
+                isValidImageUrl(p.imageUrl)
+            );
             allProducts.push(...products.map((p: any) => ({
                 name: p.name,
                 brand: p.brand,
-                imageUrl: p.imageUrl || '',
+                imageUrl: p.imageUrl, // Only include if valid (already filtered)
                 productLink: p.productLink,
             })));
         }
     }
     
-    // Add product card if we have products
+    // Add product card if we have products with valid imageUrls
     if (allProducts.length > 0) {
         const uniqueProducts = Array.from(new Map(allProducts.map(p => [p.productLink, p])).values()).slice(0, 5);
         replies.push({
