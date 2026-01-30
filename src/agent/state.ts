@@ -193,6 +193,7 @@ type Reply =
       top_colors: ColorWithHex[];
       two_color_combos: string[];
       three_color_combos: string[];
+      user_image_url: string | null;
     }
   | {
       reply_type: 'vibe_check_card';
@@ -203,6 +204,7 @@ type Reply =
       context_confidence: ScoringCategory;
       overall_score: number;
       recommendations: string[];
+      user_image_url: string | null;
     };
 
 /**

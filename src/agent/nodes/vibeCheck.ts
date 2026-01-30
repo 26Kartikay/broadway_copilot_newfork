@@ -154,6 +154,22 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     queueWardrobeIndex(userId, latestMessageId);
 
+    // Find the latest message with an image in the conversation history
+    const imageMessage = [...state.conversationHistoryWithImages]
+      .reverse()
+      .find((msg) => msg.content.some((part) => part.type === 'image_url'));
+
+    let userImageUrl: string | null = null;
+    if (imageMessage && imageMessage.meta?.messageId) {
+      const mediaItem = await prisma.media.findFirst({
+        where: { messageId: imageMessage.meta.messageId as string },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (mediaItem?.serverUrl) {
+        userImageUrl = mediaItem.serverUrl;
+      }
+    }
+
     const replies: Replies = [
       {
         reply_type: 'vibe_check_card',
@@ -164,6 +180,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         context_confidence: result.context_confidence,
         overall_score: result.overall_score,
         recommendations: result.recommendations,
+        user_image_url: userImageUrl,
       },
     ];
 

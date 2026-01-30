@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
+import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
 import { getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
@@ -121,6 +121,22 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     // Get palette data from mapping
     const paletteData = getPaletteData(paletteName);
 
+    // Find the latest message with an image in the conversation history
+    const imageMessage = [...state.conversationHistoryWithImages]
+      .reverse()
+      .find((msg) => msg.content.some((part) => part.type === 'image_url'));
+
+    let userImageUrl: string | null = null;
+    if (imageMessage && imageMessage.meta?.messageId) {
+      const mediaItem = await prisma.media.findFirst({
+        where: { messageId: imageMessage.meta.messageId as string },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (mediaItem?.serverUrl) {
+        userImageUrl = mediaItem.serverUrl;
+      }
+    }
+
     // Return color analysis card reply with a prompt to save the result.
     const replies: Replies = [
       {
@@ -130,6 +146,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         top_colors: shuffleArray(paletteData.topColors),
         two_color_combos: shuffleArray(paletteData.twoColorCombos),
         three_color_combos: shuffleArray(paletteData.threeColorCombos),
+        user_image_url: userImageUrl,
       },
       {
         reply_type: 'quick_reply',

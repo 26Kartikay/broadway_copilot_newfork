@@ -48,9 +48,10 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
         reply_type: 'text',
         reply_text: replyText,
     });
+    const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
     confirmationReplies.push({ // Then push the PDF
         reply_type: 'pdf',
-        media_url: paletteData.pdfPath,
+        media_url: `${baseUrl}/${paletteData.pdfPath}`,
     });
 
   } else {
