@@ -5,6 +5,8 @@ import { MessageInput, QuickReplyButton } from '../lib/chat/types';
 import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
 import { TraceBuffer } from './tracing';
 
+export type { QuickReplyButton };
+
 // ============================================================================
 // AGENT STATE DEFINITION
 // ============================================================================
@@ -42,7 +44,7 @@ export interface GraphState {
   stylingIntent: StylingIntent | null;
 
   /** Specific sub-intent for Style Studio requests */
-  subIntent?: 'style_studio_occasion' | 'style_studio_vacation' | 'style_studio_general';
+  subIntent?: 'style_studio_occasion' | 'style_studio_vacation' | 'style_studio_general' | undefined;
 
   /** Specific sub-intent for general conversation */
   generalIntent: GeneralIntent | null;
@@ -63,14 +65,14 @@ export interface GraphState {
   selectedTonality: string | null;
 
   /** The payload from the last button click that successfully routed to a sub-intent */
-  lastSubIntentPayload?: string | null;
+  lastSubIntentPayload?: string | undefined;
 
-  lastHandledPayload?: string | null;
+  lastHandledPayload?: string | undefined;
 
   thisOrThatFirstImageId?: string | undefined;
 
   /** The seasonal palette to be saved, pending user confirmation. */
-  seasonalPaletteToSave?: string;
+  seasonalPaletteToSave?: string | undefined;
 
   /** Context for product recommendations. */
   productRecommendationContext?:
@@ -81,13 +83,13 @@ export interface GraphState {
     | {
         type: 'vibe_check';
         recommendations: string[];
-      };
+      } | undefined;
 
   /** Replies returned in the HTTP response */
-  httpResponse?: Replies;
+  httpResponse?: Replies | undefined;
 
   /** Fashion quiz state */
-  quizQuestions?: any[] | undefined; // Will be properly typed with QuizQuestionSchema
+  quizQuestions?: any[] | undefined; 
   quizAnswers?: string[] | undefined;
   currentQuestionIndex?: number | undefined;
 }
@@ -185,6 +187,7 @@ type Reply =
   | {
       reply_type: 'pdf';
       media_url: string;
+      reply_text?: string;
     }
   | {
       reply_type: 'color_analysis_card';

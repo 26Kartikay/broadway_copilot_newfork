@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { MessageRole, PendingType } from '@prisma/client';
+import { MessageRole, PendingType, Prisma } from '@prisma/client';
 import { MessageContent, MessageContentPart } from '../../lib/ai';
 
 import { Tonality } from '@prisma/client';
@@ -89,7 +89,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       content: formattedContent,
       pending: pendingToPersist,
       selectedTonality: selectedTonalityToPersality,
-      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : undefined,
+      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
     },
   });
 

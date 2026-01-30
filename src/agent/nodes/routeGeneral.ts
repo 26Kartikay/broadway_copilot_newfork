@@ -49,10 +49,16 @@ export async function routeGeneral(state: GraphState): Promise<GraphState> {
           // Update both text-only and with-images history to ensure consistency for the LLM.
           state.input.Body = originalStarterText;
           if (state.conversationHistoryTextOnly.length > 0) {
-            state.conversationHistoryTextOnly[state.conversationHistoryTextOnly.length - 1].content = [{type: 'text', text: originalStarterText}];
+            const lastMessage = state.conversationHistoryTextOnly[state.conversationHistoryTextOnly.length - 1];
+            if (lastMessage) {
+              lastMessage.content = [{type: 'text', text: originalStarterText}];
+            }
           }
           if (state.conversationHistoryWithImages.length > 0) {
-            state.conversationHistoryWithImages[state.conversationHistoryWithImages.length - 1].content = [{type: 'text', text: originalStarterText}];
+            const lastMessage = state.conversationHistoryWithImages[state.conversationHistoryWithImages.length - 1];
+            if (lastMessage) {
+              lastMessage.content = [{type: 'text', text: originalStarterText}];
+            }
           }
 
           return { ...state, generalIntent: 'chat' as GeneralIntent };
@@ -64,4 +70,20 @@ export async function routeGeneral(state: GraphState): Promise<GraphState> {
     logger.debug({ userId }, 'General intent routed to "greeting" by regex');
     return { ...state, generalIntent: 'greeting' as GeneralIntent };
   }
-}
+
+  // LLM-based routing as fallback
+  try {
+    const systemPromptText = await loadPrompt('routing/route_general.txt');
+    const systemPrompt = new SystemMessage(systemPromptText);
+
+    const response = await getTextLLM()
+      .withStructuredOutput(LLMOutputSchema)
+      .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeGeneral');
+
+    logger.debug({ userId, intent: response.generalIntent }, 'General intent routed by LLM');
+    return { ...state, generalIntent: response.generalIntent };
+  } catch (err: unknown) {
+    throw new InternalServerError('Failed to route general intent', {
+      cause: err,
+    });
+  }

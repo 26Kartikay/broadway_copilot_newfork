@@ -22,24 +22,23 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
 
     const paletteData = getPaletteData(paletteNameToSave); // Get paletteData here once
 
-    await prisma.$transaction([
-      prisma.colorAnalysis.create({
-        data: {
-          userId,
-          palette_name: paletteNameToSave,
-          colors_suited: paletteData.topColors,
-          colors_to_wear: {
-            two_color_combos: paletteData.twoColorCombos,
-            three_color_combos: paletteData.threeColorCombos,
-          },
-          colors_to_avoid: null,
-        },
-      }),
-      prisma.user.update({
-        where: { id: state.user.id },
-        data: { lastColorAnalysisAt: new Date() },
-      }),
-    ]);
+    await prisma.colorAnalysis.create({
+      data: {
+        userId,
+        palette_name: paletteNameToSave,
+        colors_suited: paletteData.topColors as any,
+        colors_to_wear: {
+          two_color_combos: paletteData.twoColorCombos,
+          three_color_combos: paletteData.threeColorCombos,
+        } as any,
+        colors_to_avoid: null,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: state.user.id },
+      data: { lastColorAnalysisAt: new Date() },
+    });
 
     replyText = "I've saved your color palette to your profile.";
     logger.debug({ userId, paletteNameToSave }, 'User confirmed to save color analysis result.');
@@ -52,6 +51,7 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
     confirmationReplies.push({ // Then push the PDF
         reply_type: 'pdf',
         media_url: `${baseUrl}/${paletteData.pdfPath}`,
+        reply_text: "Here is your color palette guide.",
     });
 
   } else {
