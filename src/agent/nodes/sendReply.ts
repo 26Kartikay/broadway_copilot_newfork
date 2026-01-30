@@ -56,6 +56,13 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
         text: `[Product Recommendations: ${r.products.map((p) => p.name).join(', ')}]`,
       });
     }
+    if (r.reply_type === 'color_analysis_card' && 'palette_name' in r) {
+      // Store color analysis card as a special text marker for history
+      parts.push({
+        type: 'text',
+        text: `[Color Analysis: ${r.palette_name} palette]`,
+      });
+    }
     return parts;
   });
 
@@ -65,6 +72,11 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
     state.selectedTonality && validTonalities.includes(state.selectedTonality as Tonality)
       ? (state.selectedTonality as Tonality)
       : null;
+
+  const additionalKwargs = {
+    ...(state.productRecommendationContext && { productRecommendationContext: state.productRecommendationContext }),
+    ...(state.seasonalPaletteToSave && { seasonalPaletteToSave: state.seasonalPaletteToSave }),
+  };
 
   // Mark as delivered for HTTP mode
   logger.debug({ userId }, 'HTTP delivery mode: collecting replies for response');
@@ -77,6 +89,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       content: formattedContent,
       pending: pendingToPersist,
       selectedTonality: selectedTonalityToPersality,
+      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : undefined,
     },
   });
 

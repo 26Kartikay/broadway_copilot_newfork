@@ -8,6 +8,7 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories } from '../tools';
+import { getMainMenuReply } from './common'; // New import
 
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The first text message response to the user.'),
@@ -42,6 +43,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
             { text: 'Vibe check', id: 'vibe_check' },
             { text: 'Color analysis', id: 'color_analysis' },
             { text: 'Style Studio', id: 'style_studio' },
+            { text: 'Fashion Charades', id: 'fashion_quiz' },
             { text: 'This or That', id: 'this_or_that' },
             { text: 'Skin Lab', id: 'skin_lab' },
           ],
@@ -56,16 +58,8 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     // Menu Intent
     // ------------------------------------------
     if (generalIntent === 'menu') {
-      const menuText = 'Please choose one of the following options:';
-      const buttons = [
-        { text: 'Vibe check', id: 'vibe_check' },
-        { text: 'Color analysis', id: 'color_analysis' },
-        { text: 'Style Studio', id: 'style_studio' },
-        { text: 'This or That', id: 'this_or_that' },
-        { text: 'Skin Lab', id: 'skin_lab' },
-      ];
-      const replies: Replies = [{ reply_type: 'quick_reply', reply_text: menuText, buttons }];
-      logger.debug({ userId, messageId }, 'Menu handled with static response');
+      const replies = getMainMenuReply('Please choose one of the following options:');
+      logger.debug({ userId, messageId }, 'Menu handled with dynamic response');
       return { ...state, assistantReply: replies };
     }
 

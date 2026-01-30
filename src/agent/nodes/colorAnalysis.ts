@@ -2,10 +2,10 @@ import { z } from 'zod';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
+import { getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
-import { generateColorAnalysisImage } from '../../utils/imageGenerator';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 
@@ -13,48 +13,34 @@ import { PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
 
 /**
- * Schema for a color object with name.
- */
-const ColorObjectSchema = z.object({
-  name: z
-    .string()
-    .describe("A concise, shopper-friendly color name (e.g., 'Warm Ivory', 'Deep Espresso')."),
-});
-
-/**
  * Schema for the LLM output in color analysis.
+ * The model should only return the palette name (one of 12 allowed values).
  */
 const LLMOutputSchema = z.object({
-  compliment: z
-    .string()
-    .describe("A short compliment for the user (e.g., 'Looking sharp and confident!')."),
+  quality_ok: z
+    .boolean()
+    .describe('Whether the image quality is sufficient for analysis.'),
   palette_name: z
+    .enum([
+      'LIGHT_SPRING',
+      'WARM_SPRING',
+      'CLEAR_SPRING',
+      'LIGHT_SUMMER',
+      'COOL_SUMMER',
+      'SOFT_SUMMER',
+      'SOFT_AUTUMN',
+      'WARM_AUTUMN',
+      'DEEP_AUTUMN',
+      'COOL_WINTER',
+      'CLEAR_WINTER',
+      'DEEP_WINTER',
+    ])
+    .nullable()
+    .describe('The seasonal color palette identifier (must be one of the 12 allowed values).'),
+  error_message: z
     .string()
     .nullable()
-    .describe("The seasonal color palette name (e.g., 'Deep Winter', 'Soft Summer')."),
-  palette_description: z
-    .string()
-    .nullable()
-    .describe(
-      "Why this palette suits the user (e.g., 'Your strong contrast and cool undertones shine in the Deep Winter palette...').",
-    ),
-  colors_suited: z
-    .array(ColorObjectSchema)
-    .describe('Main representative colors from the palette.'),
-  colors_to_wear: z.object({
-    clothing: z.array(z.string()).describe('Recommended clothing colors.'),
-    jewelry: z
-      .array(z.string())
-      .describe('Recommended jewelry tones (e.g., Silver, Rose Gold, White Gold).'),
-  }),
-  colors_to_avoid: z
-    .array(ColorObjectSchema)
-    .describe('Colors that clash with the palette and should be avoided.'),
-  follow_up: z
-    .string()
-    .describe(
-      "A short, natural follow-up question to keep the chat going (e.g., 'Would you like me to suggest outfits in your palette?' or 'Want me to show how this palette works for makeup too?').",
-    ),
+    .describe('Error message to show if image quality is poor (null if quality_ok is true).'),
 });
 
 const NoImageLLMOutputSchema = z.object({
@@ -62,6 +48,16 @@ const NoImageLLMOutputSchema = z.object({
     .string()
     .describe('The text to send to the user explaining they need to send an image.'),
 });
+
+// Shuffle arrays to ensure variety in presentation
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 /**
  * Performs color analysis from a portrait and returns a WhatsApp-friendly text reply; logs and persists results.
@@ -102,87 +98,73 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(LLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryWithImages, state.traceBuffer, 'colorAnalysis');
 
-    // Save results to DB (excluding follow-up)
-    const [, user] = await prisma.$transaction([
-      prisma.colorAnalysis.create({
-        data: {
-          userId,
-          compliment: output.compliment,
-          palette_name: output.palette_name ?? null,
-          palette_description: output.palette_description ?? null,
-          colors_suited: output.colors_suited,
-          colors_to_wear: output.colors_to_wear,
-          colors_to_avoid: output.colors_to_avoid,
-        },
-      }),
-      prisma.user.update({
-        where: { id: state.user.id },
-        data: { lastColorAnalysisAt: new Date() },
-      }),
-    ]);
+    logger.debug({ userId, output }, 'Color analysis LLM output');
 
-    // Extract user image URL from the latest message
+    // Handle poor image quality case
+    if (!output.quality_ok || !output.palette_name) {
+      const errorMessage = output.error_message || 'Oops, can you try sending a clearer picture of your face? 💖';
+      const replies: Replies = [{ reply_type: 'text', reply_text: errorMessage }];
+      return {
+        ...state,
+        assistantReply: replies,
+        pending: PendingType.COLOR_ANALYSIS_IMAGE,
+      };
+    }
+
+    // Validate palette name
+    const paletteName = output.palette_name;
+    if (!isValidPalette(paletteName)) {
+      logger.error({ userId, paletteName }, 'Invalid palette name returned from LLM');
+      throw new InternalServerError(`Invalid palette name: ${paletteName}`);
+    }
+
+    // Get palette data from mapping
+    const paletteData = getPaletteData(paletteName);
+
+    // Find the latest message with an image in the conversation history
+    const imageMessage = [...state.conversationHistoryWithImages]
+      .reverse()
+      .find((msg) => msg.content.some((part) => part.type === 'image_url'));
+
     let userImageUrl: string | null = null;
-    const latestMessage = state.conversationHistoryWithImages.at(-1);
-    if (latestMessage && latestMessage.content && Array.isArray(latestMessage.content)) {
-      const imagePart = latestMessage.content.find(
-        (part): part is ImagePart => part.type === 'image_url' && 'image_url' in part
-      );
-      if (imagePart && imagePart.image_url?.url) {
-        userImageUrl = imagePart.image_url.url;
+    if (imageMessage && imageMessage.meta?.messageId) {
+      const mediaItem = await prisma.media.findFirst({
+        where: { messageId: imageMessage.meta.messageId as string },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (mediaItem?.serverUrl) {
+        userImageUrl = mediaItem.serverUrl;
       }
     }
 
-    // Generate image
-    let imageUrl: string | undefined;
-    try {
-      imageUrl = await generateColorAnalysisImage(state.user.whatsappId, {
-        palette_name: output.palette_name,
-        colors_suited: output.colors_suited,
-        colors_to_wear: output.colors_to_wear,
-        colors_to_avoid: output.colors_to_avoid,
-        userImageUrl,
-      });
-    } catch (err: unknown) {
-      logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate color analysis image');
-      // Continue without image if generation fails
-    }
+    // Return color analysis card reply with a prompt to save the result.
+    const replies: Replies = [
+      {
+        reply_type: 'color_analysis_card',
+        palette_name: paletteName,
+        description: paletteData.description,
+        top_colors: shuffleArray(paletteData.topColors),
+        two_color_combos: shuffleArray(paletteData.twoColorCombos),
+        three_color_combos: shuffleArray(paletteData.threeColorCombos),
+        user_image_url: userImageUrl,
+      },
+      {
+        reply_type: 'quick_reply',
+        reply_text: 'Do you want to save this color analysis result?',
+        buttons: [
+          { text: 'Yes', id: 'save_color_analysis_yes' },
+          { text: 'No', id: 'save_color_analysis_no' },
+        ],
+      },
+    ];
 
-    // Beautifully formatted WhatsApp message
-    const formattedMessage = `
-💫 *${output.compliment}*
-
-🎨 *Your Color Palette:* _${output.palette_name ?? 'Unknown'}_
-
-🩵  ${output.palette_description ?? 'N/A'}
-
-👗 *Best Clothing Colors:* ${output.colors_to_wear.clothing.join(', ')}
-💍 *Jewelry That Shines on You:* ${output.colors_to_wear.jewelry.join(', ')}
-🚫 *Colors to Avoid:* ${output.colors_to_avoid.map((c) => c.name).join(', ')}
-
-${output.follow_up}
-`;
-
-    const replies: Replies = [];
-    
-    // Add image reply first if generated
-    if (imageUrl) {
-      replies.push({
-        reply_type: 'image',
-        media_url: imageUrl,
-      });
-    }
-    
-    // Add text reply
-    replies.push({ reply_type: 'text', reply_text: formattedMessage.trim() });
-
-    logger.debug({ userId, messageId, replies }, 'Color analysis completed successfully');
+    logger.debug({ userId, messageId, paletteName }, 'Color analysis completed, awaiting user confirmation to save.');
 
     return {
       ...state,
-      user,
       assistantReply: replies,
-      pending: PendingType.NONE,
+      seasonalPaletteToSave: paletteName,
+      pending: PendingType.SAVE_COLOR_ANALYSIS,
     };
   } catch (err: unknown) {
     throw new InternalServerError('Color analysis failed', { cause: err });

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { logger } from '../../utils/logger';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
+import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { queueWardrobeIndex } from '../../lib/tasks';
 import type { QuickReplyButton } from '../../lib/chat/types';
@@ -111,10 +111,15 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt');
     const tonalityInstructions =
       tonalityInstructionsMap[state.selectedTonality as keyof typeof tonalityInstructionsMap];
-    const systemPromptText = systemPromptTextRaw.replace(
+    
+    const gender = state.user.confirmedGender || state.user.inferredGender || 'unknown';
+
+    let systemPromptText = systemPromptTextRaw.replace(
       '{tonality_instructions}',
       tonalityInstructions,
     );
+    systemPromptText = systemPromptText.replace('{gender}', gender);
+
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const result = await getVisionLLM()
@@ -154,65 +159,58 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     queueWardrobeIndex(userId, latestMessageId);
 
-    // Generate image
-    let imageUrl: string | undefined;
-    try {
-      imageUrl = await generateVibeCheckImage(state.user.whatsappId, {
-        overall_score: result.overall_score,
+    // Find the latest message with an image in the conversation history
+    const imageMessage = [...state.conversationHistoryWithImages]
+      .reverse()
+      .find((msg) => msg.content.some((part) => part.type === 'image_url'));
+
+    let userImageUrl: string | null = null;
+    if (imageMessage && imageMessage.meta?.messageId) {
+      const mediaItem = await prisma.media.findFirst({
+        where: { messageId: imageMessage.meta.messageId as string },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (mediaItem?.serverUrl) {
+        userImageUrl = mediaItem.serverUrl;
+      }
+    }
+
+    const replies: Replies = [
+      {
+        reply_type: 'vibe_check_card',
+        comment: result.comment,
         fit_silhouette: result.fit_silhouette,
         color_harmony: result.color_harmony,
         styling_details: result.styling_details,
         context_confidence: result.context_confidence,
-      });
-    } catch (err: unknown) {
-      logger.error({ userId, err: (err as Error)?.message }, 'Failed to generate vibe check image');
-      // Continue without image if generation fails
-    }
+        overall_score: result.overall_score,
+        recommendations: result.recommendations,
+        user_image_url: userImageUrl,
+      },
+    ];
 
-    const replies: Replies = [];
-    
-    // Add image reply first if generated
-    if (imageUrl) {
-      replies.push({
-        reply_type: 'image',
-        media_url: imageUrl,
-      });
-    }
-    
-    // Add text reply
-    replies.push({
-      reply_type: 'text',
-      reply_text: `
-✨ *Vibe Check Results* ✨
-
-${result.comment}
-
-👕 *Fit & Silhouette*: ${result.fit_silhouette.score}/10  
-_${result.fit_silhouette.explanation}_
-
-🎨 *Color Harmony*: ${result.color_harmony.score}/10  
-_${result.color_harmony.explanation}_
-
-🧢 *Styling Details*: ${result.styling_details.score}/10  
-_${result.styling_details.explanation}_
-
-🎯 *Context Confidence*: ${result.context_confidence.score}/10  
-_${result.context_confidence.explanation}_
-
-⭐ *Overall Score*: *${result.overall_score.toFixed(1)}/10*
-
-💡 *Recommendations*:  
-${result.recommendations.map((rec, i) => `   ${i + 1}. ${rec}`).join('\n')}
-
-${result.follow_up}  
-      `.trim(),
-    });
+    // Add the product recommendation question
+    const recommendationQuestion: Replies = [
+      {
+        reply_type: 'quick_reply',
+        reply_text: `Based on that feedback, shall I recommend some products to complete the look?`,
+        buttons: [
+          { text: 'Yes, please!', id: 'product_recommendation_yes' },
+          { text: 'No, thanks', id: 'product_recommendation_no' },
+        ],
+      },
+    ];
+    replies.push(...recommendationQuestion);
 
     return {
       ...state,
       user,
       assistantReply: replies,
-      pending: PendingType.NONE,
+      pending: PendingType.CONFIRM_PRODUCT_RECOMMENDATION,
+      productRecommendationContext: {
+          type: 'vibe_check',
+          recommendations: result.recommendations,
+      },
     };
   } catch (err: unknown) {
     throw new InternalServerError('Vibe check failed', { cause: err });

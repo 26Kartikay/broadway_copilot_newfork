@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { getTextLLM } from '../../lib/ai';
+import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { isValidImageUrl } from '../../utils/urlValidation';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories, searchProducts } from '../tools';
 
@@ -63,16 +64,51 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
     if (shouldRecommendProducts) {
       tools.push(searchProducts());
     }
+
+    // Use OpenAI for Skin Lab when tools are needed, as it handles tool calling more reliably than Groq
+    // Use gpt-4o for better tool calling reliability and instruction following
+    // Create a text-only OpenAI instance (without vision/reasoning features) for better tool compatibility
+    const textLLMWithTools = new ChatOpenAI({
+      model: 'gpt-4o', // Better tool calling and instruction following than gpt-4o-mini
+      temperature: 0.7, // Slightly creative but still reliable
+    });
+
     const systemPrompt = new SystemMessage(systemPromptText);
 
-    // Run LLM with structured output
-    const executorResult = await agentExecutor(
-      getTextLLM(),
-      systemPrompt,
-      conversationHistoryTextOnly,
-      { tools, outputSchema: LLMOutputSchema, nodeName: 'handleSkinLab' },
-      traceBuffer,
-    );
+    let executorResult;
+    try {
+      executorResult = await agentExecutor(
+        textLLMWithTools,
+        systemPrompt,
+        conversationHistoryTextOnly,
+        {
+          tools,
+          outputSchema: LLMOutputSchema,
+          nodeName: 'handleSkinLab',
+        },
+        traceBuffer,
+      );
+    } catch (schemaError: any) {
+      // If schema validation fails, log the error and return a graceful error message
+      logger.error(
+        {
+          userId,
+          error: schemaError.message,
+          data: schemaError.cause?.message || 'Unknown error',
+        },
+        'Schema validation failed in handleSkinLab',
+      );
+
+      // Return a helpful error message to the user
+      const errorReplies: Replies = [
+        {
+          reply_type: 'text',
+          reply_text:
+            "I'm having trouble processing that request right now. Could you try rephrasing your question or try again in a moment?",
+        },
+      ];
+      return { ...state, assistantReply: errorReplies };
+    }
 
     const finalResponse = executorResult.output;
     const toolResults = executorResult.toolResults;
@@ -160,10 +196,19 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
           return true;
         });
 
-        allProducts.push(...products.map((p: any) => ({
+        // Filter products: must have valid imageUrl
+        const validProducts = products.filter((p: any) => 
+          p && 
+          p.name && 
+          p.brand && 
+          p.productLink && 
+          isValidImageUrl(p.imageUrl)
+        );
+        
+        allProducts.push(...validProducts.map((p: any) => ({
           name: p.name,
           brand: p.brand,
-          imageUrl: p.imageUrl || '',
+          imageUrl: p.imageUrl,
           productLink: p.productLink,
         })));
         
@@ -195,16 +240,21 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
         new Map(allProducts.map(p => [p.productLink, p])).values()
       ).slice(0, 10);
 
-      replies.push({
-        reply_type: 'product_card' as const,
-        products: uniqueProducts.map((p) => ({
-          name: p.name,
-          brand: p.brand,
-          imageUrl: p.imageUrl,
-          productLink: p.productLink,
-          reason: 'Recommended for your skincare needs',
-        })),
-      } as any);
+      // Filter out any products with invalid imageUrls one more time (safety check)
+      const productsWithValidUrls = uniqueProducts.filter((p) => isValidImageUrl(p.imageUrl));
+
+      if (productsWithValidUrls.length > 0) {
+        replies.push({
+          reply_type: 'product_card' as const,
+          products: productsWithValidUrls.map((p) => ({
+            name: p.name,
+            brand: p.brand,
+            imageUrl: p.imageUrl,
+            productLink: p.productLink,
+            reason: 'Recommended for your skincare needs',
+          })),
+        } as any);
+      }
     }
 
     logger.info(

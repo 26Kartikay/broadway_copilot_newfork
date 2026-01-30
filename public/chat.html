@@ -322,6 +322,301 @@
       background: var(--broadway-gold);
     }
 
+    /* Color Analysis Card Styles */
+    .color-analysis-card {
+      background: var(--broadway-white);
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 12px;
+      border: 1px solid var(--broadway-gray-medium);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .color-analysis-header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--broadway-gold-light);
+    }
+
+    .color-analysis-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--broadway-text);
+      margin-bottom: 4px;
+      text-transform: capitalize;
+      letter-spacing: 0.5px;
+    }
+
+    .color-analysis-palette {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--broadway-gold-dark);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .color-analysis-section {
+      margin-bottom: 20px;
+    }
+
+    .color-analysis-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .color-analysis-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--broadway-text);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .color-analysis-section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--broadway-gray-medium);
+    }
+
+    .color-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .color-swatch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-width: 70px;
+    }
+
+    .color-swatch-box {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      border: 2px solid var(--broadway-gray-medium);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .color-swatch-name {
+      font-size: 11px;
+      color: var(--broadway-text);
+      text-align: center;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    .color-swatch-hex {
+      font-size: 9px;
+      color: var(--broadway-text-light);
+      font-family: 'Courier New', monospace;
+    }
+
+    .color-combo-swatches {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .color-combo-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      background: var(--broadway-gray);
+      border-radius: 8px;
+      border: 1px solid var(--broadway-gray-medium);
+    }
+
+    .color-combo-swatches-inline {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .color-combo-swatch {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      border: 2px solid var(--broadway-gray-medium);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      flex-shrink: 0;
+    }
+
+    .color-combo-label {
+      font-size: 12px;
+      color: var(--broadway-text);
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .color-combo {
+      display: inline-block;
+      background: var(--broadway-gray);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--broadway-text);
+      margin: 4px;
+      border: 1px solid var(--broadway-gray-medium);
+    }
+
+    /* Vibe Check Card Styles */
+    .vibe-check-card {
+      background: var(--broadway-white);
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 12px;
+      border: 1px solid var(--broadway-gray-medium);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .vibe-check-header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--broadway-gold-light);
+    }
+
+    .vibe-check-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--broadway-text);
+      margin-bottom: 8px;
+      text-transform: capitalize;
+      letter-spacing: 0.5px;
+    }
+
+    .vibe-check-comment {
+      font-size: 14px;
+      color: var(--broadway-text);
+      line-height: 1.6;
+      font-style: italic;
+      margin-top: 8px;
+    }
+
+    .vibe-check-overall-score {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .vibe-check-score-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--broadway-white);
+      background: linear-gradient(135deg, var(--broadway-gold) 0%, var(--broadway-gold-dark) 100%);
+      box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
+    }
+
+    .vibe-check-score-label {
+      font-size: 12px;
+      color: var(--broadway-text-light);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .vibe-check-section {
+      margin-bottom: 20px;
+    }
+
+    .vibe-check-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .vibe-check-category {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px;
+      background: var(--broadway-gray);
+      border-radius: 8px;
+      border: 1px solid var(--broadway-gray-medium);
+      margin-bottom: 12px;
+    }
+
+    .vibe-check-category:last-child {
+      margin-bottom: 0;
+    }
+
+    .vibe-check-category-score {
+      flex-shrink: 0;
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--broadway-white);
+      background: var(--broadway-gold);
+    }
+
+    .vibe-check-category-content {
+      flex: 1;
+    }
+
+    .vibe-check-category-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--broadway-text);
+      margin-bottom: 4px;
+      text-transform: capitalize;
+    }
+
+    .vibe-check-category-explanation {
+      font-size: 12px;
+      color: var(--broadway-text-light);
+      line-height: 1.4;
+    }
+
+    .vibe-check-recommendations {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 2px solid var(--broadway-gold-light);
+    }
+
+    .vibe-check-recommendations-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--broadway-text);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .vibe-check-recommendation-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 0;
+      font-size: 13px;
+      color: var(--broadway-text);
+      line-height: 1.5;
+    }
+
+    .vibe-check-recommendation-item::before {
+      content: '✨';
+      flex-shrink: 0;
+      font-size: 14px;
+    }
+
     /* Typing Indicator */
     .typing-indicator {
       display: none;
@@ -761,7 +1056,28 @@
       document.getElementById('imagePreview').classList.remove('visible');
     }
 
-    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null) {
+    // Helper function to validate if a string is a valid URL
+    function isValidUrl(string) {
+      if (!string || typeof string !== 'string') return false;
+      // Trim whitespace
+      const trimmed = string.trim();
+      if (!trimmed) return false;
+      
+      try {
+        // Check if it's a data URL
+        if (trimmed.startsWith('data:')) {
+          // Basic validation for data URLs
+          return trimmed.includes(',');
+        }
+        // Check if it's a valid HTTP/HTTPS URL (must be absolute)
+        const url = new URL(trimmed);
+        return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null, colorAnalysisCard = null, pdfUrl = null, vibeCheckCard = null) {
       const container = document.getElementById('messagesContainer');
       
       // Remove welcome message if present
@@ -773,8 +1089,14 @@
       
       let bubbleContent = content ? `<div class="message-text">${formatText(content)}</div>` : '';
       
-      if (imageUrl) {
-        bubbleContent += `<img src="${imageUrl}" alt="Image">`;
+      // Only add image if imageUrl is a valid URL
+      if (imageUrl && isValidUrl(imageUrl)) {
+        bubbleContent += `<img src="${imageUrl}" alt="Image" onerror="this.style.display='none'">`;
+      }
+      
+      // Only add PDF if pdfUrl is a valid URL
+      if (pdfUrl && isValidUrl(pdfUrl)) {
+        bubbleContent += `<iframe src="${pdfUrl}" width="100%" height="500px"></iframe>`;
       }
 
       messageDiv.innerHTML = `<div class="message-bubble">${bubbleContent}</div>`;
@@ -803,20 +1125,227 @@
         products.forEach(product => {
           const card = document.createElement('div');
           card.className = 'product-card';
-          card.innerHTML = `
-            <img class="product-card-image" src="${product.imageUrl || 'https://via.placeholder.com/160x140?text=No+Image'}" alt="${product.name}" onerror="this.src='https://via.placeholder.com/160x140?text=No+Image'">
-            <div class="product-card-content">
-              <div class="product-card-brand">${product.brand || 'Broadway'}</div>
-              <div class="product-card-name">${product.name}</div>
-              ${product.reason ? `<div class="product-card-reason">${product.reason}</div>` : ''}
-              <a href="${product.productLink}" target="_blank" class="product-card-link">View Product →</a>
-            </div>
+          
+          // Create image element programmatically to ensure proper URL handling
+          const img = document.createElement('img');
+          img.className = 'product-card-image';
+          img.alt = product.name || 'Product';
+          
+          // Determine the image URL - use placeholder if invalid
+          const placeholderUrl = 'https://via.placeholder.com/160x140?text=No+Image';
+          if (product.imageUrl && isValidUrl(product.imageUrl)) {
+            img.src = product.imageUrl;
+            img.onerror = function() {
+              this.src = placeholderUrl;
+              this.onerror = null; // Prevent infinite loop
+            };
+          } else {
+            img.src = placeholderUrl;
+          }
+          
+          // Create card content
+          const content = document.createElement('div');
+          content.className = 'product-card-content';
+          content.innerHTML = `
+            <div class="product-card-brand">${(product.brand || 'Broadway').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            <div class="product-card-name">${(product.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${product.reason ? `<div class="product-card-reason">${product.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+            <a href="${product.productLink && isValidUrl(product.productLink) ? product.productLink : '#'}" target="_blank" class="product-card-link">View Product →</a>
           `;
+          
+          card.appendChild(img);
+          card.appendChild(content);
           productCards.appendChild(card);
         });
         
         productCardsContainer.appendChild(productCards);
         messageDiv.querySelector('.message-bubble').appendChild(productCardsContainer);
+      }
+
+      // Add color analysis card if present
+      if (colorAnalysisCard) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'color-analysis-card';
+        
+        // Format palette name (convert WARM_AUTUMN to Warm Autumn)
+        const paletteDisplayName = colorAnalysisCard.palette_name
+          .split('_')
+          .map(word => word.charAt(0) + word.slice(1).toLowerCase())
+          .join(' ');
+        
+        // Helper function to find color by name (case-insensitive, partial match)
+        const findColorByName = (colorName) => {
+          const normalized = colorName.trim().toLowerCase();
+          return colorAnalysisCard.top_colors.find(color => 
+            color.name.toLowerCase().includes(normalized) || 
+            normalized.includes(color.name.toLowerCase())
+          );
+        };
+        
+        // Helper function to parse combo string and extract color names
+        const parseCombo = (comboString) => {
+          // Split by common separators: &, and, comma
+          return comboString.split(/[&,]/).map(s => s.trim()).filter(s => s);
+        };
+        
+        // Get 2-3 top colors (show first 3)
+        const topColors = colorAnalysisCard.top_colors.slice(0, 3);
+        
+        // Get 2-3 two-color combos (show first 3)
+        const twoColorCombos = colorAnalysisCard.two_color_combos.slice(0, 3);
+        
+        // Get 2-3 three-color combos (show first 3)
+        const threeColorCombos = colorAnalysisCard.three_color_combos.slice(0, 3);
+        
+        cardDiv.innerHTML = `
+          <div class="color-analysis-header">
+            <div class="color-analysis-title">Your Seasonal Palette</div>
+            <div class="color-analysis-palette">${paletteDisplayName}</div>
+            ${colorAnalysisCard.description ? `<div class="color-analysis-description">${colorAnalysisCard.description}</div>` : ''}
+          </div>
+          
+          <div class="color-analysis-section">
+            <div class="color-analysis-section-title">Top Colors</div>
+            <div class="color-swatches">
+              ${topColors.map(color => `
+                <div class="color-swatch">
+                  <div class="color-swatch-box" style="background-color: ${color.hex}"></div>
+                  <div class="color-swatch-name">${color.name}</div>
+                  <div class="color-swatch-hex">${color.hex}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+          
+          <div class="color-analysis-section">
+            <div class="color-analysis-section-title">Two-Color Combinations</div>
+            <div class="color-combo-swatches">
+              ${twoColorCombos.map(combo => {
+                const colors = parseCombo(combo);
+                const colorObjs = colors.map(name => findColorByName(name)).filter(c => c);
+                if (colorObjs.length === 0) return `<span class="color-combo">${combo}</span>`;
+                return `
+                  <div class="color-combo-item">
+                    <div class="color-combo-swatches-inline">
+                      ${colorObjs.map(color => `
+                        <div class="color-combo-swatch" style="background-color: ${color.hex}" title="${color.name}"></div>
+                      `).join('')}
+                    </div>
+                    <div class="color-combo-label">${combo}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+          
+          <div class="color-analysis-section">
+            <div class="color-analysis-section-title">Three-Color Combinations</div>
+            <div class="color-combo-swatches">
+              ${threeColorCombos.map(combo => {
+                const colors = parseCombo(combo);
+                const colorObjs = colors.map(name => findColorByName(name)).filter(c => c);
+                if (colorObjs.length === 0) return `<span class="color-combo">${combo}</span>`;
+                return `
+                  <div class="color-combo-item">
+                    <div class="color-combo-swatches-inline">
+                      ${colorObjs.map(color => `
+                        <div class="color-combo-swatch" style="background-color: ${color.hex}" title="${color.name}"></div>
+                      `).join('')}
+                    </div>
+                    <div class="color-combo-label">${combo}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+        
+        messageDiv.querySelector('.message-bubble').appendChild(cardDiv);
+      }
+
+      // Add vibe check card if present
+      if (vibeCheckCard) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'vibe-check-card';
+        
+        // Format score with one decimal place
+        const formatScore = (score) => {
+          return typeof score === 'number' ? score.toFixed(1) : score;
+        };
+        
+        // Get score color based on value (0-10 scale)
+        const getScoreColor = (score) => {
+          if (score >= 8) return 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+          if (score >= 6) return 'linear-gradient(135deg, var(--broadway-gold) 0%, var(--broadway-gold-dark) 100%)';
+          if (score >= 4) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+          return 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+        };
+        
+        cardDiv.innerHTML = `
+          <div class="vibe-check-header">
+            <div class="vibe-check-title">Vibe Check Results</div>
+            <div class="vibe-check-overall-score">
+              <div class="vibe-check-score-circle" style="background: ${getScoreColor(vibeCheckCard.overall_score)}">
+                ${formatScore(vibeCheckCard.overall_score)}
+              </div>
+              <div class="vibe-check-score-label">Overall Score</div>
+            </div>
+            ${vibeCheckCard.comment ? `<div class="vibe-check-comment">"${vibeCheckCard.comment}"</div>` : ''}
+          </div>
+          
+          <div class="vibe-check-section">
+            <div class="vibe-check-category">
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.fit_silhouette.score)}">
+                ${formatScore(vibeCheckCard.fit_silhouette.score)}
+              </div>
+              <div class="vibe-check-category-content">
+                <div class="vibe-check-category-name">Fit & Silhouette</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.fit_silhouette.explanation || ''}</div>
+              </div>
+            </div>
+            
+            <div class="vibe-check-category">
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.color_harmony.score)}">
+                ${formatScore(vibeCheckCard.color_harmony.score)}
+              </div>
+              <div class="vibe-check-category-content">
+                <div class="vibe-check-category-name">Color Harmony</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.color_harmony.explanation || ''}</div>
+              </div>
+            </div>
+            
+            <div class="vibe-check-category">
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.styling_details.score)}">
+                ${formatScore(vibeCheckCard.styling_details.score)}
+              </div>
+              <div class="vibe-check-category-content">
+                <div class="vibe-check-category-name">Styling Details</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.styling_details.explanation || ''}</div>
+              </div>
+            </div>
+            
+            <div class="vibe-check-category">
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.context_confidence.score)}">
+                ${formatScore(vibeCheckCard.context_confidence.score)}
+              </div>
+              <div class="vibe-check-category-content">
+                <div class="vibe-check-category-name">Context Confidence</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.context_confidence.explanation || ''}</div>
+              </div>
+            </div>
+          </div>
+          
+          ${vibeCheckCard.recommendations && vibeCheckCard.recommendations.length > 0 ? `
+            <div class="vibe-check-recommendations">
+              <div class="vibe-check-recommendations-title">Recommendations</div>
+              ${vibeCheckCard.recommendations.map(rec => `
+                <div class="vibe-check-recommendation-item">${rec}</div>
+              `).join('')}
+            </div>
+          ` : ''}
+        `;
+        
+        messageDiv.querySelector('.message-bubble').appendChild(cardDiv);
       }
 
       container.appendChild(messageDiv);
@@ -891,13 +1420,37 @@
         if (data.replies && data.replies.length > 0) {
           data.replies.forEach(reply => {
             const buttons = reply.buttons || null;
-            const imageUrl = reply.reply_type === 'image' ? reply.media_url : null;
+            // Only use media_url if it's a valid URL and reply type is 'image'
+            const imageUrl = reply.reply_type === 'image' && isValidUrl(reply.media_url) ? reply.media_url : null;
             const products = reply.reply_type === 'product_card' ? reply.products : null;
+            const colorAnalysisCard = reply.reply_type === 'color_analysis_card' ? {
+              palette_name: reply.palette_name,
+              description: reply.description,
+              top_colors: reply.top_colors,
+              two_color_combos: reply.two_color_combos,
+              three_color_combos: reply.three_color_combos
+            } : null;
+            const vibeCheckCard = reply.reply_type === 'vibe_check_card' ? {
+              comment: reply.comment,
+              fit_silhouette: reply.fit_silhouette,
+              color_harmony: reply.color_harmony,
+              styling_details: reply.styling_details,
+              context_confidence: reply.context_confidence,
+              overall_score: reply.overall_score,
+              recommendations: reply.recommendations
+            } : null;
             const text = reply.reply_text || '';
             
-            // If it's a product_card reply, only show products (text is optional)
+            // Handle different reply types
             if (reply.reply_type === 'product_card') {
               addMessage(text, false, null, null, products);
+            } else if (reply.reply_type === 'color_analysis_card') {
+              addMessage('', false, null, null, null, colorAnalysisCard);
+            } else if (reply.reply_type === 'vibe_check_card') {
+              addMessage('', false, null, null, null, null, null, vibeCheckCard);
+            } else if (reply.reply_type === 'pdf') {
+              const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
+              addMessage(text, false, buttons, imageUrl, null, null, pdfUrl);
             } else {
               addMessage(text, false, buttons, imageUrl, null);
             }
@@ -940,13 +1493,37 @@
         if (data.replies && data.replies.length > 0) {
           data.replies.forEach(reply => {
             const buttons = reply.buttons || null;
-            const imageUrl = reply.reply_type === 'image' ? reply.media_url : null;
+            // Only use media_url if it's a valid URL and reply type is 'image'
+            const imageUrl = reply.reply_type === 'image' && isValidUrl(reply.media_url) ? reply.media_url : null;
             const products = reply.reply_type === 'product_card' ? reply.products : null;
+            const colorAnalysisCard = reply.reply_type === 'color_analysis_card' ? {
+              palette_name: reply.palette_name,
+              description: reply.description,
+              top_colors: reply.top_colors,
+              two_color_combos: reply.two_color_combos,
+              three_color_combos: reply.three_color_combos
+            } : null;
+            const vibeCheckCard = reply.reply_type === 'vibe_check_card' ? {
+              comment: reply.comment,
+              fit_silhouette: reply.fit_silhouette,
+              color_harmony: reply.color_harmony,
+              styling_details: reply.styling_details,
+              context_confidence: reply.context_confidence,
+              overall_score: reply.overall_score,
+              recommendations: reply.recommendations
+            } : null;
             const replyText = reply.reply_text || '';
             
-            // If it's a product_card reply, only show products (text is optional)
+            // Handle different reply types
             if (reply.reply_type === 'product_card') {
               addMessage(replyText, false, null, null, products);
+            } else if (reply.reply_type === 'color_analysis_card') {
+              addMessage('', false, null, null, null, colorAnalysisCard);
+            } else if (reply.reply_type === 'vibe_check_card') {
+              addMessage('', false, null, null, null, null, null, vibeCheckCard);
+            } else if (reply.reply_type === 'pdf') {
+              const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
+              addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
             } else {
               addMessage(replyText, false, buttons, imageUrl, null);
             }

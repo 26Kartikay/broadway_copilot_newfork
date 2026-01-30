@@ -2,6 +2,7 @@ import { PendingType, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai';
 import { MessageInput, QuickReplyButton } from '../lib/chat/types';
+import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
 import { TraceBuffer } from './tracing';
 
 // ============================================================================
@@ -68,8 +69,27 @@ export interface GraphState {
 
   thisOrThatFirstImageId?: string | undefined;
 
+  /** The seasonal palette to be saved, pending user confirmation. */
+  seasonalPaletteToSave?: string;
+
+  /** Context for product recommendations. */
+  productRecommendationContext?:
+    | {
+        type: 'color_palette';
+        paletteName: string;
+      }
+    | {
+        type: 'vibe_check';
+        recommendations: string[];
+      };
+
   /** Replies returned in the HTTP response */
   httpResponse?: Replies;
+
+  /** Fashion quiz state */
+  quizQuestions?: any[] | undefined; // Will be properly typed with QuizQuestionSchema
+  quizAnswers?: string[] | undefined;
+  currentQuestionIndex?: number | undefined;
 }
 
 // ============================================================================
@@ -87,7 +107,8 @@ export type IntentLabel =
   | 'style_studio'
   | 'styling'
   | 'this_or_that'
-  | 'skin_lab';
+  | 'skin_lab'
+  | 'fashion_quiz';
 
 /**
  * Specific styling intents for fashion/styling related requests.
@@ -127,6 +148,10 @@ export interface ProductRecommendation {
   productLink: string;
   reason?: string;
 }
+export interface ScoringCategory {
+  score: number;
+  explanation: string;
+}
 
 /**
  * Standard reply structure for agent responses.
@@ -156,6 +181,30 @@ type Reply =
       reply_type: 'product_card';
       products: ProductRecommendation[];
       reply_text?: string;
+    }
+  | {
+      reply_type: 'pdf';
+      media_url: string;
+    }
+  | {
+      reply_type: 'color_analysis_card';
+      palette_name: SeasonalPalette;
+      description: string;
+      top_colors: ColorWithHex[];
+      two_color_combos: string[];
+      three_color_combos: string[];
+      user_image_url: string | null;
+    }
+  | {
+      reply_type: 'vibe_check_card';
+      comment: string;
+      fit_silhouette: ScoringCategory;
+      color_harmony: ScoringCategory;
+      styling_details: ScoringCategory;
+      context_confidence: ScoringCategory;
+      overall_score: number;
+      recommendations: string[];
+      user_image_url: string | null;
     };
 
 /**
@@ -168,4 +217,4 @@ export type Replies = Reply[];
  * Missing profile fields that need to be collected from the user.
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
-export type MissingProfileField = 'gender' | 'age_group';
+export type MissingProfileField = 'gender' | 'age_group' | 'fitPreference';

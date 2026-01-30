@@ -210,8 +210,6 @@ export interface ChatResponse {
   replies: Replies;
   /** Pending action type, if any (legacy - use metadata.session_state) */
   pending: string | null;
-  /** Additional response context and metadata */
-  metadata?: ResponseMetadata;
 }
 
 // ================================
@@ -341,12 +339,7 @@ export const EXAMPLE_CHAT_RESPONSE: ChatResponse = {
       expected_action: 'button_click'
     }
   ],
-  pending: null,
-  metadata: {
-    session_state: 'initial',
-    conversation_id: 'conv_123',
-    timestamp: new Date().toISOString()
-  }
+  pending: null
 };
 
 // ================================
@@ -407,3 +400,4 @@ export function chatRequestToMessageInput(
 
   return input;
 }
+

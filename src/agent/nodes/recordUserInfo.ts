@@ -1,53 +1,63 @@
-import { z } from 'zod';
+import { AgeGroup, Gender, PendingType, Fit } from '@prisma/client';
 
-import { AgeGroup, Gender, PendingType } from '@prisma/client';
-
-import { getTextLLM } from '../../lib/ai';
-import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { loadPrompt } from '../../utils/prompts';
 import { GraphState } from '../state';
 
 /**
- * Structured output schema for confirming user profile fields.
- */
-const LLMOutputSchema = z.object({
-  confirmed_gender: z
-    .enum(Gender)
-    .describe("The user's inferred gender, which must be one of the values from the Gender enum."),
-  confirmed_age_group: z
-    .enum(AgeGroup)
-    .describe(
-      "The user's inferred age group, which must be one of the values from the AgeGroup enum.",
-    ),
-});
-
-/**
- * Extracts and persists confirmed user profile fields inferred from recent conversation.
+ * Extracts and persists confirmed user profile fields from a button payload.
  * Resets pending state to NONE when complete.
  */
 export async function recordUserInfo(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
+  const buttonPayload = state.input.ButtonPayload;
+
+  if (!buttonPayload) {
+    logger.warn({ userId }, 'recordUserInfo called without a button payload. This may happen if the user types their answer. The current implementation only handles button clicks for this flow.');
+    // Do nothing and let the conversation continue. The profile will be updated on the next relevant action.
+    return { ...state, pending: PendingType.NONE };
+  }
+
   try {
-    const systemPromptText = await loadPrompt('data/record_user_info.txt');
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const [field, ...valueParts] = buttonPayload.split('_');
+    const value = valueParts.join('_');
 
-    const response = await getTextLLM()
-      .withStructuredOutput(LLMOutputSchema)
-      .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'recordUserInfo');
+    let dataToUpdate: { confirmedGender?: Gender; confirmedAgeGroup?: AgeGroup; fitPreference?: Fit } = {};
 
-    const user = await prisma.user.update({
-      where: { id: state.user.id },
-      data: {
-        confirmedGender: response.confirmed_gender,
-        confirmedAgeGroup: response.confirmed_age_group,
-      },
-    });
-    logger.debug({ userId }, 'User info recorded successfully');
-    return { ...state, user, pending: PendingType.NONE };
+    if (field === 'gender' && value !== 'skip') {
+      if (Object.values(Gender).includes(value as Gender)) {
+        dataToUpdate.confirmedGender = value as Gender;
+      } else {
+        logger.warn({ userId, value }, 'Invalid gender value received from button payload.');
+      }
+    } else if (field === 'age') {
+      if (Object.values(AgeGroup).includes(value as AgeGroup)) {
+        dataToUpdate.confirmedAgeGroup = value as AgeGroup;
+      } else {
+        logger.warn({ userId, value }, 'Invalid age group value received from button payload.');
+      }
+    } else if (field === 'fit') {
+      if (Object.values(Fit).includes(value as Fit)) {
+        dataToUpdate.fitPreference = value as Fit;
+      } else {
+        logger.warn({ userId, value }, 'Invalid fit value received from button payload.');
+      }
+    }
+
+    if (Object.keys(dataToUpdate).length > 0) {
+      const user = await prisma.user.update({
+        where: { id: state.user.id },
+        data: dataToUpdate,
+      });
+      logger.debug({ userId, updatedFields: Object.keys(dataToUpdate) }, 'User info recorded successfully from button payload');
+      return { ...state, user, pending: PendingType.NONE };
+    }
+
+    logger.debug({ userId, buttonPayload }, 'User may have skipped providing info.');
+    return { ...state, pending: PendingType.NONE };
+
   } catch (err: unknown) {
-    throw new InternalServerError('Failed to record user info', { cause: err });
+    throw new InternalServerError('Failed to record user info from button payload', { cause: err });
   }
 }

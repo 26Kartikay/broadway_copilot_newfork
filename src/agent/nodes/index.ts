@@ -1,6 +1,7 @@
 export * from './askUserInfo';
 export * from './colorAnalysis';
 export * from './dailyFact';
+export * from './handleFashionCharades';
 export * from './handleFeedback';
 export * from './handleGeneral';
 export * from './handleStyleStudio';
@@ -15,4 +16,5 @@ export * from './vibeCheck';
 export * from './routeStyleStudio';
 export * from './handleSkinLab';
 export * from './handleThisOrThat';
-
+export * from './handleSaveColorAnalysis';
+export * from './handleProductRecommendationConfirmation';
