@@ -42,6 +42,10 @@ const LLMOutputSchema = z.object({
     .string()
     .nullable()
     .describe('Error message to show if image quality is poor (null if quality_ok is true).'),
+  inferred_gender: z
+    .enum(['MALE', 'FEMALE'])
+    .nullable()
+    .describe('The inferred gender of the person in the image. Null if unable to infer.'),
 });
 
 const NoImageLLMOutputSchema = z.object({
@@ -146,14 +150,22 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
     // Determine color twin celebrities
     let colorTwins: Celebrity[] = [];
-    const gender = state.user.confirmedGender || state.user.inferredGender; // Assuming 'male' or 'female'
+    const inferredGender = output.inferred_gender;
+    const userProfileGender = state.user.confirmedGender || state.user.inferredGender;
 
-    if (gender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
+    let determinedGender: Gender | null = null;
+    if (inferredGender === 'MALE' || inferredGender === 'FEMALE') {
+      determinedGender = Gender[inferredGender]; // Convert string 'MALE'/'FEMALE' to Gender.MALE/Gender.FEMALE
+    } else if (userProfileGender) {
+      determinedGender = userProfileGender;
+    }
+
+    if (determinedGender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
       colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
-    } else if (gender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
+    } else if (determinedGender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
       colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
     } else {
-      // If gender is unknown or not explicitly male/female, provide a mix
+      // Fallback: If gender is still unknown, provide a mix
       const maleCelebs = celebrityPalettes[paletteName]?.male || [];
       const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
       colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4); // Limit to 4 mixed examples
