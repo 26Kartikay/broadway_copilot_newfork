@@ -10,7 +10,7 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 
-import { PendingType } from '@prisma/client';
+import { PendingType, Gender } from '@prisma/client';
 import { GraphState, Replies } from '../state';
 
 /**
@@ -148,9 +148,9 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     let colorTwins: Celebrity[] = [];
     const gender = state.user.confirmedGender || state.user.inferredGender; // Assuming 'male' or 'female'
 
-    if (gender === 'male' && celebrityPalettes[paletteName]?.male) {
+    if (gender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
       colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
-    } else if (gender === 'female' && celebrityPalettes[paletteName]?.female) {
+    } else if (gender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
       colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
     } else {
       // If gender is unknown or not explicitly male/female, provide a mix
