@@ -29,9 +29,9 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
 
   try {
     // ------------------------------------------
-    // Greeting Intent — Uses List Picker
+    // Greeting/Menu Intent — Uses List Picker
     // ------------------------------------------
-    if (generalIntent === 'greeting') {
+    if (generalIntent === 'greeting' || generalIntent === 'menu') {
       const greetingText = `✨ Welcome, ${user.profileName || 'there'}! Let's explore some Broadway magic.\n\nWhat would you like to do today?`;
 
       const replies: Replies = [
@@ -50,16 +50,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
         },
       ];
 
-      logger.debug({ userId, messageId }, 'Greeting handled with image and list picker');
-      return { ...state, assistantReply: replies };
-    }
-
-    // ------------------------------------------
-    // Menu Intent
-    // ------------------------------------------
-    if (generalIntent === 'menu') {
-      const replies = getMainMenuReply('Please choose one of the following options:');
-      logger.debug({ userId, messageId }, 'Menu handled with dynamic response');
+      logger.debug({ userId, messageId }, 'Greeting/Menu handled with image and list picker');
       return { ...state, assistantReply: replies };
     }
 

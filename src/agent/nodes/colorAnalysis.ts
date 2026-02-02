@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
-import { getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
+import { ColorWithHex, getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
+import { Celebrity, celebrityPalettes } from '../../data/celebrityPalettes'; // Import Celebrity data
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
@@ -54,10 +55,32 @@ function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    [shuffled[i]!, shuffled[j]!] = [shuffled[j]!, shuffled[i]!];
   }
   return shuffled;
 }
+
+/**
+ * Formats color combination strings into structured data with hex codes.
+ * @param combos An array of color combination strings (e.g., "Color1 & Color2").
+ * @param allColors An array of all available colors with their hex codes.
+ * @returns A structured array of color combinations with names and hex codes.
+ */
+function formatColorCombos(combos: string[], allColors: ColorWithHex[]): ColorWithHex[][] {
+  const colorMap = new Map(allColors.map((color) => [color.name.toLowerCase(), color.hex]));
+
+  return combos.map((combo) => {
+    // Split by " & " or ", " and trim whitespace
+    const colorNames = combo.split(/ & |, /).map((name) => name.trim());
+
+    return colorNames.map((name) => {
+      const hex = colorMap.get(name.toLowerCase());
+      // Return a default or handle missing colors if necessary
+      return { name, hex: hex || '#000000' };
+    });
+  });
+}
+
 
 /**
  * Performs color analysis from a portrait and returns a WhatsApp-friendly text reply; logs and persists results.
@@ -81,7 +104,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'colorAnalysis');
 
 
-    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
+    const replies: Replies = [{ reply_type: 'color_analysis_image_upload_request', reply_text: response.reply_text }];
     return {
       ...state,
       assistantReply: replies,
@@ -121,6 +144,21 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     // Get palette data from mapping
     const paletteData = getPaletteData(paletteName);
 
+    // Determine color twin celebrities
+    let colorTwins: Celebrity[] = [];
+    const gender = state.user.confirmedGender || state.user.inferredGender; // Assuming 'male' or 'female'
+
+    if (gender === 'male' && celebrityPalettes[paletteName]?.male) {
+      colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
+    } else if (gender === 'female' && celebrityPalettes[paletteName]?.female) {
+      colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
+    } else {
+      // If gender is unknown or not explicitly male/female, provide a mix
+      const maleCelebs = celebrityPalettes[paletteName]?.male || [];
+      const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
+      colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4); // Limit to 4 mixed examples
+    }
+
     // Find the latest message with an image in the conversation history
     const imageMessage = [...state.conversationHistoryWithImages]
       .reverse()
@@ -144,9 +182,9 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         palette_name: paletteName,
         description: paletteData.description,
         top_colors: shuffleArray(paletteData.topColors),
-        two_color_combos: shuffleArray(paletteData.twoColorCombos),
-        three_color_combos: shuffleArray(paletteData.threeColorCombos),
+        two_color_combos: shuffleArray(formatColorCombos(paletteData.twoColorCombos, paletteData.topColors)),
         user_image_url: userImageUrl,
+        color_twin: colorTwins, // Add the color twin celebrities
       },
       {
         reply_type: 'quick_reply',

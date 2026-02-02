@@ -3,7 +3,7 @@ import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { GraphState, Replies, ProductRecommendation } from '../state';
 import { searchProducts } from '../tools';
-import { getPaletteData } from '../../data/seasonalPalettes';
+import { getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
 import { getMainMenuReply } from './common';
 import { getTextLLM } from '../../lib/ai';
 import { logger } from '../../utils/logger';
@@ -36,7 +36,7 @@ export async function handleProductRecommendationConfirmation(state: GraphState)
   let systemPrompt: SystemMessage;
   const gender = user.confirmedGender || user.inferredGender || 'unknown';
 
-  if (productRecommendationContext?.type === 'color_palette') {
+  if (productRecommendationContext?.type === 'color_palette' && isValidPalette(productRecommendationContext.paletteName)) {
       const paletteData = getPaletteData(productRecommendationContext.paletteName);
       const colors = paletteData.topColors.map(c => c.name).slice(0, 3);
       const colorList = colors.join(', ');

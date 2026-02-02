@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { MessageRole, PendingType } from '@prisma/client';
+import { MessageRole, PendingType, Prisma } from '@prisma/client';
 import { MessageContent, MessageContentPart } from '../../lib/ai';
 
 import { Tonality } from '@prisma/client';
@@ -43,7 +43,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
 
   const formattedContent: MessageContent = orderedReplies.flatMap((r) => {
     const parts: MessageContentPart[] = [];
-    if (r.reply_text) {
+    if ('reply_text' in r && r.reply_text) {
       parts.push({ type: 'text', text: r.reply_text });
     }
     if (r.reply_type === 'image') {
@@ -89,7 +89,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       content: formattedContent,
       pending: pendingToPersist,
       selectedTonality: selectedTonalityToPersality,
-      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : undefined,
+      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
     },
   });
 
