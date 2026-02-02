@@ -1,3 +1,4 @@
+import { User, PendingType } from '@prisma/client';
 import { BaseMessage } from '../lib/ai';
 import { MessageInput, QuickReplyButton } from '../lib/chat/types';
 import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
