@@ -1,8 +1,7 @@
-import { PendingType, User } from '@prisma/client';
-
 import { BaseMessage } from '../lib/ai';
 import { MessageInput, QuickReplyButton } from '../lib/chat/types';
 import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
+import { Celebrity } from '../data/celebrityPalettes'; // Import Celebrity interface
 import { TraceBuffer } from './tracing';
 
 export type { QuickReplyButton };
@@ -201,6 +200,7 @@ type Reply =
       top_colors: ColorWithHex[];
       two_color_combos: ColorWithHex[][];
       user_image_url: string | null;
+      color_twin: Celebrity[];
     }
   | {
       reply_type: 'vibe_check_card';
@@ -225,3 +225,4 @@ export type Replies = Reply[];
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
 export type MissingProfileField = 'gender' | 'age_group' | 'fitPreference';
+

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
 import { ColorWithHex, getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
+import { Celebrity, celebrityPalettes } from '../../data/celebrityPalettes'; // Import Celebrity data
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
@@ -143,6 +144,21 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     // Get palette data from mapping
     const paletteData = getPaletteData(paletteName);
 
+    // Determine color twin celebrities
+    let colorTwins: Celebrity[] = [];
+    const gender = state.user.confirmedGender || state.user.inferredGender; // Assuming 'male' or 'female'
+
+    if (gender === 'male' && celebrityPalettes[paletteName]?.male) {
+      colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
+    } else if (gender === 'female' && celebrityPalettes[paletteName]?.female) {
+      colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
+    } else {
+      // If gender is unknown or not explicitly male/female, provide a mix
+      const maleCelebs = celebrityPalettes[paletteName]?.male || [];
+      const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
+      colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4); // Limit to 4 mixed examples
+    }
+
     // Find the latest message with an image in the conversation history
     const imageMessage = [...state.conversationHistoryWithImages]
       .reverse()
@@ -168,6 +184,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         top_colors: shuffleArray(paletteData.topColors),
         two_color_combos: shuffleArray(formatColorCombos(paletteData.twoColorCombos, paletteData.topColors)),
         user_image_url: userImageUrl,
+        color_twin: colorTwins, // Add the color twin celebrities
       },
       {
         reply_type: 'quick_reply',
