@@ -104,7 +104,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'colorAnalysis');
 
 
-    const replies: Replies = [{ reply_type: 'image_upload_request', reply_text: response.reply_text, require_image_upload: true }];
+    const replies: Replies = [{ reply_type: 'color_analysis_image_upload_request', reply_text: response.reply_text }];
     return {
       ...state,
       assistantReply: replies,

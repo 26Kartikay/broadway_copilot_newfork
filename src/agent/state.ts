@@ -178,10 +178,13 @@ type Reply =
       media_url: string;
       reply_text?: string;
     }
-    | {
-      reply_type: 'image_upload_request';
+  | {
+      reply_type: 'color_analysis_image_upload_request';
       reply_text: string;
-      require_image_upload: boolean;
+    }
+  | {
+      reply_type: 'vibe_check_image_upload_request';
+      reply_text: string;
     }
   | {
       reply_type: 'product_card';
