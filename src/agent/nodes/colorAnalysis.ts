@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
-import { getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
+import { ColorWithHex, getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
@@ -60,6 +60,28 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
+ * Formats color combination strings into structured data with hex codes.
+ * @param combos An array of color combination strings (e.g., "Color1 & Color2").
+ * @param allColors An array of all available colors with their hex codes.
+ * @returns A structured array of color combinations with names and hex codes.
+ */
+function formatColorCombos(combos: string[], allColors: ColorWithHex[]): ColorWithHex[][] {
+  const colorMap = new Map(allColors.map((color) => [color.name.toLowerCase(), color.hex]));
+
+  return combos.map((combo) => {
+    // Split by " & " or ", " and trim whitespace
+    const colorNames = combo.split(/ & |, /).map((name) => name.trim());
+
+    return colorNames.map((name) => {
+      const hex = colorMap.get(name.toLowerCase());
+      // Return a default or handle missing colors if necessary
+      return { name, hex: hex || '#000000' };
+    });
+  });
+}
+
+
+/**
  * Performs color analysis from a portrait and returns a WhatsApp-friendly text reply; logs and persists results.
  * @param state The current agent state.
  */
@@ -81,7 +103,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'colorAnalysis');
 
 
-    const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
+    const replies: Replies = [{ reply_type: 'image_upload_request', reply_text: response.reply_text, require_image_upload: true }];
     return {
       ...state,
       assistantReply: replies,
@@ -144,8 +166,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         palette_name: paletteName,
         description: paletteData.description,
         top_colors: shuffleArray(paletteData.topColors),
-        two_color_combos: shuffleArray(paletteData.twoColorCombos),
-        three_color_combos: shuffleArray(paletteData.threeColorCombos),
+        two_color_combos: shuffleArray(formatColorCombos(paletteData.twoColorCombos, paletteData.topColors)),
         user_image_url: userImageUrl,
       },
       {

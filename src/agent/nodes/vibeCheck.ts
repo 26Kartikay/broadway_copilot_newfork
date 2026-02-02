@@ -89,7 +89,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       const response = await getTextLLM()
         .withStructuredOutput(NoImageLLMOutputSchema)
         .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'vibeCheck');
-      const replies: Replies = [{ reply_type: 'text', reply_text: response.reply_text }];
+      const replies: Replies = [{ reply_type: 'image_upload_request', reply_text: response.reply_text, require_image_upload: true }];
       return {
         ...state,
         assistantReply: replies,

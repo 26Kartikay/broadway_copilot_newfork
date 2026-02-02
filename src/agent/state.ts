@@ -179,6 +179,11 @@ type Reply =
       media_url: string;
       reply_text?: string;
     }
+    | {
+      reply_type: 'image_upload_request';
+      reply_text: string;
+      require_image_upload: boolean;
+    }
   | {
       reply_type: 'product_card';
       products: ProductRecommendation[];
@@ -194,8 +199,7 @@ type Reply =
       palette_name: SeasonalPalette;
       description: string;
       top_colors: ColorWithHex[];
-      two_color_combos: string[];
-      three_color_combos: string[];
+      two_color_combos: ColorWithHex[][];
       user_image_url: string | null;
     }
   | {
