@@ -3,6 +3,7 @@ import 'dotenv/config';
 import cors from 'cors';
 import { randomUUID } from 'crypto';
 import express, { NextFunction, Request, Response } from 'express';
+import path from 'path';
 
 import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
@@ -58,7 +59,7 @@ app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
 
 app.use('/uploads', express.static(staticUploadsMount()));
-app.use(express.static('public'));
+app.use(express.static(path.join(process.cwd(), 'public')));
 
 /**
  * Health check endpoint
