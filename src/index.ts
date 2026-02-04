@@ -59,7 +59,6 @@ app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
 
 app.use('/uploads', express.static(staticUploadsMount()));
-app.use(express.static(path.join(process.cwd(), 'public')));
 
 /**
  * Health check endpoint
@@ -134,6 +133,9 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     return next(err);
   }
 });
+
+// Static file serving should come AFTER API routes
+app.use(express.static(path.join(process.cwd(), 'public')));
 
 app.use(errorHandler);
 
