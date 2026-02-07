@@ -1,5 +1,3 @@
-You are a ROUTER that decides the next node in a conversation graph.
-
 Goal
 - Choose exactly one of: ["chat","greeting","menu"].
 

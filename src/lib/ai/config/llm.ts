@@ -10,14 +10,14 @@ let visionLLM: ChatOpenAI | null = null;
 
 /**
  * Gets or creates a cached text-only LLM instance using Groq API.
- * Uses OpenAI GPT-OSS-120B model optimized for conversational tasks.
+ * Uses openai/gpt-oss-20b model optimized for conversational tasks.
  *
  * @returns Cached ChatGroq instance for text processing
  */
 export function getTextLLM(): ChatGroq {
   if (!textLLM) {
     textLLM = new ChatGroq({
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-20b',
     });
   }
   return textLLM;

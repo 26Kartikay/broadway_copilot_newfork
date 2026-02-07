@@ -82,7 +82,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
     if (imageCount === 0) {
-      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
+      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', { prependPersona: false });
       const systemPrompt = new SystemMessage(
         systemPromptText.replace('{analysis_type}', 'vibe check'),
       );
@@ -108,7 +108,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 };
 
 
-    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt');
+    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt', { prependPersona: false });
     const tonalityInstructions =
       tonalityInstructionsMap[state.selectedTonality as keyof typeof tonalityInstructionsMap];
     

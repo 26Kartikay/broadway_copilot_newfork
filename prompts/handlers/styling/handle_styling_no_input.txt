@@ -2,11 +2,10 @@
 The user has indicated a styling intent (`{INTENT}`) but hasn't provided any details.
 
 ## Task
-Craft a witty, engaging question to get the specific information you need to help them.
+Craft a question to get the specific information you need to help them.
 
 ## Guidelines
 - Your question should be specific to the `{INTENT}`.
-- Keep it under 30 words and conversational. Make replies punchy, witty, and engaging—hook them fast, avoid walls of text.
 - Output ONLY the message text.
 
 ## Output Format
