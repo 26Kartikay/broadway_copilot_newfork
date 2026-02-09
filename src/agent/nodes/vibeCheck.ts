@@ -13,6 +13,7 @@ import { loadPrompt } from '../../utils/prompts';
 import { PendingType, Prisma } from '@prisma/client';
 import { InternalServerError } from '../../utils/errors';
 import { GraphState, Replies } from '../state';
+import { isGuestUser } from '../../utils/user'; // Import the utility function
 
 const ScoringCategorySchema = z.object({
   score: z.number().min(0).max(10).describe('Score as a fractional number between 0 and 10.'),
@@ -149,15 +150,25 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       userId,
     };
 
-    const [, user] = await prisma.$transaction([
-      prisma.vibeCheck.create({ data: vibeCheckData }),
-      prisma.user.update({
-        where: { id: userId },
-        data: { lastVibeCheckAt: new Date() },
-      }),
-    ]);
+    const guestUser = isGuestUser(state.user);
+    let updatedUser = state.user; // Start with current user in state
 
-    queueWardrobeIndex(userId, latestMessageId);
+    let mainReplies: Replies = [];
+    if (guestUser) {
+        logger.debug({ userId }, 'Guest user performed vibe check, results not saved.');
+        mainReplies.push({ reply_type: 'text', reply_text: "As a guest user, I can't save your vibe check results. Sign up to save your progress!" });
+    } else {
+        const [, userTransactionResult] = await prisma.$transaction([
+            prisma.vibeCheck.create({ data: vibeCheckData }),
+            prisma.user.update({
+                where: { id: userId },
+                data: { lastVibeCheckAt: new Date() },
+            }),
+        ]);
+        updatedUser = userTransactionResult; // Update user object if transaction was successful
+
+        queueWardrobeIndex(userId, latestMessageId); // Only queue if not guest
+    }
 
     // Find the latest message with an image in the conversation history
     const imageMessage = [...state.conversationHistoryWithImages]
@@ -175,19 +186,17 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       }
     }
 
-    const replies: Replies = [
-      {
-        reply_type: 'vibe_check_card',
-        comment: result.comment,
-        fit_silhouette: result.fit_silhouette,
-        color_harmony: result.color_harmony,
-        styling_details: result.styling_details,
-        context_confidence: result.context_confidence,
-        overall_score: result.overall_score,
-        recommendations: result.recommendations,
-        user_image_url: userImageUrl,
-      },
-    ];
+    mainReplies.push({ // Always push the vibe check card regardless of guest status
+      reply_type: 'vibe_check_card',
+      comment: result.comment,
+      fit_silhouette: result.fit_silhouette,
+      color_harmony: result.color_harmony,
+      styling_details: result.styling_details,
+      context_confidence: result.context_confidence,
+      overall_score: result.overall_score,
+      recommendations: result.recommendations,
+      user_image_url: userImageUrl,
+    });
 
     // Add the product recommendation question
     const recommendationQuestion: Replies = [
@@ -200,12 +209,12 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         ],
       },
     ];
-    replies.push(...recommendationQuestion);
+    mainReplies.push(...recommendationQuestion);
 
     return {
       ...state,
-      user,
-      assistantReply: replies,
+      user: updatedUser,
+      assistantReply: mainReplies,
       pending: PendingType.CONFIRM_PRODUCT_RECOMMENDATION,
       productRecommendationContext: {
           type: 'vibe_check',

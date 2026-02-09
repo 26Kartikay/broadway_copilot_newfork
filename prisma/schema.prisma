@@ -16,16 +16,14 @@ enum MessageRole {
   TOOL
 }
 enum Gender {
-  MALE
-  FEMALE
+  MALE @map("male")
+  FEMALE @map("female")
+  OTHER @map("other")
 }
 enum AgeGroup {
-  AGE_13_17
-  AGE_18_25
-  AGE_26_35
-  AGE_36_45
-  AGE_46_55
-  AGE_55_PLUS
+  TEEN @map("teen")
+  ADULT @map("adult")
+  SENIOR @map("senior")
 }
 enum PendingType {
   NONE
@@ -100,26 +98,28 @@ enum Tonality {
 }
 
 enum Fit {
-  SLIM
-  REGULAR
-  OVERSIZED
+  LOW @map("low")
+  MEDIUM @map("medium")
+  HIGH @map("high")
 }
 
 // --- CORE ---
 
 model User {
   id          String @id @default(cuid())
+  appUserId   String @unique
   whatsappId  String @unique
   profileName String @default("")
 
-  inferredGender    Gender?
-  inferredAgeGroup  AgeGroup?
   confirmedGender   Gender?
   confirmedAgeGroup AgeGroup?
   fitPreference     Fit?
 
   lastVibeCheckAt     DateTime?
   lastColorAnalysisAt DateTime?
+
+  lastSyncedAt DateTime?
+  syncVersion  BigInt?
 
   createdAt DateTime @default(now())
   
@@ -134,6 +134,7 @@ model User {
   tasks         Task[]
   graphRuns     GraphRun[]
 
+  @@index([appUserId])
   @@index([createdAt])
 }
 

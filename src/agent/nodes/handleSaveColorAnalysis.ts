@@ -5,11 +5,14 @@ import { logger } from '../../utils/logger';
 import { getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
 import { InternalServerError } from '../../utils/errors';
 import { getMainMenuReply } from './common';
+import { isGuestUser } from '../../utils/user'; // Import the utility function
 
 export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphState> {
   const userId = state.user.id;
   const userResponse = state.input.ButtonPayload;
   const paletteNameToSave = state.seasonalPaletteToSave;
+
+  const guestUser = isGuestUser(state.user);
 
   let replyText: string;
   const confirmationReplies: Replies = []; // Declare and initialize here
@@ -20,39 +23,49 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
       throw new InternalServerError(`Invalid palette name: ${paletteNameToSave}`);
     }
 
-    const paletteData = getPaletteData(paletteNameToSave); // Get paletteData here once
+    if (guestUser) {
+      replyText = "As a guest user, I can't save your color palette. Sign up to save your results!";
+      logger.debug({ userId }, 'Guest user tried to save color analysis result, but saving is disabled.');
+    } else {
+      const paletteData = getPaletteData(paletteNameToSave); // Get paletteData here once
 
-    await prisma.colorAnalysis.create({
-      data: {
-        userId,
-        palette_name: paletteNameToSave,
-        colors_suited: paletteData.topColors as any,
-        colors_to_wear: {
-          two_color_combos: paletteData.twoColorCombos,
-          three_color_combos: paletteData.threeColorCombos,
-        } as any,
-        colors_to_avoid: Prisma.JsonNull,
-      },
-    });
+      await prisma.colorAnalysis.create({
+        data: {
+          userId,
+          palette_name: paletteNameToSave,
+          colors_suited: paletteData.topColors as any,
+          colors_to_wear: {
+            two_color_combos: paletteData.twoColorCombos,
+            three_color_combos: paletteData.threeColorCombos,
+          } as any,
+          colors_to_avoid: Prisma.JsonNull,
+        },
+      });
 
-    await prisma.user.update({
-      where: { id: state.user.id },
-      data: { lastColorAnalysisAt: new Date() },
-    });
+      await prisma.user.update({
+        where: { id: state.user.id },
+        data: { lastColorAnalysisAt: new Date() },
+      });
 
-    replyText = "I've saved your color palette to your profile.";
-    logger.debug({ userId, paletteNameToSave }, 'User confirmed to save color analysis result.');
+      replyText = "I've saved your color palette to your profile.";
+      logger.debug({ userId, paletteNameToSave }, 'User confirmed to save color analysis result.');
+    }
 
     confirmationReplies.push({ // Push the text reply first
         reply_type: 'text',
         reply_text: replyText,
     });
-    const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
-    confirmationReplies.push({ // Then push the PDF
-        reply_type: 'pdf',
-        media_url: `${baseUrl}/${paletteData.pdfPath}`,
-        reply_text: "Here is your color palette guide.",
-    });
+
+    // Only provide PDF if not a guest user AND saving was confirmed
+    if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
+        const paletteData = getPaletteData(paletteNameToSave);
+        const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+        confirmationReplies.push({ // Then push the PDF
+            reply_type: 'pdf',
+            media_url: `${baseUrl}/${paletteData.pdfPath}`,
+            reply_text: "Here is your color palette guide.",
+        });
+    }
 
   } else {
     replyText = "No problem. I won't save your color palette.";

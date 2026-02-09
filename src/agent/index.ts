@@ -190,6 +190,7 @@ export async function runAgentForHttp(
     const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
       identifierId,
       profileName ?? '',
+      identifierId, // appUserId is the same as identifierId for initial user creation
     );
     conversation = _conversation;
 

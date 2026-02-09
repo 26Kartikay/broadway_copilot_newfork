@@ -6,6 +6,7 @@ import { prisma } from '../../lib/prisma';
 import { queueMemoryExtraction } from '../../lib/tasks';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
+import { isGuestUser } from '../../utils/user'; // Import isGuestUser
 
 const FEEDBACK_ACK_FALLBACK =
   "Thanks so much for sharing—I'm really glad I can keep making your styling chats better!";
@@ -65,7 +66,11 @@ export async function handleFeedback(state: GraphState): Promise<GraphState> {
       });
     });
 
-    queueMemoryExtraction(user.id, conversationId);
+    if (!isGuestUser(user)) {
+      queueMemoryExtraction(user.id, conversationId);
+    } else {
+      logger.debug({ userId: user.id, conversationId }, 'Skipped memory extraction for guest user from feedback.');
+    }
 
     replies = [
       {

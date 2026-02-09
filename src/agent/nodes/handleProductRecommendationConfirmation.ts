@@ -34,7 +34,7 @@ export async function handleProductRecommendationConfirmation(state: GraphState)
   logger.debug({ userId: user.id }, 'User wants product recommendations, calling agent.');
   const tools = [searchProducts()];
   let systemPrompt: SystemMessage;
-  const gender = user.confirmedGender || user.inferredGender || 'unknown';
+  const gender = user.confirmedGender || 'unknown';
 
   if (productRecommendationContext?.type === 'color_palette' && isValidPalette(productRecommendationContext.paletteName)) {
       const paletteData = getPaletteData(productRecommendationContext.paletteName);
