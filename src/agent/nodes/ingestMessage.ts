@@ -30,14 +30,16 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     throw new Error('User ID not found in message input');
   }
 
-  let media: { serverUrl: string; aiUrl: string; originalUrl: string; mimeType: string } | undefined;
+  let media:
+    | { serverUrl: string; aiUrl: string; originalUrl: string; mimeType: string }
+    | undefined;
   let content: MessageContent = [{ type: 'text', text }];
 
   if (numMedia === '1' && mediaUrl0 && mediaContentType0?.startsWith('image/')) {
     try {
       // Process media for both AI (OpenAI) and storage
       const { aiUrl, serverUrl } = await processMediaForAI(mediaUrl0, userId, mediaContentType0);
-      
+
       // Use aiUrl for conversation history (works with OpenAI locally and in prod)
       content.push({ type: 'image_url', image_url: { url: aiUrl } });
       media = { serverUrl, aiUrl, originalUrl: mediaUrl0, mimeType: mediaContentType0 };
@@ -227,7 +229,8 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     pending: state.pending ?? dbPending,
     selectedTonality: state.selectedTonality ?? dbSelectedTonality,
     thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId,
-    productRecommendationContext: state.productRecommendationContext ?? productRecommendationContextFromDB,
+    productRecommendationContext:
+      state.productRecommendationContext ?? productRecommendationContextFromDB,
     seasonalPaletteToSave: state.seasonalPaletteToSave ?? seasonalPaletteToSaveFromDB,
     user,
     input,

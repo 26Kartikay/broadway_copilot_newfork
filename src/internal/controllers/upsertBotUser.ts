@@ -1,16 +1,20 @@
 // src/internal/controllers/upsertBotUser.ts
+import { AgeGroup, Fit, Gender } from '@prisma/client'; // Import Prisma enum types
 import { Request, Response } from 'express';
 import { prisma } from '../../lib/prisma';
-import { Gender, AgeGroup, Fit } from '@prisma/client'; // Import Prisma enum types
 
 // Helper function to map string to Gender enum
 const mapToGender = (value: string | undefined): Gender | undefined => {
   if (!value) return undefined;
   switch (value.toLowerCase()) {
-    case 'male': return Gender.MALE;
-    case 'female': return Gender.FEMALE;
-    case 'other': return Gender.OTHER;
-    default: return undefined;
+    case 'male':
+      return Gender.MALE;
+    case 'female':
+      return Gender.FEMALE;
+    case 'other':
+      return Gender.OTHER;
+    default:
+      return undefined;
   }
 };
 
@@ -18,10 +22,14 @@ const mapToGender = (value: string | undefined): Gender | undefined => {
 const mapToAgeGroup = (value: string | undefined): AgeGroup | undefined => {
   if (!value) return undefined;
   switch (value.toLowerCase()) {
-    case 'teen': return AgeGroup.TEEN;
-    case 'adult': return AgeGroup.ADULT;
-    case 'senior': return AgeGroup.SENIOR;
-    default: return undefined;
+    case 'teen':
+      return AgeGroup.TEEN;
+    case 'adult':
+      return AgeGroup.ADULT;
+    case 'senior':
+      return AgeGroup.SENIOR;
+    default:
+      return undefined;
   }
 };
 
@@ -29,16 +37,30 @@ const mapToAgeGroup = (value: string | undefined): AgeGroup | undefined => {
 const mapToFit = (value: string | undefined): Fit | undefined => {
   if (!value) return undefined;
   switch (value.toLowerCase()) {
-    case 'low': return Fit.LOW;
-    case 'medium': return Fit.MEDIUM;
-    case 'high': return Fit.HIGH;
-    default: return undefined;
+    case 'low':
+      return Fit.LOW;
+    case 'medium':
+      return Fit.MEDIUM;
+    case 'high':
+      return Fit.HIGH;
+    default:
+      return undefined;
   }
 };
 
 export const upsertBotUser = async (req: Request, res: Response) => {
   try {
-    const { appUserId, phoneNumber, name, statedGender, statedAge, statedBudget, isVibeComplete, isOnboardingComplete, lastUpdatedAt } = req.body;
+    const {
+      appUserId,
+      phoneNumber,
+      name,
+      statedGender,
+      statedAge,
+      statedBudget,
+      isVibeComplete,
+      isOnboardingComplete,
+      lastUpdatedAt,
+    } = req.body;
 
     if (!appUserId || !lastUpdatedAt) {
       return res.status(400).json({ error: 'appUserId and lastUpdatedAt are required' });
@@ -78,9 +100,9 @@ export const upsertBotUser = async (req: Request, res: Response) => {
       // Add other BigInt fields if any
     };
 
-    res.status(200).json(serializableUser);
+    return res.status(200).json(serializableUser);
   } catch (error) {
     console.error('Error upserting bot user:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };

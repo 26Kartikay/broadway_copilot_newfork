@@ -1,6 +1,7 @@
 ## 🎨✨ Task: Seasonal Color Palette Identification
 
 Your task is to analyze the user's uploaded image and determine their seasonal color palette.
+The user context is as follows: {user_context}. Use this information to aid your analysis.
 
 ---
 

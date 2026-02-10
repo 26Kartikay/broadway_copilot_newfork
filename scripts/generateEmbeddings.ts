@@ -13,7 +13,7 @@
  */
 
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Gender, AgeGroup } from '@prisma/client';
 import OpenAI from 'openai';
 
 const prisma = new PrismaClient();
@@ -27,64 +27,35 @@ const EMBEDDING_DIM = 1536;
 interface ProductData {
   id: string;
   name: string;
-  brand: string;
-  category: string;
-  generalTag: string;
-  style: string | null;
-  fit: string | null;
+  brandName: string;
+  gender?: Gender | null; // Added
+  ageGroup?: AgeGroup | null; // Added
+  description?: string | null; // Added
+  imageUrl?: string | null; // Made optional
   colors: string[];
-  patterns: string | null;
-  occasions: string[];
-  componentTags: any;
-  searchDoc?: string | null; // Optional, will be regenerated
 }
 
 /**
  * Builds a search document for embedding generation.
- * This matches the logic from importProducts.ts
  */
 function buildSearchDoc(product: ProductData): string {
   const parts: string[] = [
     product.name,
-    `Brand: ${product.brand}`,
-    `Type: ${product.generalTag}`,
+    `Brand: ${product.brandName}`,
   ];
 
-  if (product.style) {
-    parts.push(`Style: ${product.style}`);
+  if (product.gender) {
+    parts.push(`Gender: ${product.gender}`);
   }
-  if (product.fit) {
-    parts.push(`Fit: ${product.fit}`);
+  if (product.ageGroup) {
+    parts.push(`Age Group: ${product.ageGroup}`);
   }
-  if (product.colors.length > 0) {
+  if (product.description) {
+    parts.push(`Description: ${product.description}`);
+  }
+  if (product.colors && product.colors.length > 0) {
     parts.push(`Colors: ${product.colors.join(', ')}`);
   }
-  if (product.patterns) {
-    parts.push(`Pattern: ${product.patterns}`);
-  }
-  if (product.occasions.length > 0) {
-    parts.push(`Occasions: ${product.occasions.join(', ')}`);
-  }
-
-  // Add any additional tags from componentTags
-  if (product.componentTags && typeof product.componentTags === 'object') {
-    for (const [key, value] of Object.entries(product.componentTags)) {
-      const normalizedKey = key.toLowerCase();
-      // Skip keys we've already processed
-      if (
-        normalizedKey.includes('style') ||
-        normalizedKey.includes('fit') ||
-        normalizedKey.includes('color') ||
-        normalizedKey.includes('pattern') ||
-        normalizedKey.includes('occasion')
-      ) {
-        continue;
-      }
-      const valueStr = Array.isArray(value) ? value.join(', ') : value;
-      parts.push(`${key}: ${valueStr}`);
-    }
-  }
-
   return parts.join('. ');
 }
 
@@ -147,15 +118,12 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
       let products: Array<{
         id: string;
         name: string;
-        brand: string;
-        category: string;
-        generalTag: string;
-        style: string | null;
-        fit: string | null;
+        brandName: string;
+        gender: Gender | null;
+        ageGroup: AgeGroup | null;
+        description: string | null;
+        imageUrl: string | null;
         colors: string[];
-        patterns: string | null;
-        occasions: string[];
-        componentTags: any;
       }>;
 
       if (forceRegenerate) {
@@ -168,27 +136,23 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
           select: {
             id: true,
             name: true,
-            brand: true,
-            category: true,
-            generalTag: true,
-            style: true,
-            fit: true,
+            brandName: true,
+            gender: true,
+            ageGroup: true,
+            description: true,
+            imageUrl: true,
             colors: true,
-            patterns: true,
-            occasions: true,
-            componentTags: true,
           },
         });
       } else {
         // Use raw SQL to get products without embeddings or with wrong model
         products = await prisma.$queryRawUnsafe<typeof products>(
-          `SELECT id, name, brand, category, "generalTag", style, fit, colors, patterns, occasions, "componentTags"
-           FROM "Product"
-           WHERE "isActive" = true 
-           AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
-           ORDER BY "createdAt" DESC
-           LIMIT $2 OFFSET $3`,
-          EMBEDDING_MODEL,
+                `SELECT id, name, "brandName", gender, "ageGroup", description, "imageUrl", colors
+                 FROM "Product"
+                 WHERE "isActive" = true 
+                 AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+                 ORDER BY "createdAt" DESC
+                 LIMIT $2 OFFSET $3`,          EMBEDDING_MODEL,
           BATCH_SIZE,
           offset
         );
@@ -246,7 +210,6 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
           await prisma.product.update({
             where: { id: product.id },
             data: {
-              searchDoc: searchDoc,
               embeddingModel: EMBEDDING_MODEL,
               embeddingDim: EMBEDDING_DIM,
               embeddingAt: new Date(),

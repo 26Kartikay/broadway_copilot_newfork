@@ -1167,8 +1167,9 @@
           content.innerHTML = `
             <div class="product-card-brand">${(product.brand || 'Broadway').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
             <div class="product-card-name">${(product.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${product.description ? `<div class="product-card-description">${product.description.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+            ${product.colors && product.colors.length > 0 ? `<div class="product-card-colors">Colors: ${product.colors.join(', ').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${product.reason ? `<div class="product-card-reason">${product.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
-            <a href="${product.productLink && isValidUrl(product.productLink) ? product.productLink : '#'}" target="_blank" class="product-card-link">View Product →</a>
           `;
           
           card.appendChild(img);

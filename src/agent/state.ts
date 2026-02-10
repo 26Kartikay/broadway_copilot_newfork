@@ -1,8 +1,8 @@
-import { User, PendingType } from '@prisma/client';
+import { PendingType, User } from '@prisma/client';
+import { Celebrity } from '../data/celebrityPalettes'; // Import Celebrity interface
+import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
 import { BaseMessage } from '../lib/ai';
 import { MessageInput, QuickReplyButton } from '../lib/chat/types';
-import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
-import { Celebrity } from '../data/celebrityPalettes'; // Import Celebrity interface
 import { TraceBuffer } from './tracing';
 
 export type { QuickReplyButton };
@@ -44,7 +44,11 @@ export interface GraphState {
   stylingIntent: StylingIntent | null;
 
   /** Specific sub-intent for Style Studio requests */
-  subIntent?: 'style_studio_occasion' | 'style_studio_vacation' | 'style_studio_general' | undefined;
+  subIntent?:
+    | 'style_studio_occasion'
+    | 'style_studio_vacation'
+    | 'style_studio_general'
+    | undefined;
 
   /** Specific sub-intent for general conversation */
   generalIntent: GeneralIntent | null;
@@ -83,13 +87,14 @@ export interface GraphState {
     | {
         type: 'vibe_check';
         recommendations: string[];
-      } | undefined;
+      }
+    | undefined;
 
   /** Replies returned in the HTTP response */
   httpResponse?: Replies | undefined;
 
   /** Fashion quiz state */
-  quizQuestions?: any[] | undefined; 
+  quizQuestions?: any[] | undefined;
   quizAnswers?: string[] | undefined;
   currentQuestionIndex?: number | undefined;
 }
@@ -147,7 +152,8 @@ export interface ProductRecommendation {
   name: string;
   brand: string;
   imageUrl: string;
-  productLink: string;
+  description?: string | undefined;
+  colors?: string[] | undefined;
   reason?: string;
 }
 export interface ScoringCategory {
@@ -229,4 +235,3 @@ export type Replies = Reply[];
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
 export type MissingProfileField = 'gender' | 'age_group' | 'fitPreference';
-

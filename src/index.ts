@@ -9,33 +9,39 @@ import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
 import { connectPrisma } from './lib/prisma';
 import { connectRedis } from './lib/redis';
-import { errorHandler } from './middleware/errors';
 import { authenticateInternal } from './middleware/auth'; // Import the new authentication middleware
+import { errorHandler } from './middleware/errors';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
 
 // Import the new internal controllers
-import { upsertBotUser } from './internal/controllers/upsertBotUser';
 import { patchBotUser } from './internal/controllers/patchBotUser';
+import { upsertBotUser } from './internal/controllers/upsertBotUser';
 
 const app = express();
 app.set('trust proxy', true);
 
 app.use(
   cors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void): void => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ): void => {
       // Allow requests with no origin (mobile apps, curl, Postman)
       if (!origin) {
         callback(null, true);
         return;
       }
-      
+
       // Allow localhost for development
-      if (/^http:\/\/localhost(:\d+)?$/.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+      if (
+        /^http:\/\/localhost(:\d+)?$/.test(origin) ||
+        /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)
+      ) {
         callback(null, true);
         return;
       }
-      
+
       // Allow Cloud Run URLs and custom domains
       const serverUrl = process.env.SERVER_URL;
       if (serverUrl && origin) {
@@ -46,14 +52,16 @@ app.use(
           return;
         }
       }
-      
+
       // Allow *.run.app domains (Cloud Run default)
-      if (/^https:\/\/[^\.]+-[^\.]+\.a\.run\.app$/.test(origin) || 
-          /^https:\/\/[^\.]+\.run\.app$/.test(origin)) {
+      if (
+        /^https:\/\/[^\.]+-[^\.]+\.a\.run\.app$/.test(origin) ||
+        /^https:\/\/[^\.]+\.run\.app$/.test(origin)
+      ) {
         callback(null, true);
         return;
       }
-      
+
       // Default: allow same-origin requests (frontend served from same domain)
       callback(null, true);
     },
@@ -114,7 +122,7 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     if (!userId) {
       return res.status(400).json({
         error: 'userId is required',
-        code: 'MISSING_USER_ID'
+        code: 'MISSING_USER_ID',
       });
     }
 
@@ -130,15 +138,18 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     // Response without metadata
     const response = {
       replies,
-      pending
+      pending,
     };
 
     return res.status(200).json(response);
   } catch (err: unknown) {
-    logger.error({
-      err: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined
-    }, 'Chat endpoint error');
+    logger.error(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      },
+      'Chat endpoint error',
+    );
     return next(err);
   }
 });

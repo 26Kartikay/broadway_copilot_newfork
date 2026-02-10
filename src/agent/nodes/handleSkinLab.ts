@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage } from '../../lib/ai/core/messages';
+import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
@@ -23,7 +23,7 @@ const LLMOutputSchema = z.object({
  */
 function formatLLMOutput(text: string): string {
   if (!text) return '';
-  const lines = text.split('\n').map(line => line.trim());
+  const lines = text.split('\n').map((line) => line.trim());
   return lines.join('\n\n').trim();
 }
 
@@ -42,18 +42,18 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
     // Count user messages in conversation to determine if we should recommend products
     // Only recommend products after at least 2-3 exchanges (after initial discussion)
     const userMessageCount = conversationHistoryTextOnly.filter(
-      msg => msg.role === 'user'
+      (msg) => msg.role === 'user',
     ).length;
-    
+
     // Count assistant messages to understand conversation depth
     const assistantMessageCount = conversationHistoryTextOnly.filter(
-      msg => msg.role === 'assistant'
+      (msg) => msg.role === 'assistant',
     ).length;
-    
+
     // Only enable product search after 2+ user messages (meaning we've had at least 2 exchanges)
     // This ensures we discuss the issue first before recommending products
     const shouldRecommendProducts = userMessageCount >= 2;
-    
+
     logger.debug(
       { userId, userMessageCount, assistantMessageCount, shouldRecommendProducts },
       'Skin Lab: Conversation depth analysis',
@@ -88,13 +88,16 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
         },
         traceBuffer,
       );
-    } catch (schemaError: any) {
+    } catch (schemaError: unknown) {
       // If schema validation fails, log the error and return a graceful error message
       logger.error(
         {
           userId,
-          error: schemaError.message,
-          data: schemaError.cause?.message || 'Unknown error',
+          error: schemaError instanceof Error ? schemaError.message : String(schemaError),
+          data:
+            schemaError instanceof Error && schemaError.cause
+              ? (schemaError.cause as Error).message
+              : 'Unknown error',
         },
         'Schema validation failed in handleSkinLab',
       );
@@ -127,28 +130,36 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
 
     // Extract products directly from searchProducts tool results
     // Only extract products if we're in the recommendation phase (after initial discussion)
-    const productResults = shouldRecommendProducts 
-      ? toolResults.filter(tr => tr.name === 'searchProducts')
+    const productResults = shouldRecommendProducts
+      ? toolResults.filter((tr) => tr.name === 'searchProducts')
       : [];
-    
+
     logger.debug(
-      { userId, messageId, shouldRecommendProducts, productResultsCount: productResults.length, productResults },
+      {
+        userId,
+        messageId,
+        shouldRecommendProducts,
+        productResultsCount: productResults.length,
+        productResults,
+      },
       'Extracting products from tool results',
     );
 
-    const allProducts: Array<{
+    interface ProductSearchResult {
       name: string;
       brand: string;
       imageUrl: string;
-      productLink: string;
-    }> = [];
+      description?: string | undefined;
+      colors?: string[] | undefined;
+    }
+    const allProducts: ProductSearchResult[] = [];
 
     for (const toolResult of productResults) {
       logger.debug(
-        { 
-          userId, 
-          toolName: toolResult.name, 
-          resultType: typeof toolResult.result, 
+        {
+          userId,
+          toolName: toolResult.name,
+          resultType: typeof toolResult.result,
           isArray: Array.isArray(toolResult.result),
           resultLength: Array.isArray(toolResult.result) ? toolResult.result.length : 'N/A',
         },
@@ -163,12 +174,11 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
           continue;
         }
 
-        const products = toolResult.result.filter((p: any) => {
+        const products = toolResult.result.filter((p: ProductSearchResult) => {
           // Filter out invalid products
           if (!p || typeof p !== 'object') return false;
-          if (!p.name || !p.brand || !p.productLink) return false;
-          
-          const productLinkLower = (p.productLink || '').toLowerCase().trim();
+          if (!p.name || !p.brand || !p.imageUrl) return false;
+
           const imageUrlLower = (p.imageUrl || '').toLowerCase().trim();
 
           // Skip placeholder URLs
@@ -180,16 +190,7 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
             'unknown',
           ];
 
-          if (
-            placeholderPatterns.some(pattern => 
-              productLinkLower.includes(pattern) || imageUrlLower.includes(pattern)
-            )
-          ) {
-            return false;
-          }
-
-          // Must have valid http(s) URL for product link
-          if (!productLinkLower.startsWith('http://') && !productLinkLower.startsWith('https://')) {
+          if (placeholderPatterns.some((pattern) => imageUrlLower.includes(pattern))) {
             return false;
           }
 
@@ -197,21 +198,21 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
         });
 
         // Filter products: must have valid imageUrl
-        const validProducts = products.filter((p: any) => 
-          p && 
-          p.name && 
-          p.brand && 
-          p.productLink && 
-          isValidImageUrl(p.imageUrl)
+        const validProducts = products.filter(
+          (p: ProductSearchResult) =>
+            p && p.name && p.brand && isValidImageUrl(p.imageUrl),
         );
-        
-        allProducts.push(...validProducts.map((p: any) => ({
-          name: p.name,
-          brand: p.brand,
-          imageUrl: p.imageUrl,
-          productLink: p.productLink,
-        })));
-        
+
+        allProducts.push(
+          ...validProducts.map((p: ProductSearchResult) => ({
+            name: p.name,
+            brand: p.brand,
+            imageUrl: p.imageUrl,
+            description: p.description,
+            colors: p.colors,
+          })),
+        );
+
         logger.debug(
           { userId, productsFound: products.length, totalProducts: allProducts.length },
           'Products extracted from array result',
@@ -221,7 +222,11 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
         try {
           const parsed = JSON.parse(toolResult.result);
           if (Array.isArray(parsed)) {
-            allProducts.push(...parsed.filter((p: any) => p.name && p.brand && p.productLink));
+            allProducts.push(
+              ...(parsed.filter(
+                (p: ProductSearchResult) => p.name && p.brand && p.imageUrl,
+              ) as any),
+            );
           }
         } catch {
           // Not JSON, skip
@@ -236,8 +241,9 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
 
     // Add product card if we have valid products (limit to 10)
     if (allProducts.length > 0) {
+      // Use name+brand as unique identifier for deduplication
       const uniqueProducts = Array.from(
-        new Map(allProducts.map(p => [p.productLink, p])).values()
+        new Map(allProducts.map((p) => [`${p.name}|${p.brand}`, p])).values(),
       ).slice(0, 10);
 
       // Filter out any products with invalid imageUrls one more time (safety check)
@@ -250,10 +256,11 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
             name: p.name,
             brand: p.brand,
             imageUrl: p.imageUrl,
-            productLink: p.productLink,
+            description: p.description,
+            colors: p.colors,
             reason: 'Recommended for your skincare needs',
           })),
-        } as any);
+        });
       }
     }
 

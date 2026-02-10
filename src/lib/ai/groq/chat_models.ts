@@ -10,9 +10,8 @@ import { logger } from '../../../utils/logger';
 import { MODEL_COSTS } from '../config/costs';
 import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { BaseMessage, SystemMessage, TextPart } from '../core/messages';
-import { toOpenAIToolSpec } from '../core/tools';
 import { GroqChatModelParams, RunOutcome } from '../core/runnables';
-
+import { toOpenAIToolSpec } from '../core/tools';
 
 type GroqParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming;
 
@@ -59,7 +58,6 @@ export class ChatGroq extends BaseChatCompletionsModel {
     traceBuffer: TraceBuffer,
     nodeName: string,
   ): Promise<RunOutcome> {
-    
     // 💡 FIX APPLIED HERE: Correctly constructing the Groq tool specification.
     const addBoundTools = (p: GroqParams): GroqParams => {
       if (this.boundTools.length === 0) return p;
@@ -72,12 +70,13 @@ export class ChatGroq extends BaseChatCompletionsModel {
         const spec = toOpenAIToolSpec(t); // returns { name: '...', description: '...', parameters: { ... } }
         return {
           type: 'function' as const,
-          function: { // Correctly nest the function properties under the 'function' key
+          function: {
+            // Correctly nest the function properties under the 'function' key
             name: spec.name,
             description: spec.description ?? '',
             parameters: spec.parameters ?? {},
-            // The `strict` property is a non-standard OpenAI extension usually handled 
-            // by the client library, so we'll leave it out of the function definition 
+            // The `strict` property is a non-standard OpenAI extension usually handled
+            // by the client library, so we'll leave it out of the function definition
             // unless the Groq SDK explicitly requires it here.
           },
         };

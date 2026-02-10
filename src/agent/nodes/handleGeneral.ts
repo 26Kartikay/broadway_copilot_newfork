@@ -8,7 +8,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories } from '../tools';
-import { getMainMenuReply } from './common'; // New import
 
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The first text message response to the user.'),

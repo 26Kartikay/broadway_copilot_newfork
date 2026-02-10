@@ -17,7 +17,8 @@ let visionLLM: ChatOpenAI | null = null;
 export function getTextLLM(): ChatGroq {
   if (!textLLM) {
     textLLM = new ChatGroq({
-      model: 'openai/gpt-oss-20b',
+      // Previous model was decommissioned; use current Llama 3.3 70B variant
+      model: 'llama-3.3-70b-versatile',
     });
   }
   return textLLM;

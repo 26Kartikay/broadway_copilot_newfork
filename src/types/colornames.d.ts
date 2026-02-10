@@ -20,4 +20,3 @@ declare module 'colornames' {
   const colornames: ColorNames;
   export = colornames;
 }
-

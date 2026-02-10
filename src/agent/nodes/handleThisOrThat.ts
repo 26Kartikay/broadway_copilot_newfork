@@ -6,8 +6,8 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { GraphState, Replies } from '../state';
 
-import { loadPrompt } from '../../utils/prompts';
 import { createCanvas, loadImage } from 'canvas';
+import { loadPrompt } from '../../utils/prompts';
 
 import { redis } from '../../lib/redis';
 
@@ -85,11 +85,7 @@ async function combineImagesSideBySide(url1: string, url2: string): Promise<stri
   return canvas.toDataURL('image/png');
 }
 
-async function saveFirstImageUrl(
-  userId: string,
-  imageUrl: string,
-  ttlSeconds: number = 3600,
-) {
+async function saveFirstImageUrl(userId: string, imageUrl: string, ttlSeconds: number = 3600) {
   await redis.hSet(`${REDIS_PREFIX}:${userId}`, {
     firstImageUrl: imageUrl,
     pending: 'SECOND_IMAGE',
@@ -269,6 +265,8 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
       { userId, messageId, error: err instanceof Error ? err.message : String(err) },
       'Failed handling This or That outfit comparison',
     );
-    throw new InternalServerError('Failed to handle This or That outfit comparison', { cause: err });
+    throw new InternalServerError('Failed to handle This or That outfit comparison', {
+      cause: err,
+    });
   }
 }

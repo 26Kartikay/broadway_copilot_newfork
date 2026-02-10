@@ -9,8 +9,10 @@ import {
   handleGeneral,
   handleProductRecommendationConfirmation,
   handleSaveColorAnalysis,
+  handleSkinLab,
   handleStyleStudio,
   handleStyling,
+  handleThisOrThat,
   ingestMessage,
   recordUserInfo,
   routeGeneral,
@@ -18,8 +20,6 @@ import {
   routeStyleStudio,
   sendReply,
   vibeCheck,
-  handleSkinLab,
-  handleThisOrThat,
 } from './nodes';
 import { GraphState } from './state';
 

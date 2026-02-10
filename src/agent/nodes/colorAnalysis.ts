@@ -1,16 +1,16 @@
 import { z } from 'zod';
 
-import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
-import { ColorWithHex, getPaletteData, isValidPalette, SeasonalPalette } from '../../data/seasonalPalettes';
 import { Celebrity, celebrityPalettes } from '../../data/celebrityPalettes'; // Import Celebrity data
+import { ColorWithHex, getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
+import { getTextLLM, getVisionLLM } from '../../lib/ai';
+import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 
-import { PendingType, Gender } from '@prisma/client';
+import { Gender, PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
 
 /**
@@ -18,9 +18,7 @@ import { GraphState, Replies } from '../state';
  * The model should only return the palette name (one of 12 allowed values).
  */
 const LLMOutputSchema = z.object({
-  quality_ok: z
-    .boolean()
-    .describe('Whether the image quality is sufficient for analysis.'),
+  quality_ok: z.boolean().describe('Whether the image quality is sufficient for analysis.'),
   palette_name: z
     .enum([
       'LIGHT_SPRING',
@@ -85,7 +83,6 @@ function formatColorCombos(combos: string[], allColors: ColorWithHex[]): ColorWi
   });
 }
 
-
 /**
  * Performs color analysis from a portrait and returns a WhatsApp-friendly text reply; logs and persists results.
  * @param state The current agent state.
@@ -107,8 +104,9 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(NoImageLLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'colorAnalysis');
 
-
-    const replies: Replies = [{ reply_type: 'color_analysis_image_upload_request', reply_text: response.reply_text }];
+    const replies: Replies = [
+      { reply_type: 'color_analysis_image_upload_request', reply_text: response.reply_text },
+    ];
     return {
       ...state,
       assistantReply: replies,
@@ -118,7 +116,20 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
   // Image present: run color analysis
   try {
-    const systemPromptText = await loadPrompt('handlers/analysis/color_analysis.txt');
+    const systemPromptTextRaw = await loadPrompt('handlers/analysis/color_analysis.txt');
+
+    const gender = state.user.confirmedGender;
+    const ageGroup = state.user.confirmedAgeGroup;
+    let userContext = 'an adult';
+    if (gender && ageGroup) {
+      userContext = `a ${ageGroup.toLowerCase()} ${gender.toLowerCase()}`;
+    } else if (gender) {
+      userContext = `an adult ${gender.toLowerCase()}`;
+    } else if (ageGroup) {
+      userContext = `a ${ageGroup.toLowerCase()}`;
+    }
+
+    const systemPromptText = systemPromptTextRaw.replace('{user_context}', userContext);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const output = await getVisionLLM()
@@ -129,7 +140,8 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
     // Handle poor image quality case
     if (!output.quality_ok || !output.palette_name) {
-      const errorMessage = output.error_message || 'Oops, can you try sending a clearer picture of your face? 💖';
+      const errorMessage =
+        output.error_message || 'Oops, can you try sending a clearer picture of your face? 💖';
       const replies: Replies = [{ reply_type: 'text', reply_text: errorMessage }];
       return {
         ...state,
@@ -194,7 +206,9 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         palette_name: paletteName,
         description: paletteData.description,
         top_colors: shuffleArray(paletteData.topColors),
-        two_color_combos: shuffleArray(formatColorCombos(paletteData.twoColorCombos, paletteData.topColors)),
+        two_color_combos: shuffleArray(
+          formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
+        ),
         user_image_url: userImageUrl,
         color_twin: colorTwins, // Add the color twin celebrities
       },
@@ -208,7 +222,10 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       },
     ];
 
-    logger.debug({ userId, messageId, paletteName }, 'Color analysis completed, awaiting user confirmation to save.');
+    logger.debug(
+      { userId, messageId, paletteName },
+      'Color analysis completed, awaiting user confirmation to save.',
+    );
 
     return {
       ...state,

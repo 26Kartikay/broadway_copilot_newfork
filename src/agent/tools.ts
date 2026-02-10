@@ -1,4 +1,4 @@
-import { WardrobeItem, WardrobeItemCategory, ProductCategory } from '@prisma/client';
+import { WardrobeItem, WardrobeItemCategory } from '@prisma/client';
 import { z } from 'zod';
 
 import { OpenAIEmbeddings, Tool } from '../lib/ai';
@@ -13,19 +13,14 @@ import { logger } from '../utils/logger';
 
 type ProductRow = {
   id: string;
-  handleId: string;
+  barcode: string;
   name: string;
-  brand: string;
-  category: ProductCategory;
-  generalTag: string;
-  style: string | null;
-  fit: string | null;
-  colors: string[];
-  patterns: string | null;
-  occasions: string[];
+  brandName: string;
+  gender: string | null;
+  ageGroup: string | null;
+  description: string;
   imageUrl: string;
-  productLink: string;
-  searchDoc: string;
+  colors: string[];
 };
 
 type ProductSemanticRow = ProductRow & { distance: number };
@@ -44,7 +39,6 @@ type WardrobeRow = Pick<
   | 'keywords'
   | 'searchDoc'
 >;
-
 
 type SemanticResultRow = WardrobeRow & { distance: number };
 type KeywordResultRow = WardrobeRow & { keyword_matches: number | null };
@@ -114,10 +108,9 @@ export function searchWardrobe(userId: string): Tool {
 
         const baseWhere = baseConditions.join(' AND ');
         const resultsMap = new Map<
-  string,
-  { item: WardrobeRow; score: number; sources: string[] }
->();
-
+          string,
+          { item: WardrobeRow; score: number; sources: string[] }
+        >();
 
         // 1. Semantic Search (Vector Similarity)
         const embeddingCount = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
@@ -281,9 +274,7 @@ export function searchWardrobe(userId: string): Tool {
 export function fetchColorAnalysis(userId: string): Tool {
   // Use z.object({}) without passthrough to avoid OpenAI schema issues
   // The schema processor will add the required type and properties
-  const fetchColorAnalysisSchema = z
-    .object({})
-    .describe('No parameters. Must be called with {}.');
+  const fetchColorAnalysisSchema = z.object({}).describe('No parameters. Must be called with {}.');
 
   return new Tool({
     name: 'fetchColorAnalysis',
@@ -405,78 +396,59 @@ export function fetchRelevantMemories(userId: string): Tool {
 
 /**
  * Tool for searching the Broadway product catalog.
- * Uses hybrid search combining semantic similarity and structured filters.
- * Returns product recommendations with images and purchase links.
+ * Uses text search on name, brand, and description with structured filters.
+ * Returns product recommendations with images.
  */
 export function searchProducts(): Tool {
-  const searchProductsSchema = z.object({
-  query: z.string().describe("Natural language product search query"),
-  filters: z.object({
-    category: z
-      .enum([
-        'CLOTHING_FASHION',
-        'BEAUTY_PERSONAL_CARE',
-        'HEALTH_WELLNESS',
-        'JEWELLERY_ACCESSORIES',
-        'FOOTWEAR',
-        'BAGS_LUGGAGE',
-      ])
-      .optional()
-      .describe(
-        'Filter by product category. Valid values: CLOTHING_FASHION (shirts, pants, dresses), BEAUTY_PERSONAL_CARE (skincare, makeup), HEALTH_WELLNESS (supplements), JEWELLERY_ACCESSORIES (sunglasses, watches, jewelry, bags, belts, scarves), FOOTWEAR (shoes, sandals, boots), BAGS_LUGGAGE (suitcases, backpacks, travel bags). IMPORTANT: For accessories like sunglasses, use JEWELLERY_ACCESSORIES not ACCESSORIES.'
-      ),
-    style: z.string().optional().describe(
-      "Filter by style aesthetic (e.g., 'Athleisure', 'Minimal', 'Streetwear', 'Classic', 'Boho')"
-    ),
-    fit: z.string().optional().describe(
-      "Filter by fit/silhouette (e.g., 'Oversized', 'Slim', 'Regular', 'Relaxed')"
-    ),
-    color: z.string().optional().describe(
-      "Filter by color (e.g., 'Black', 'Navy', 'White', 'Beige')"
-    ),
-    occasion: z.string().optional().describe(
-      "Filter by occasion (e.g., 'Casual', 'Work', 'Party', 'Gym', 'Travel')"
-    ),
-    brand: z.string().optional().describe('Filter by brand name'),
-  }).strict().default({}),
-  limit: z.number().int().positive().default(5),
-}).strict();
+  const searchProductsSchema = z
+    .object({
+      query: z.string().describe('Natural language product search query'),
+      filters: z
+        .object({
+          gender: z
+            .enum(['MALE', 'FEMALE', 'OTHER'])
+            .optional()
+            .describe('Filter by gender (MALE, FEMALE, OTHER)'),
+          ageGroup: z
+            .enum(['TEEN', 'ADULT', 'SENIOR'])
+            .optional()
+            .describe('Filter by age group (TEEN, ADULT, SENIOR)'),
+          color: z
+            .string()
+            .optional()
+            .describe("Filter by color (e.g., 'Black', 'Navy', 'White', 'Beige')"),
+          brand: z.string().optional().describe('Filter by brand name'),
+        })
+        .strict()
+        .default({}),
+      limit: z.number().int().positive().default(5),
+    })
+    .strict();
 
   return new Tool({
-  name: 'searchProducts',
-  description:
-    'Searches the Broadway product catalog to find products matching the query. Uses semantic search combined with filters for style, fit, color, occasion, and category. Returns product recommendations with name, brand, image, and purchase link. Use this to recommend specific products from our catalog during styling advice. CRITICAL: For accessories (sunglasses, watches, jewelry, belts, scarves), always use category "JEWELLERY_ACCESSORIES", never use "ACCESSORIES".',
-  schema: searchProductsSchema,
+    name: 'searchProducts',
+    description:
+      'Searches the Broadway product catalog to find products matching the query. Uses text search on name, brand, and description combined with filters for gender, age group, color, and brand. Returns product recommendations with name, brand, image, and description. Use this to recommend specific products from our catalog during styling advice.',
+    schema: searchProductsSchema,
     func: async ({ query, filters = {}, limit = 5 }: z.infer<typeof searchProductsSchema>) => {
       if (query.trim() === '') {
         throw new BadRequestError('Search query is required');
       }
 
       try {
-        const model = new OpenAIEmbeddings({
-          model: 'text-embedding-3-small',
-        });
-
         // Build filter conditions
         const conditions: string[] = ['"isActive" = true'];
         const params: (string | number)[] = [];
         let paramIndex = 1;
 
-        if (filters?.category) {
-          params.push(filters.category);
-          conditions.push(`"category"::text = $${paramIndex++}`);
+        if (filters?.gender) {
+          params.push(filters.gender);
+          conditions.push(`"gender"::text = $${paramIndex++}`);
         }
 
-        if (filters?.style) {
-          // Use LIKE for partial matching to be more lenient
-          params.push(`%${filters.style.toLowerCase()}%`);
-          conditions.push(`LOWER("style") LIKE $${paramIndex++}`);
-        }
-
-        if (filters?.fit) {
-          // Use LIKE for partial matching to be more lenient
-          params.push(`%${filters.fit.toLowerCase()}%`);
-          conditions.push(`LOWER("fit") LIKE $${paramIndex++}`);
+        if (filters?.ageGroup) {
+          params.push(filters.ageGroup);
+          conditions.push(`"ageGroup"::text = $${paramIndex++}`);
         }
 
         if (filters?.color) {
@@ -486,293 +458,193 @@ export function searchProducts(): Tool {
             `EXISTS (
               SELECT 1 FROM unnest("colors") AS col 
               WHERE LOWER(col::text) LIKE $${paramIndex}
-            )`
-          );
-          paramIndex++;
-        }
-
-        if (filters?.occasion) {
-          // Handle compound occasions like "office casual party" by checking if any
-          // occasion in the product's occasions array appears as a substring in the filter.
-          // This allows "office casual party" to match products tagged with "Casual" or "Party"
-          const occasionLower = filters.occasion.toLowerCase();
-          params.push(occasionLower);
-          conditions.push(
-            `EXISTS (
-              SELECT 1 FROM unnest("occasions") AS occ 
-              WHERE $${paramIndex} LIKE '%' || LOWER(occ::text) || '%'
-            )`
+            )`,
           );
           paramIndex++;
         }
 
         if (filters?.brand) {
           params.push(filters.brand.toLowerCase());
-          conditions.push(`LOWER("brand") = $${paramIndex++}`);
+          conditions.push(`LOWER("brandName") = $${paramIndex++}`);
         }
 
         const whereClause = conditions.join(' AND ');
-const resultsMap = new Map<
-  string,
-  { item: ProductRow; score: number; sources: string[] }
->();
 
-
-        // 1. Semantic Search (Vector Similarity) - Primary method
-        const embeddingCount = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-          'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL AND "isActive" = true',
-        );
-
-        if (Number(embeddingCount[0].count) > 0) {
-          const embedded = await model.embedQuery(query);
-          const vector = JSON.stringify(embedded);
-
-          const semanticQuery = `
-            SELECT id, "handleId", name, brand, category, "generalTag", 
-                   style, fit, colors, patterns, occasions,
-                   "imageUrl", "productLink", "searchDoc",
-                   ("embedding" <=> $${paramIndex}::vector) as distance
-            FROM "Product"
-            WHERE "embedding" IS NOT NULL AND ${whereClause}
-            ORDER BY "embedding" <=> $${paramIndex}::vector
-            LIMIT ${Math.min(limit * 3, 30)}
-          `;
-
-          const semanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
-            semanticQuery,
-            ...params,
-            vector,
-          );
-
-          for (const item of semanticResults) {
-            const { distance, ...itemData } = item;
-            const score = Math.max(0, 1 - distance);
-            resultsMap.set(item.id, {
-              item: itemData,
-              score: score * 0.7, // Weight semantic search at 70%
-              sources: ['semantic'],
-            });
-          }
-        }
-
-        // 2. Text Search (Fallback / Boost)
+        // Text Search on name, brandName, and description
         const searchTerms = query
           .toLowerCase()
           .split(/\s+/)
           .filter((term) => term.length > 2);
 
+        let results: ProductRow[] = [];
+
         if (searchTerms.length > 0) {
           const textConditions = searchTerms.map(
             (_, i) =>
-              `(LOWER(name) LIKE $${paramIndex + i} OR LOWER("searchDoc") LIKE $${paramIndex + i} OR LOWER(brand) LIKE $${paramIndex + i})`,
+              `(LOWER(name) LIKE $${paramIndex + i} OR LOWER("brandName") LIKE $${paramIndex + i} OR LOWER(description) LIKE $${paramIndex + i})`,
           );
           const textParams = searchTerms.map((term) => `%${term}%`);
 
           const textQuery = `
-            SELECT id, "handleId", name, brand, category, "generalTag",
-                   style, fit, colors, patterns, occasions,
-                   "imageUrl", "productLink", "searchDoc"
+            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
             FROM "Product"
             WHERE ${whereClause} AND (${textConditions.join(' OR ')})
-            LIMIT ${Math.min(limit * 2, 20)}
+            ORDER BY "createdAt" DESC
+            LIMIT ${limit * 2}
           `;
 
-          const textResults = await prisma.$queryRawUnsafe<ProductRow[]>(
+          results = await prisma.$queryRawUnsafe<ProductRow[]>(
             textQuery,
             ...params,
             ...textParams,
           );
+        } else {
+          // If no search terms, just return filtered products
+          const simpleQuery = `
+            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
+            FROM "Product"
+            WHERE ${whereClause}
+            ORDER BY "createdAt" DESC
+            LIMIT ${limit * 2}
+          `;
 
-          for (const item of textResults) {
-            const nameMatches = searchTerms.filter(
-              (term) =>
-                item.name.toLowerCase().includes(term) ||
-                item.brand.toLowerCase().includes(term) ||
-                (item.searchDoc && item.searchDoc.toLowerCase().includes(term)),
-            ).length;
-
-            const score = Math.min(1, nameMatches / searchTerms.length);
-
-            const existing = resultsMap.get(item.id);
-            if (existing) {
-              existing.score += score * 0.3;
-              existing.sources.push('text');
-            } else {
-              resultsMap.set(item.id, {
-                item,
-                score: score * 0.3,
-                sources: ['text'],
-              });
-            }
-          }
+          results = await prisma.$queryRawUnsafe<ProductRow[]>(simpleQuery, ...params);
         }
 
-        // Sort by combined score and return top results
-        const sortedResults = Array.from(resultsMap.values())
+        // Score results based on match quality
+        const scoredResults = results.map((item) => {
+          const queryLower = query.toLowerCase();
+          let score = 0;
+
+          // Name matches get highest score
+          if (item.name.toLowerCase().includes(queryLower)) {
+            score += 3;
+          }
+          // Brand matches get medium score
+          if (item.brandName.toLowerCase().includes(queryLower)) {
+            score += 2;
+          }
+          // Description matches get lower score
+          if (item.description && item.description.toLowerCase().includes(queryLower)) {
+            score += 1;
+          }
+
+          // Count matching search terms
+          const matchingTerms = searchTerms.filter(
+            (term) =>
+              item.name.toLowerCase().includes(term) ||
+              item.brandName.toLowerCase().includes(term) ||
+              (item.description && item.description.toLowerCase().includes(term)),
+          ).length;
+
+          score += matchingTerms * 0.5;
+
+          return { item, score };
+        });
+
+        // Sort by score and return top results
+        const sortedResults = scoredResults
           .sort((a, b) => b.score - a.score)
           .slice(0, limit)
           .map((result) => ({
             name: result.item.name,
-            brand: result.item.brand,
-            type: result.item.generalTag,
-            style: result.item.style,
-            fit: result.item.fit,
+            brand: result.item.brandName,
+            gender: result.item.gender,
+            ageGroup: result.item.ageGroup,
+            description: result.item.description,
             colors: result.item.colors,
-            occasions: result.item.occasions,
             imageUrl: result.item.imageUrl,
-            productLink: result.item.productLink,
           }));
 
-        // If no results found with filters, try again without optional filters (fallback to lenient search)
-        if (sortedResults.length === 0 && (filters?.style || filters?.fit || filters?.color || filters?.occasion || filters?.brand)) {
-          logger.debug({ query, filters }, 'No results with filters, trying without optional filters');
-          
-          // Build lenient conditions (only category filter, if provided)
+        // Fallback: if no results with filters, try without optional filters
+        if (
+          sortedResults.length === 0 &&
+          (filters?.gender || filters?.ageGroup || filters?.color || filters?.brand)
+        ) {
+          logger.debug(
+            { query, filters },
+            'No results with filters, trying without optional filters',
+          );
+
           const lenientConditions: string[] = ['"isActive" = true'];
           const lenientParams: (string | number)[] = [];
           let lenientParamIndex = 1;
 
-          // Only keep category filter as it's more important
-          if (filters?.category) {
-            lenientParams.push(filters.category);
-            lenientConditions.push(`"category"::text = $${lenientParamIndex++}`);
-          }
-
-          const lenientWhereClause = lenientConditions.join(' AND ');
-          const lenientResultsMap = new Map<
-            string,
-            { item: ProductRow; score: number; sources: string[] }
-          >();
-
-          // Try semantic search without strict filters
-          const embeddingCount = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-            'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL AND "isActive" = true',
-          );
-
-          if (Number(embeddingCount[0].count) > 0) {
-            const embedded = await model.embedQuery(query);
-            const vector = JSON.stringify(embedded);
-
-            const lenientSemanticQuery = `
-              SELECT id, "handleId", name, brand, category, "generalTag", 
-                     style, fit, colors, patterns, occasions,
-                     "imageUrl", "productLink", "searchDoc",
-                     ("embedding" <=> $${lenientParamIndex}::vector) as distance
-              FROM "Product"
-              WHERE "embedding" IS NOT NULL AND ${lenientWhereClause}
-              ORDER BY "embedding" <=> $${lenientParamIndex}::vector
-              LIMIT ${Math.min(limit * 3, 30)}
-            `;
-
-            const lenientSemanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
-              lenientSemanticQuery,
-              ...lenientParams,
-              vector,
-            );
-
-            for (const item of lenientSemanticResults) {
-              const { distance, ...itemData } = item;
-              const score = Math.max(0, 1 - distance);
-              lenientResultsMap.set(item.id, {
-                item: itemData,
-                score: score * 0.7,
-                sources: ['semantic'],
-              });
-            }
-          }
-
-          // Try text search without strict filters
-          const searchTerms = query
-            .toLowerCase()
-            .split(/\s+/)
-            .filter((term) => term.length > 2);
-
           if (searchTerms.length > 0) {
             const textConditions = searchTerms.map(
               (_, i) =>
-                `(LOWER(name) LIKE $${lenientParamIndex + i} OR LOWER("searchDoc") LIKE $${lenientParamIndex + i} OR LOWER(brand) LIKE $${lenientParamIndex + i})`,
+                `(LOWER(name) LIKE $${lenientParamIndex + i} OR LOWER("brandName") LIKE $${lenientParamIndex + i} OR LOWER(description) LIKE $${lenientParamIndex + i})`,
             );
             const textParams = searchTerms.map((term) => `%${term}%`);
 
-            const lenientTextQuery = `
-              SELECT id, "handleId", name, brand, category, "generalTag",
-                     style, fit, colors, patterns, occasions,
-                     "imageUrl", "productLink", "searchDoc"
+            const lenientQuery = `
+              SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
               FROM "Product"
-              WHERE ${lenientWhereClause} AND (${textConditions.join(' OR ')})
-              LIMIT ${Math.min(limit * 2, 20)}
+              WHERE ${lenientConditions.join(' AND ')} AND (${textConditions.join(' OR ')})
+              ORDER BY "createdAt" DESC
+              LIMIT ${limit * 2}
             `;
 
-            const lenientTextResults = await prisma.$queryRawUnsafe<ProductRow[]>(
-              lenientTextQuery,
-              ...lenientParams,
+            const lenientResults = await prisma.$queryRawUnsafe<ProductRow[]>(
+              lenientQuery,
               ...textParams,
             );
 
-            for (const item of lenientTextResults) {
-              const nameMatches = searchTerms.filter(
+            const lenientScored = lenientResults.map((item) => {
+              const queryLower = query.toLowerCase();
+              let score = 0;
+
+              if (item.name.toLowerCase().includes(queryLower)) score += 3;
+              if (item.brandName.toLowerCase().includes(queryLower)) score += 2;
+              if (item.description && item.description.toLowerCase().includes(queryLower)) score += 1;
+
+              const matchingTerms = searchTerms.filter(
                 (term) =>
                   item.name.toLowerCase().includes(term) ||
-                  item.brand.toLowerCase().includes(term) ||
-                  (item.searchDoc && item.searchDoc.toLowerCase().includes(term)),
+                  item.brandName.toLowerCase().includes(term) ||
+                  (item.description && item.description.toLowerCase().includes(term)),
               ).length;
 
-              const score = Math.min(1, nameMatches / searchTerms.length);
+              score += matchingTerms * 0.5;
+              return { item, score };
+            });
 
-              const existing = lenientResultsMap.get(item.id);
-              if (existing) {
-                existing.score += score * 0.3;
-                existing.sources.push('text');
-              } else {
-                lenientResultsMap.set(item.id, {
-                  item,
-                  score: score * 0.3,
-                  sources: ['text'],
-                });
-              }
+            const lenientSorted = lenientScored
+              .sort((a, b) => b.score - a.score)
+              .slice(0, limit)
+              .map((result) => ({
+                name: result.item.name,
+                brand: result.item.brandName,
+                gender: result.item.gender,
+                ageGroup: result.item.ageGroup,
+                description: result.item.description,
+                colors: result.item.colors,
+                imageUrl: result.item.imageUrl,
+              }));
+
+            if (lenientSorted.length > 0) {
+              logger.info(
+                { query, filters, resultCount: lenientSorted.length },
+                'Product search completed (lenient fallback)',
+              );
+              return lenientSorted;
             }
-          }
-
-          // Get results from lenient search
-          const lenientSortedResults = Array.from(lenientResultsMap.values())
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit)
-            .map((result) => ({
-              name: result.item.name,
-              brand: result.item.brand,
-              type: result.item.generalTag,
-              style: result.item.style,
-              fit: result.item.fit,
-              colors: result.item.colors,
-              occasions: result.item.occasions,
-              imageUrl: result.item.imageUrl,
-              productLink: result.item.productLink,
-            }));
-
-          if (lenientSortedResults.length > 0) {
-            logger.info(
-              { query, filters, resultCount: lenientSortedResults.length },
-              'Product search completed (lenient fallback)',
-            );
-            return lenientSortedResults;
           }
         }
 
-        // Final fallback: if still no results after all attempts, return recent active products
-        // This ensures we always return products
+        // Final fallback: return recent active products
         if (sortedResults.length === 0) {
-          logger.debug({ query, filters }, 'No results found after all searches, returning fallback products');
-          
+          logger.debug(
+            { query, filters },
+            'No results found after all searches, returning fallback products',
+          );
+
           const fallbackQuery = `
-            SELECT id, "handleId", name, brand, category, "generalTag",
-                   style, fit, colors, patterns, occasions,
-                   "imageUrl", "productLink", "searchDoc"
+            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
             FROM "Product"
             WHERE "isActive" = true
               AND "imageUrl" IS NOT NULL 
-              AND "productLink" IS NOT NULL
               AND "imageUrl" != ''
-              AND "productLink" != ''
             ORDER BY "createdAt" DESC
             LIMIT ${limit}
           `;
@@ -787,19 +659,19 @@ const resultsMap = new Map<
 
             return fallbackResults.map((item) => ({
               name: item.name,
-              brand: item.brand,
-              type: item.generalTag,
-              style: item.style,
-              fit: item.fit,
+              brand: item.brandName,
+              gender: item.gender,
+              ageGroup: item.ageGroup,
+              description: item.description,
               colors: item.colors,
-              occasions: item.occasions,
               imageUrl: item.imageUrl,
-              productLink: item.productLink,
             }));
           }
 
-          // If even fallback returns no results, return empty array (shouldn't happen in practice)
-          logger.warn({ query, filters }, 'Fallback search returned no products - database may be empty');
+          logger.warn(
+            { query, filters },
+            'Fallback search returned no products - database may be empty',
+          );
           return [];
         }
 

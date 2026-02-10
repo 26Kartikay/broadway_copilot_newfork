@@ -1,5 +1,5 @@
 // src/middleware/auth.ts
-import { Request, Response, NextFunction } from 'express';
+import { NextFunction, Request, Response } from 'express';
 
 export const authenticateInternal = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -7,7 +7,9 @@ export const authenticateInternal = (req: Request, res: Response, next: NextFunc
 
   if (!INTERNAL_AUTH_TOKEN) {
     console.error('INTERNAL_AUTH_TOKEN is not set in environment variables.');
-    return res.status(500).json({ error: 'Server configuration error: Internal auth token not set.' });
+    return res
+      .status(500)
+      .json({ error: 'Server configuration error: Internal auth token not set.' });
   }
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -17,7 +19,7 @@ export const authenticateInternal = (req: Request, res: Response, next: NextFunc
   const token = authHeader.split(' ')[1];
 
   if (token === INTERNAL_AUTH_TOKEN) {
-    next();
+    return next();
   } else {
     res.status(403).json({ error: 'Forbidden: Invalid authentication token.' });
   }

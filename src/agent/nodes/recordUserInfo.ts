@@ -1,4 +1,4 @@
-import { AgeGroup, Gender, PendingType, Fit } from '@prisma/client';
+import { AgeGroup, Fit, Gender, PendingType } from '@prisma/client';
 
 import { prisma } from '../../lib/prisma';
 import { InternalServerError } from '../../utils/errors';
@@ -14,7 +14,10 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
   const buttonPayload = state.input.ButtonPayload;
 
   if (!buttonPayload) {
-    logger.warn({ userId }, 'recordUserInfo called without a button payload. This may happen if the user types their answer. The current implementation only handles button clicks for this flow.');
+    logger.warn(
+      { userId },
+      'recordUserInfo called without a button payload. This may happen if the user types their answer. The current implementation only handles button clicks for this flow.',
+    );
     // Do nothing and let the conversation continue. The profile will be updated on the next relevant action.
     return { ...state, pending: PendingType.NONE };
   }
@@ -23,7 +26,11 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
     const [field, ...valueParts] = buttonPayload.split('_');
     const value = valueParts.join('_');
 
-    let dataToUpdate: { confirmedGender?: Gender; confirmedAgeGroup?: AgeGroup; fitPreference?: Fit } = {};
+    let dataToUpdate: {
+      confirmedGender?: Gender;
+      confirmedAgeGroup?: AgeGroup;
+      fitPreference?: Fit;
+    } = {};
 
     if (field === 'gender' && value !== 'skip') {
       if (Object.values(Gender).includes(value as Gender)) {
@@ -50,13 +57,15 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
         where: { id: state.user.id },
         data: dataToUpdate,
       });
-      logger.debug({ userId, updatedFields: Object.keys(dataToUpdate) }, 'User info recorded successfully from button payload');
+      logger.debug(
+        { userId, updatedFields: Object.keys(dataToUpdate) },
+        'User info recorded successfully from button payload',
+      );
       return { ...state, user, pending: PendingType.NONE };
     }
 
     logger.debug({ userId, buttonPayload }, 'User may have skipped providing info.');
     return { ...state, pending: PendingType.NONE };
-
   } catch (err: unknown) {
     throw new InternalServerError('Failed to record user info from button payload', { cause: err });
   }

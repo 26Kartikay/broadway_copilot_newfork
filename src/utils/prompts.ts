@@ -13,7 +13,7 @@ let personaContent: string | null = null; // Cache for persona.txt content
  */
 export async function loadPrompt(
   filename: string,
-  options?: { prependPersona?: boolean }
+  options?: { prependPersona?: boolean },
 ): Promise<string> {
   const { prependPersona = true } = options || {};
 
