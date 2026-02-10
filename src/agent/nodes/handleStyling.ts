@@ -26,7 +26,7 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
 
   try {
     if (lastMessage?.meta?.buttonPayload) {
-      const defaultPromptText = await loadPrompt('handlers/styling/handle_styling_no_input.txt');
+      const defaultPromptText = await loadPrompt('handlers/styling/handle_styling_no_input.txt', user);
       const systemPromptText = defaultPromptText.replace('{INTENT}', stylingIntent);
       const systemPrompt = new SystemMessage(systemPromptText);
       const response = await getTextLLM()
@@ -39,7 +39,7 @@ export async function handleStyling(state: GraphState): Promise<GraphState> {
 
     const tools = [searchWardrobe(userId), fetchColorAnalysis(userId)];
 
-    const systemPromptText = await loadPrompt(`handlers/styling/handle_${stylingIntent}.txt`);
+    const systemPromptText = await loadPrompt(`handlers/styling/handle_${stylingIntent}.txt`, user);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const { output: finalResponse } = await agentExecutor(

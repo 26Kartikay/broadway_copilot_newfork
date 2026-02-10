@@ -288,7 +288,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   const canDoColorAnalysis = colorMinutesAgo === -1 || colorMinutesAgo >= 30;
 
   try {
-    const systemPromptText = await loadPrompt('routing/route_intent.txt');
+    const systemPromptText = await loadPrompt('routing/route_intent.txt', user);
     const formattedSystemPrompt = systemPromptText
       .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
       .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());

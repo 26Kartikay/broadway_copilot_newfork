@@ -57,7 +57,7 @@ export async function routeStyleStudio(state: GraphState): Promise<GraphState> {
       };
     }
 
-    const systemPromptText = await loadPrompt('routing/route_style_studio.txt');
+    const systemPromptText = await loadPrompt('routing/route_style_studio.txt', user);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const response = await getTextLLM()

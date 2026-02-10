@@ -75,7 +75,7 @@ export async function askUserInfo(state: GraphState): Promise<GraphState> {
   } else {
     // Fallback to the original LLM-based method for any other case.
     try {
-      const systemPromptText = await loadPrompt('data/ask_user_info.txt');
+      const systemPromptText = await loadPrompt('data/ask_user_info.txt', state.user);
       const fieldToAsk = missingField || 'required information';
       logger.debug(
         { userId, messageId, missingField: fieldToAsk },

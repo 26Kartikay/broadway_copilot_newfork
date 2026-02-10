@@ -109,7 +109,7 @@ export async function handleFashionCharades(state: GraphState): Promise<GraphSta
 
 async function startNewCharadesRound(state: GraphState): Promise<GraphState> {
   // Generate a new charades clue
-  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_generation.txt');
+  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_generation.txt', user);
   const systemPrompt = new SystemMessage(systemPromptText);
 
   const response = await getTextLLM()
@@ -259,7 +259,7 @@ async function evaluateCharadesGuess(state: GraphState, userGuess: string): Prom
   const clue = state.quizQuestions[0] as z.infer<typeof CharadesClueSchema>;
 
   // Evaluate the guess using AI
-  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_scoring.txt');
+  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_scoring.txt', user);
 
   const formattedPrompt = systemPromptText
     .replace('{correct_answer}', clue.answer)

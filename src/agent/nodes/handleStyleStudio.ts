@@ -68,7 +68,7 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
 
   try {
     const intentKey = subIntent.replace('style_studio_', ''); // e.g. 'occasion', 'vacation', 'general'
-    const systemPromptText = await loadPrompt(`handlers/style_studio/${intentKey}.txt`);
+    const systemPromptText = await loadPrompt(`handlers/style_studio/${intentKey}.txt`, state.user);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     // Use agentExecutor with product search tool

@@ -82,7 +82,7 @@ export async function routeGeneral(state: GraphState): Promise<GraphState> {
 
   // LLM-based routing as fallback
   try {
-    const systemPromptText = await loadPrompt('routing/route_general.txt');
+    const systemPromptText = await loadPrompt('routing/route_general.txt', state.user);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     const llm = getTextLLM();

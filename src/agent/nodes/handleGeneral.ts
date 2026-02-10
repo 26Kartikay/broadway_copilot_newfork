@@ -72,7 +72,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     // Chat Intent (unchanged)
     // ------------------------------------------
     if (generalIntent === 'chat') {
-      let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt');
+      let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt', state.user);
       systemPromptText += '\nPlease respond concisely, avoiding verbosity.';
 
       const tools = [fetchRelevantMemories(userId)];

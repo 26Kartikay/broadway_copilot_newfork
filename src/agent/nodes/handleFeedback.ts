@@ -33,7 +33,7 @@ const LLMOutputSchema = z.object({
 
 export async function handleFeedback(state: GraphState): Promise<GraphState> {
   const { conversationId, conversationHistoryTextOnly, user } = state;
-  const systemPromptText = await loadPrompt('data/record_feedback.txt');
+  const systemPromptText = await loadPrompt('data/record_feedback.txt', user);
   const systemPrompt = new SystemMessage(systemPromptText);
 
   const trimmedHistory = conversationHistoryTextOnly.slice(-3);

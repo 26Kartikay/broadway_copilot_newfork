@@ -37,7 +37,7 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
 
   try {
     // Load the system prompt for Skin Lab
-    const systemPromptText = await loadPrompt('handlers/skin_lab/skin_lab_prompt.txt');
+    const systemPromptText = await loadPrompt('handlers/skin_lab/skin_lab_prompt.txt', user);
 
     // Count user messages in conversation to determine if we should recommend products
     // Only recommend products after at least 2-3 exchanges (after initial discussion)

@@ -194,6 +194,7 @@ export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
 
       const systemPromptText = await loadPrompt(
         'handlers/this_or_that/this_or_that_image_analysis.txt',
+        user,
       );
       const systemPrompt = new SystemMessage(systemPromptText);
       const userCombinedImageMessage = new UserMessage([
