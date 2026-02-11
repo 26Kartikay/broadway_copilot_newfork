@@ -442,12 +442,12 @@ export function searchProducts(): Tool {
         let paramIndex = 1;
 
         if (filters?.gender) {
-          params.push(filters.gender);
+          params.push(filters.gender.toLowerCase());
           conditions.push(`"gender"::text = $${paramIndex++}`);
         }
 
         if (filters?.ageGroup) {
-          params.push(filters.ageGroup);
+          params.push(filters.ageGroup.toLowerCase());
           conditions.push(`"ageGroup"::text = $${paramIndex++}`);
         }
 
@@ -557,13 +557,16 @@ export function searchProducts(): Tool {
           }));
 
         // Fallback: if no results with filters, try without optional filters
+        // IMPORTANT: Do NOT perform lenient fallback if gender or ageGroup filters were explicitly provided
+        // as this can lead to incorrect recommendations (e.g., showing male products for a female query)
         if (
           sortedResults.length === 0 &&
-          (filters?.gender || filters?.ageGroup || filters?.color || filters?.brand)
+          !(filters?.gender || filters?.ageGroup) && // Only fallback if NO gender or ageGroup filter was set
+          (filters?.color || filters?.brand) // Still allow fallback for color/brand if no gender/ageGroup
         ) {
           logger.debug(
             { query, filters },
-            'No results with filters, trying without optional filters',
+            'No results with filters, trying without optional filters (lenient fallback)',
           );
 
           const lenientConditions: string[] = ['"isActive" = true'];
@@ -639,18 +642,33 @@ export function searchProducts(): Tool {
             'No results found after all searches, returning fallback products',
           );
 
-          const fallbackQuery = `
-            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
-            FROM "Product"
-            WHERE "isActive" = true
-              AND "imageUrl" IS NOT NULL 
-              AND "imageUrl" != ''
-            ORDER BY "createdAt" DESC
-            LIMIT ${limit}
-          `;
-
-          const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery);
-
+                    const fallbackConditions: string[] = [
+                      `"isActive" = true`,
+                      `"imageUrl" IS NOT NULL`,
+                      `"imageUrl" != ''`
+                    ];
+                    const fallbackParams: (string | number)[] = [];
+                    let fallbackParamIndex = 1;
+          
+                              if (filters?.gender) {
+                                fallbackParams.push(filters.gender.toLowerCase());
+                                fallbackConditions.push(`"gender"::text = $${fallbackParamIndex++}`);
+                              }          
+                              if (filters?.ageGroup) {
+                                fallbackParams.push(filters.ageGroup.toLowerCase());
+                                fallbackConditions.push(`"ageGroup"::text = $${fallbackParamIndex++}`);
+                              }          
+                    const fallbackWhereClause = fallbackConditions.join(' AND ');
+          
+                    const fallbackQuery = `
+                      SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
+                      FROM "Product"
+                      WHERE ${fallbackWhereClause}
+                      ORDER BY "createdAt" DESC
+                      LIMIT ${limit}
+                    `;
+          
+                    const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery, ...fallbackParams);
           if (fallbackResults.length > 0) {
             logger.info(
               { query, filters, resultCount: fallbackResults.length },

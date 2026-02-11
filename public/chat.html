@@ -872,6 +872,7 @@
         <select id="userIdSelect" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555;">
           <option value="guest_TEMP">Guest User</option>
           <option value="kartikay1234">Kartikay (App User)</option>
+          <option value="shambhavi5678">Shambhavi (App User)</option>
         </select>
         <label for="profileNameInput" style="color: white; font-size: 12px;">Name:</label>
         <input type="text" id="profileNameInput" value="Guest" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: 100px;">
@@ -1608,6 +1609,8 @@
             profileNameInput.value = 'Guest';
           } else if (userIdSelect.value === 'kartikay1234') {
             profileNameInput.value = 'Kartikay';
+          } else if (userIdSelect.value === 'shambhavi5678') {
+            profileNameInput.value = 'Shambhavi';
           }
         });
       }
