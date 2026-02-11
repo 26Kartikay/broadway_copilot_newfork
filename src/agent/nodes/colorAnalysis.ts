@@ -95,7 +95,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
   // No image case
   if (imageCount === 0) {
-    const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', user);
+    const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', state.user);
     const systemPrompt = new SystemMessage(
       systemPromptText.replace('{analysis_type}', 'color analysis'),
     );
@@ -116,7 +116,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
   // Image present: run color analysis
   try {
-    const systemPromptTextRaw = await loadPrompt('handlers/analysis/color_analysis.txt', user);
+    const systemPromptTextRaw = await loadPrompt('handlers/analysis/color_analysis.txt', state.user);
 
     const gender = state.user.confirmedGender;
     const ageGroup = state.user.confirmedAgeGroup;

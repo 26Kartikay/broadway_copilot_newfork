@@ -73,6 +73,15 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     // ------------------------------------------
     if (generalIntent === 'chat') {
       let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt', state.user);
+
+      // Inject user's name and gender into the system prompt for the LLM
+      if (user.profileName) {
+        systemPromptText += `\nThe user's name is ${user.profileName}.`;
+      }
+      if (user.confirmedGender) {
+        systemPromptText += `\nThe user's gender is ${user.confirmedGender}.`;
+      }
+
       systemPromptText += '\nPlease respond concisely, avoiding verbosity.';
 
       const tools = [fetchRelevantMemories(userId)];
