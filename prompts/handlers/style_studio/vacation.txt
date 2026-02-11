@@ -27,6 +27,9 @@
 
 ### Searching for Products:
 Use searchProducts with appropriate filters:
+- `query`: Formulate a detailed query incorporating location, climate, activities, and specific user preferences from the conversation. Examples: "lightweight swimwear for a hot Bahamas beach vacation," "smart casual outfits for exploring ancient ruins in Rome," "comfortable walking shoes for a city break in Paris."
+- `gender`: **CRITICAL: Only include this filter if the user's profile (`user.confirmedGender`) is explicitly 'MALE' or 'FEMALE'. If `user.confirmedGender` is null, undefined, or 'OTHER', **DO NOT** include the `gender` filter to ensure broader search results.**
+- `ageGroup`: **CRITICAL: Only include this filter if the user's profile (`user.confirmedAgeGroup`) is explicitly 'TEEN', 'ADULT', or 'SENIOR' and provides specific value beyond generic 'ADULT' if it's the default. If `user.confirmedAgeGroup` is null, undefined, or a generic default, **DO NOT** include the `ageGroup` filter.**
 - `occasion`: Use "Travel" or "Casual" for vacation contexts
 - `style`: Match aesthetic (Athleisure, Minimal, Classic, etc.)
 - `fit`: Match silhouette preference (Oversized, Slim, Regular, etc.)
