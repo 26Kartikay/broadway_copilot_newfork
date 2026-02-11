@@ -23,6 +23,12 @@ type ProductRow = {
   colors: string[];
 };
 
+interface ProductWithScore {
+  item: ProductRow;
+  score: number;
+  sources: string[];
+}
+
 type ProductSemanticRow = ProductRow & { distance: number };
 
 type WardrobeRow = Pick<
@@ -436,269 +442,157 @@ export function searchProducts(): Tool {
       }
 
       try {
-        // Build filter conditions
-        const conditions: string[] = ['"isActive" = true'];
-        const params: (string | number)[] = [];
-        let paramIndex = 1;
-
-        if (filters?.gender) {
-          params.push(filters.gender.toLowerCase());
-          conditions.push(`"gender"::text = $${paramIndex++}`);
-        }
-
-        if (filters?.ageGroup) {
-          params.push(filters.ageGroup.toLowerCase());
-          conditions.push(`"ageGroup"::text = $${paramIndex++}`);
-        }
-
-        if (filters?.color) {
-          // Use LIKE for partial matching on colors array
-          params.push(`%${filters.color.toLowerCase()}%`);
-          conditions.push(
-            `EXISTS (
-              SELECT 1 FROM unnest("colors") AS col 
-              WHERE LOWER(col::text) LIKE $${paramIndex}
-            )`,
-          );
-          paramIndex++;
-        }
-
-        if (filters?.brand) {
-          params.push(filters.brand.toLowerCase());
-          conditions.push(`LOWER("brandName") = $${paramIndex++}`);
-        }
-
-        const whereClause = conditions.join(' AND ');
-
-        // Text Search on name, brandName, and description
-        const searchTerms = query
-          .toLowerCase()
-          .split(/\s+/)
-          .filter((term) => term.length > 2);
-
-        let results: ProductRow[] = [];
-
-        if (searchTerms.length > 0) {
-          const textConditions = searchTerms.map(
-            (_, i) =>
-              `(LOWER(name) LIKE $${paramIndex + i} OR LOWER("brandName") LIKE $${paramIndex + i} OR LOWER(description) LIKE $${paramIndex + i})`,
-          );
-          const textParams = searchTerms.map((term) => `%${term}%`);
-
-          const textQuery = `
-            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
-            FROM "Product"
-            WHERE ${whereClause} AND (${textConditions.join(' OR ')})
-            ORDER BY "createdAt" DESC
-            LIMIT ${limit * 2}
-          `;
-
-          results = await prisma.$queryRawUnsafe<ProductRow[]>(
-            textQuery,
-            ...params,
-            ...textParams,
-          );
-        } else {
-          // If no search terms, just return filtered products
-          const simpleQuery = `
-            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
-            FROM "Product"
-            WHERE ${whereClause}
-            ORDER BY "createdAt" DESC
-            LIMIT ${limit * 2}
-          `;
-
-          results = await prisma.$queryRawUnsafe<ProductRow[]>(simpleQuery, ...params);
-        }
-
-        // Score results based on match quality
-        const scoredResults = results.map((item) => {
-          const queryLower = query.toLowerCase();
-          let score = 0;
-
-          // Name matches get highest score
-          if (item.name.toLowerCase().includes(queryLower)) {
-            score += 3;
-          }
-          // Brand matches get medium score
-          if (item.brandName.toLowerCase().includes(queryLower)) {
-            score += 2;
-          }
-          // Description matches get lower score
-          if (item.description && item.description.toLowerCase().includes(queryLower)) {
-            score += 1;
-          }
-
-          // Count matching search terms
-          const matchingTerms = searchTerms.filter(
-            (term) =>
-              item.name.toLowerCase().includes(term) ||
-              item.brandName.toLowerCase().includes(term) ||
-              (item.description && item.description.toLowerCase().includes(term)),
-          ).length;
-
-          score += matchingTerms * 0.5;
-
-          return { item, score };
+        const model = new OpenAIEmbeddings({
+          model: 'text-embedding-3-small',
         });
+        const embeddedQuery = await model.embedQuery(query);
+        const vector = JSON.stringify(embeddedQuery);
 
-        // Sort by score and return top results
-        const sortedResults = scoredResults
-          .sort((a, b) => b.score - a.score)
-          .slice(0, limit)
-          .map((result) => ({
-            name: result.item.name,
-            brand: result.item.brandName,
-            gender: result.item.gender,
-            ageGroup: result.item.ageGroup,
-            description: result.item.description,
-            colors: result.item.colors,
-            imageUrl: result.item.imageUrl,
-          }));
+        // Check if any products have embeddings first
+        const embeddingCount = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+          'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL',
+        );
+        const hasEmbeddings = Number(embeddingCount[0].count) > 0;
 
-        // Fallback: if no results with filters, try without optional filters
-        // IMPORTANT: Do NOT perform lenient fallback if gender or ageGroup filters were explicitly provided
-        // as this can lead to incorrect recommendations (e.g., showing male products for a female query)
-        if (
-          sortedResults.length === 0 &&
-          !(filters?.gender || filters?.ageGroup) && // Only fallback if NO gender or ageGroup filter was set
-          (filters?.color || filters?.brand) // Still allow fallback for color/brand if no gender/ageGroup
-        ) {
-          logger.debug(
-            { query, filters },
-            'No results with filters, trying without optional filters (lenient fallback)',
+        let resultsMap = new Map<
+          string,
+          { item: ProductRow; score: number; sources: string[] }
+        >();
+
+        if (hasEmbeddings) {
+          // Build base conditions for semantic search, incorporating gender and ageGroup
+          const semanticConditions: string[] = ['"embedding" IS NOT NULL'];
+          const semanticParams: (string | number)[] = [];
+          let semanticParamIndex = 1;
+
+          if (filters?.gender) {
+            semanticParams.push(filters.gender.toLowerCase());
+            semanticConditions.push(`"gender"::text = $${semanticParamIndex++}`);
+          }
+
+          if (filters?.ageGroup) {
+            semanticParams.push(filters.ageGroup.toLowerCase());
+            semanticConditions.push(`"ageGroup"::text = $${semanticParamIndex++}`);
+          }
+
+          const semanticWhereClause = semanticConditions.join(' AND ');
+
+          // Perform semantic search
+          const semanticQuery = `
+            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors,
+                   ("embedding" <=> $${semanticParamIndex}::vector) as distance
+            FROM "Product"
+            WHERE ${semanticWhereClause}
+            ORDER BY "embedding" <=> $${semanticParamIndex}::vector
+            LIMIT ${limit * 2}
+          `;
+
+          const semanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
+            semanticQuery,
+            ...semanticParams,
+            vector,
           );
 
-          const lenientConditions: string[] = ['"isActive" = true'];
-          const lenientParams: (string | number)[] = [];
-          let lenientParamIndex = 1;
-
-          if (searchTerms.length > 0) {
-            const textConditions = searchTerms.map(
-              (_, i) =>
-                `(LOWER(name) LIKE $${lenientParamIndex + i} OR LOWER("brandName") LIKE $${lenientParamIndex + i} OR LOWER(description) LIKE $${lenientParamIndex + i})`,
-            );
-            const textParams = searchTerms.map((term) => `%${term}%`);
-
-            const lenientQuery = `
-              SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
-              FROM "Product"
-              WHERE ${lenientConditions.join(' AND ')} AND (${textConditions.join(' OR ')})
-              ORDER BY "createdAt" DESC
-              LIMIT ${limit * 2}
-            `;
-
-            const lenientResults = await prisma.$queryRawUnsafe<ProductRow[]>(
-              lenientQuery,
-              ...textParams,
-            );
-
-            const lenientScored = lenientResults.map((item) => {
-              const queryLower = query.toLowerCase();
-              let score = 0;
-
-              if (item.name.toLowerCase().includes(queryLower)) score += 3;
-              if (item.brandName.toLowerCase().includes(queryLower)) score += 2;
-              if (item.description && item.description.toLowerCase().includes(queryLower)) score += 1;
-
-              const matchingTerms = searchTerms.filter(
-                (term) =>
-                  item.name.toLowerCase().includes(term) ||
-                  item.brandName.toLowerCase().includes(term) ||
-                  (item.description && item.description.toLowerCase().includes(term)),
-              ).length;
-
-              score += matchingTerms * 0.5;
-              return { item, score };
+          for (const item of semanticResults) {
+            const { distance, ...itemData } = item;
+            const score = Math.max(0, 1 - distance); // 0 to 1 score
+            resultsMap.set(item.id, {
+              item: itemData,
+              score: score * 0.9, // Weight semantic search highly
+              sources: ['semantic'],
             });
-
-            const lenientSorted = lenientScored
-              .sort((a, b) => b.score - a.score)
-              .slice(0, limit)
-              .map((result) => ({
-                name: result.item.name,
-                brand: result.item.brandName,
-                gender: result.item.gender,
-                ageGroup: result.item.ageGroup,
-                description: result.item.description,
-                colors: result.item.colors,
-                imageUrl: result.item.imageUrl,
-              }));
-
-            if (lenientSorted.length > 0) {
-              logger.info(
-                { query, filters, resultCount: lenientSorted.length },
-                'Product search completed (lenient fallback)',
-              );
-              return lenientSorted;
-            }
           }
         }
 
-        // Final fallback: return recent active products
-        if (sortedResults.length === 0) {
-          logger.debug(
-            { query, filters },
-            'No results found after all searches, returning fallback products',
-          );
 
-                    const fallbackConditions: string[] = [
-                      `"isActive" = true`,
-                      `"imageUrl" IS NOT NULL`,
-                      `"imageUrl" != ''`
-                    ];
-                    const fallbackParams: (string | number)[] = [];
-                    let fallbackParamIndex = 1;
-          
-                              if (filters?.gender) {
-                                fallbackParams.push(filters.gender.toLowerCase());
-                                fallbackConditions.push(`"gender"::text = $${fallbackParamIndex++}`);
-                              }          
-                              if (filters?.ageGroup) {
-                                fallbackParams.push(filters.ageGroup.toLowerCase());
-                                fallbackConditions.push(`"ageGroup"::text = $${fallbackParamIndex++}`);
-                              }          
-                    const fallbackWhereClause = fallbackConditions.join(' AND ');
-          
-                    const fallbackQuery = `
-                      SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
-                      FROM "Product"
-                      WHERE ${fallbackWhereClause}
-                      ORDER BY "createdAt" DESC
-                      LIMIT ${limit}
-                    `;
-          
-                    const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery, ...fallbackParams);
-          if (fallbackResults.length > 0) {
-            logger.info(
-              { query, filters, resultCount: fallbackResults.length },
-              'Product search completed (fallback to recent products)',
-            );
+        
+                const finalSortedResults = Array.from(resultsMap.values())
+                  .sort((a, b) => b.score - a.score)
+                  .slice(0, limit)
+                  .map((result) => ({
+                    name: result.item.name,
+                    brand: result.item.brandName,
+                    gender: result.item.gender,
+                    ageGroup: result.item.ageGroup,
+                    description: result.item.description,
+                    colors: result.item.colors,
+                    imageUrl: result.item.imageUrl,
+                  }));
 
-            return fallbackResults.map((item) => ({
-              name: item.name,
-              brand: item.brandName,
-              gender: item.gender,
-              ageGroup: item.ageGroup,
-              description: item.description,
-              colors: item.colors,
-              imageUrl: item.imageUrl,
-            }));
-          }
+                // If no results after semantic and text search, fall back to recent active products with filters
+                if (finalSortedResults.length === 0) {
+                  logger.debug(
+                    { query, filters },
+                    'No results found after all searches, returning fallback products',
+                  );
 
-          logger.warn(
-            { query, filters },
-            'Fallback search returned no products - database may be empty',
-          );
-          return [];
-        }
+                  const fallbackConditions: string[] = [
+                    `"isActive" = true`,
+                    `"imageUrl" IS NOT NULL`,
+                    `"imageUrl" != ''`
+                  ];
+                  const fallbackParams: (string | number)[] = [];
+                  let fallbackParamIndex = 1;
+        
+                  if (filters?.gender) {
+                    fallbackParams.push(filters.gender.toLowerCase());
+                    fallbackConditions.push(`"gender"::text = $${fallbackParamIndex++}`);
+                  }          
+                  if (filters?.ageGroup) {
+                    fallbackParams.push(filters.ageGroup.toLowerCase());
+                    fallbackConditions.push(`"ageGroup"::text = $${fallbackParamIndex++}`);
+                  }
+                  if (filters?.color) { // Include color filter in final fallback
+                    fallbackParams.push(`%${filters.color.toLowerCase()}%`);
+                    fallbackConditions.push(`LOWER(ARRAY_TO_STRING(colors, ',')) LIKE $${fallbackParamIndex++}`);
+                  }
+                  if (filters?.brand) { // Include brand filter in final fallback
+                    fallbackParams.push(`%${filters.brand.toLowerCase()}%`);
+                    fallbackConditions.push(`LOWER("brandName") LIKE $${fallbackParamIndex++}`);
+                  }
+                        
+                  const fallbackWhereClause = fallbackConditions.join(' AND ');
+        
+                  const fallbackQuery = `
+                    SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
+                    FROM "Product"
+                    WHERE ${fallbackWhereClause}
+                    ORDER BY "createdAt" DESC
+                    LIMIT ${limit}
+                  `;
+        
+                  const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery, ...fallbackParams);
+                  if (fallbackResults.length > 0) {
+                    logger.info(
+                      { query, filters, resultCount: fallbackResults.length },
+                      'Product search completed (fallback to recent products)',
+                    );
+
+                    return fallbackResults.map((item) => ({
+                      name: item.name,
+                      brand: item.brandName,
+                      gender: item.gender,
+                      ageGroup: item.ageGroup,
+                      description: item.description,
+                      colors: item.colors,
+                      imageUrl: item.imageUrl,
+                    }));
+                  }
+
+                  logger.warn(
+                    { query, filters },
+                    'Fallback search returned no products - database may be empty',
+                  );
+                  return [];
+                }
+
 
         logger.info(
-          { query, filters, resultCount: sortedResults.length },
+          { query, filters, resultCount: finalSortedResults.length },
           'Product search completed',
         );
 
-        return sortedResults;
+        return finalSortedResults;
       } catch (err: unknown) {
         logger.error({ query, filters, err: (err as Error)?.message }, 'Failed to search products');
         throw new InternalServerError('Failed to search products', {
