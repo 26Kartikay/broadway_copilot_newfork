@@ -28,15 +28,23 @@ interface ProductData {
   id: string;
   name: string;
   brandName: string;
-  gender?: Gender | null; // Added
-  ageGroup?: AgeGroup | null; // Added
-  description?: string | null; // Added
-  imageUrl?: string | null; // Made optional
+  gender?: Gender | null;
+  ageGroup?: AgeGroup | null;
+  description?: string | null;
+  imageUrl?: string | null;
   colors: string[];
+  category?: string | null;
+  subCategory?: string | null;
+  productType?: string | null;
+  style?: string | null;
+  occasion?: string | null;
+  fit?: string | null;
+  season?: string | null;
 }
 
 /**
- * Builds a search document for embedding generation.
+ * Builds an enriched search document for embedding generation.
+ * Includes all structured attributes to improve semantic search quality.
  */
 function buildSearchDoc(product: ProductData): string {
   const parts: string[] = [
@@ -44,18 +52,50 @@ function buildSearchDoc(product: ProductData): string {
     `Brand: ${product.brandName}`,
   ];
 
+  // Core structured attributes
+  if (product.category) {
+    parts.push(`Category: ${product.category}`);
+  }
+  if (product.subCategory) {
+    parts.push(`Subcategory: ${product.subCategory}`);
+  }
+  if (product.productType) {
+    parts.push(`Product Type: ${product.productType}`);
+  }
   if (product.gender) {
     parts.push(`Gender: ${product.gender}`);
   }
   if (product.ageGroup) {
     parts.push(`Age Group: ${product.ageGroup}`);
   }
-  if (product.description) {
-    parts.push(`Description: ${product.description}`);
+  
+  // Style and occasion attributes
+  if (product.style) {
+    parts.push(`Style: ${product.style}`);
   }
+  if (product.occasion) {
+    parts.push(`Occasion: ${product.occasion}`);
+  }
+  if (product.fit) {
+    parts.push(`Fit: ${product.fit}`);
+  }
+  if (product.season) {
+    parts.push(`Season: ${product.season}`);
+  }
+  
+  // Colors
   if (product.colors && product.colors.length > 0) {
     parts.push(`Colors: ${product.colors.join(', ')}`);
   }
+  
+  // Description (rich text) - Cleaned of HTML tags for embedding
+  if (product.description) {
+    const cleanedDescription = product.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleanedDescription) {
+      parts.push(`Description: ${cleanedDescription}`);
+    }
+  }
+  
   return parts.join('. ');
 }
 
@@ -124,6 +164,13 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
         description: string | null;
         imageUrl: string | null;
         colors: string[];
+        category: string | null;
+        subCategory: string | null;
+        productType: string | null;
+        style: string | null;
+        occasion: string | null;
+        fit: string | null;
+        season: string | null;
       }>;
 
       if (forceRegenerate) {
@@ -142,17 +189,26 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
             description: true,
             imageUrl: true,
             colors: true,
+            category: true,
+            subCategory: true,
+            productType: true,
+            style: true,
+            occasion: true,
+            fit: true,
+            season: true,
           },
         });
       } else {
         // Use raw SQL to get products without embeddings or with wrong model
         products = await prisma.$queryRawUnsafe<typeof products>(
-                `SELECT id, name, "brandName", gender, "ageGroup", description, "imageUrl", colors
+                `SELECT id, name, "brandName", gender, "ageGroup", description, "imageUrl", colors,
+                        category, "subCategory", "productType", style, occasion, fit, season
                  FROM "Product"
                  WHERE "isActive" = true 
                  AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
                  ORDER BY "createdAt" DESC
-                 LIMIT $2 OFFSET $3`,          EMBEDDING_MODEL,
+                 LIMIT $2 OFFSET $3`,
+          EMBEDDING_MODEL,
           BATCH_SIZE,
           offset
         );

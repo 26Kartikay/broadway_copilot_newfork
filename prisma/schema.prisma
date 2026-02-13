@@ -313,6 +313,16 @@ model Product {
   imageUrl    String?
   colors      String[]
   
+  // Structured attributes for hybrid retrieval
+  category        String?
+  subCategory     String?
+  productType     String?
+  style           String?
+  occasion        String?
+  fit             String?
+  season          String?
+  popularityScore Float?  @default(0.0)
+  
   embedding      Unsupported("vector")?
   embeddingModel String?
   embeddingDim   Int?
@@ -329,6 +339,11 @@ model Product {
   @@index([colors])
   @@index([isActive])
   @@index([createdAt])
+  @@index([category])
+  @@index([subCategory])
+  @@index([productType])
+  @@index([brandName, category])
+  @@index([isActive, gender, ageGroup])
 }
 
 // --- AGENT & LOGGING ---

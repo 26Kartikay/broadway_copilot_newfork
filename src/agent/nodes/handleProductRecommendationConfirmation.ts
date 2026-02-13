@@ -114,10 +114,10 @@ export async function handleProductRecommendationConfirmation(
     for (const toolResult of productResults) {
       if (Array.isArray(toolResult.result)) {
         // Filter products: must have name, brand, and valid imageUrl
-        const products = toolResult.result.filter(
-          (p: ProductSearchResult) =>
-            p && p.name && p.brand && isValidImageUrl(p.imageUrl),
-        );
+        const products = toolResult.result.filter((p: ProductSearchResult) => {
+          return p && p.name && p.brand && isValidImageUrl(p.imageUrl);
+        });
+
         allProducts.push(
           ...products.map((p: ProductSearchResult) => ({
             name: p.name,
@@ -136,6 +136,7 @@ export async function handleProductRecommendationConfirmation(
       const uniqueProducts = Array.from(
         new Map(allProducts.map((p) => [`${p.name}|${p.brand}`, p])).values(),
       ).slice(0, 5);
+      
       replies.push({
         reply_type: 'product_card',
         products: uniqueProducts,

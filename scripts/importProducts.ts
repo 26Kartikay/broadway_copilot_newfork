@@ -19,6 +19,7 @@
  */
 
 import 'dotenv/config';
+import Papa from 'papaparse';
 import { PrismaClient, Gender, AgeGroup } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -51,67 +52,17 @@ interface ProductData {
 // Removed buildSearchDoc function as searchDoc is no longer in Product model.
 
 // ============================================================================
-// CSV PARSER
-// ============================================================================
-
-/**
- * Simple CSV parser that handles quoted fields.
- */
-function parseCSV(content: string): Record<string, string>[] {
-  const lines = content.split('\n').filter(line => line.trim());
-  if (lines.length < 2) return [];
-
-  const headers = parseCSVLine(lines[0]);
-  const rows: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
-    const row: Record<string, string> = {};
-    
-    for (let j = 0; j < headers.length; j++) {
-      row[headers[j]] = values[j] || '';
-    }
-    
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  result.push(current.trim());
-  return result;
-}
-
-// ============================================================================
 // MAIN IMPORT FUNCTION
 // ============================================================================
 
 interface RawProduct {
   barcode: string;
   name: string;
-  'brand name': string; // Use string literal for column with space
+  brandName: string; // Use camelCase to match CSV header
   gender?: string;
   age?: string;
   description?: string;
-  image: string;
+  imageUrl: string;
   color?: string; // This will be a comma-separated string
 }
 
@@ -142,7 +93,16 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
   if (filePath.endsWith('.json')) {
     rawProducts = JSON.parse(content);
   } else {
-    rawProducts = parseCSV(content) as unknown as RawProduct[];
+    const result = Papa.parse(content, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: false,
+    });
+    rawProducts = result.data as RawProduct[];
+    if (result.errors.length > 0) {
+      console.warn('⚠️  Errors encountered during CSV parsing:');
+      console.warn(result.errors);
+    }
   }
 
   console.log(`📋 Found ${rawProducts.length} products to import`);
@@ -160,7 +120,6 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
     console.log(`\n🔄 Processing product ${productNum}/${totalProducts}: ${raw.name || raw.barcode || 'unknown'}`);
 
     try {
-      console.log('Raw data from CSV:', JSON.stringify(raw, null, 2));
 
       
       // Check for duplicates (within the entire set, as we're processing one by one)
@@ -195,14 +154,30 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         }
       }
 
+      // Debug: Check what imageUrl value we're getting from CSV
+      if (imported < 3) {
+        console.log(`\n🔍 Debug product ${imported + 1}:`);
+        console.log(`   Raw keys: ${Object.keys(raw).join(', ')}`);
+        console.log(`   raw.imageUrl: ${raw.imageUrl}`);
+        console.log(`   raw['imageUrl']: ${(raw as any)['imageUrl']}`);
+        console.log(`   raw.image: ${(raw as any).image}`);
+      }
+      
+      // Access imageUrl - try multiple ways in case of column name issues
+      const imageUrlValue = raw.imageUrl || 
+                           (raw as any)['imageUrl'] || 
+                           (raw as any).image || 
+                           (raw as any)['image'] ||
+                           '';
+      
       const product: ProductData = {
         barcode: raw.barcode,
         name: raw.name,
-        brandName: raw['brand name'], // Access using string literal
+        brandName: raw.brandName, // Access using string literal
         gender: genderEnum,
         ageGroup: ageGroupEnum,
         description: raw.description || '',
-        imageUrl: raw.image || '',
+        imageUrl: imageUrlValue,
         colors: raw.color ? raw.color.split(',').map(c => c.trim()).filter(Boolean) : [],
       };
 

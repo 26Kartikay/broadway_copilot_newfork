@@ -1,7 +1,9 @@
 import { WardrobeItem, WardrobeItemCategory } from '@prisma/client';
 import { z } from 'zod';
 
-import { OpenAIEmbeddings, Tool } from '../lib/ai';
+import { ChatOpenAI, OpenAIEmbeddings, SystemMessage, Tool, UserMessage } from '../lib/ai';
+import type { TraceBuffer } from '../agent/tracing';
+import { createId } from '@paralleldrive/cuid2';
 
 import { prisma } from '../lib/prisma';
 import { BadRequestError, InternalServerError } from '../utils/errors';
@@ -21,6 +23,15 @@ type ProductRow = {
   description: string;
   imageUrl: string;
   colors: string[];
+  category: string | null;
+  subCategory: string | null;
+  productType: string | null;
+  style: string | null;
+  occasion: string | null;
+  fit: string | null;
+  season: string | null;
+  popularityScore: number | null;
+  createdAt: Date;
 };
 
 interface ProductWithScore {
@@ -29,7 +40,20 @@ interface ProductWithScore {
   sources: string[];
 }
 
-type ProductSemanticRow = ProductRow & { distance: number };
+type ProductSemanticRow = ProductRow & { distance: number; similarity: number };
+
+// Query understanding output
+interface QueryAttributes {
+  category?: string | null;
+  subCategory?: string | null;
+  productType?: string | null;
+  gender?: string | null;
+  ageGroup?: string | null;
+  color?: string | null;
+  brand?: string | null;
+  style?: string | null;
+  occasion?: string | null;
+}
 
 type WardrobeRow = Pick<
   WardrobeItem,
@@ -401,9 +425,132 @@ export function fetchRelevantMemories(userId: string): Tool {
 // ============================================================================
 
 /**
- * Tool for searching the Broadway product catalog.
- * Uses text search on name, brand, and description with structured filters.
- * Returns product recommendations with images.
+ * Extracts structured attributes from a natural language query using LLM.
+ */
+async function understandQuery(query: string, existingFilters: { gender?: string | undefined; ageGroup?: string | undefined }): Promise<QueryAttributes> {
+  try {
+    const querySchema = z.object({
+      category: z.string().nullable().optional().describe('Main product category from hierarchy: "Clothing & Fashion", "Beauty & Personal Care", "Health & Wellness", "Jewellery & Accessories", "Footwear", "Bags & Luggage"'),
+      subCategory: z.string().nullable().optional().describe('Product subcategory from hierarchy (e.g., "Tops", "Bottoms", "Skincare", "Footwear", "Jewellery")'),
+      productType: z.string().nullable().optional().describe('Specific product type from hierarchy (e.g., "T-Shirts", "Jeans", "Moisturizers", "Sneakers", "Handbags")'),
+      gender: z.enum(['MALE', 'FEMALE', 'OTHER']).nullable().optional().describe('Gender if mentioned in query'),
+      ageGroup: z.enum(['TEEN', 'ADULT', 'SENIOR']).nullable().optional().describe('Age group if mentioned in query'),
+      color: z.string().nullable().optional().describe('Color mentioned in query (e.g., "Black", "Navy", "White")'),
+      brand: z.string().nullable().optional().describe('Brand name if mentioned in query'),
+      style: z.string().nullable().optional().describe('Style mentioned (e.g., "casual", "formal", "sporty")'),
+      occasion: z.string().nullable().optional().describe('Occasion mentioned (e.g., "work", "party", "everyday")'),
+    });
+
+    const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
+    const structuredModel = model.withStructuredOutput(querySchema);
+
+    // Create minimal trace buffer for LLM call
+    const traceBuffer: TraceBuffer = {
+      nodeRuns: [{
+        id: createId(),
+        nodeName: 'query-understanding',
+        startTime: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }],
+      llmTraces: [],
+    };
+
+    const categoryHierarchy = {
+      'Clothing & Fashion': {
+        'Tops': ['T-Shirts', 'Shirts', 'Blouses', 'Crop Tops', 'Tanks', 'Hoodies', 'Sweatshirts', 'Kurtas', 'Tunics', 'Kaftan', 'Jackets', 'Coats', 'Blazers', 'Shrugs', 'Sweaters', 'Cardigans'],
+        'Bottoms': ['Jeans', 'Trousers', 'Joggers', 'Shorts', 'Skirts', 'Palazzos', 'Skort', 'Sweatpants'],
+      },
+      'Beauty & Personal Care': {
+        'Skincare': ['Moisturizers', 'Cleansers', 'Toners', 'Serums', 'Essences', 'Sunscreens', 'Face Masks', 'Eye Creams'],
+        'Makeup': ['Foundations', 'Concealers', 'Blush', 'Bronzer', 'Highlighter', 'Lipsticks', 'Lip Balms', 'Mascaras', 'Eyeliners'],
+        'Hair Care': ['Shampoo', 'Conditioner', 'Hair Masks', 'Hair Oils', 'Hair Serums', 'Styling Products'],
+        'Fragrance': ['Perfume', 'Body Mist', 'Deodorants'],
+        'Men\'s Grooming': ['Beard Care', 'Shaving'],
+        'Body Care': [],
+      },
+      'Health & Wellness': {
+        'Nutrition & Supplements': ['Protein & Amino Acids', 'Vitamins & Minerals', 'Herbal & Ayurvedic', 'Weight Management', 'Sleep & Recovery', 'Immunity Booster'],
+        'Smart Healthtech & Electronics': ['Smart Rings', 'Smart Bands', 'Fitness Trackers', 'Smart Scales', 'Smart mirrors', 'Gym Equipments'],
+      },
+      'Jewellery & Accessories': {
+        'Jewellery': ['Necklaces', 'Earrings', 'Rings', 'Bracelets'],
+        'Watches': [],
+      },
+      'Footwear': {
+        'Footwear': ['Sneakers', 'Casual Shoes', 'Sports Shoes', 'Boots', 'Sandals', 'Heels', 'Flats', 'Shoes', 'Low-tops', 'High-tops', 'Flip Flops', 'Gym Shoes', 'Formal Shoes', 'Slippers'],
+      },
+      'Bags & Luggage': {
+        'Bags & Luggage': ['Backpacks', 'Handbags', 'Totes', 'Wallets', 'Luggage', 'Sling Bags', 'Suitcases', 'Messenger Bags', 'Travel Accessories', 'Laptop Sleeves'],
+      },
+    };
+
+    const systemPrompt = new SystemMessage(
+      'You are a product search query analyzer. Extract structured attributes from natural language product search queries. ' +
+      'Only extract attributes that are explicitly mentioned or clearly implied in the query. ' +
+      'Return null for any attribute that cannot be determined from the query. ' +
+      '\n\nIMPORTANT COLOR NORMALIZATION RULES:' +
+      '- Normalize color names to standard fashion/retail color names' +
+      '- Examples: "rust" -> "rust", "terracotta" -> "terracotta" or "orange", "burnt orange" -> "burnt orange" or "orange"' +
+      '- "burgundy" -> "burgundy" or "maroon", "navy" -> "navy" or "blue", "beige" -> "beige" or "tan"' +
+      '- Preserve specific color names when they are standard (e.g., "rust", "terracotta", "burgundy")' +
+      '- For ambiguous colors, provide the most common standard name' +
+      '- Return the normalized color name in lowercase' +
+      '\n\nCATEGORY/SUBCATEGORY/PRODUCT TYPE EXTRACTION RULES:' +
+      '- Use the following hierarchy to extract categories, subcategories, and product types:' +
+      JSON.stringify(categoryHierarchy, null, 2) +
+      '\n- DO NOT extract generic words like "fashion", "clothing", "items", "products" as category' +
+      '- Extract category from the main categories listed above (e.g., "Clothing & Fashion", "Beauty & Personal Care")' +
+      '- Extract subCategory from the subcategories within the main category (e.g., "Tops", "Bottoms", "Skincare")' +
+      '- Extract productType from the specific product types within the subcategory (e.g., "T-Shirts", "Jeans", "Moisturizers")' +
+      '- Match product types exactly as they appear in the hierarchy (case-sensitive)' +
+      '- If the query says "fashion items" or "clothing", return null for category (these are too generic)' +
+      '- Return null for category/subCategory/productType if you cannot determine a specific match from the hierarchy' +
+      '\n\nOTHER NORMALIZATION:' +
+      '- Gender: "MALE" not "male" or "men", "FEMALE" not "female" or "women"' +
+      '- AgeGroup: "ADULT" not "adult" or "adults", "TEEN" not "teen", "SENIOR" not "senior"'
+    );
+
+    const userMessage = new UserMessage(
+      `Query: "${query}"\n\n` +
+      (existingFilters.gender ? `Existing gender filter: ${existingFilters.gender}\n` : '') +
+      (existingFilters.ageGroup ? `Existing age group filter: ${existingFilters.ageGroup}\n` : '') +
+      '\nExtract all relevant product attributes from this query.'
+    );
+
+    const result = await structuredModel.run(systemPrompt, [userMessage], traceBuffer, 'query-understanding');
+    
+    // Convert undefined to null to match QueryAttributes type
+    return {
+      category: result.category ?? null,
+      subCategory: result.subCategory ?? null,
+      productType: result.productType ?? null,
+      gender: result.gender ?? null,
+      ageGroup: result.ageGroup ?? null,
+      color: result.color ?? null,
+      brand: result.brand ?? null,
+      style: result.style ?? null,
+      occasion: result.occasion ?? null,
+    };
+  } catch (err) {
+    logger.warn({ query, err: (err as Error)?.message }, 'Query understanding failed, continuing without extracted attributes');
+    return {};
+  }
+}
+
+
+
+
+
+/**
+ * Tool for searching the Broadway product catalog using hybrid retrieval.
+ * 
+ * Architecture:
+ * - Phase 1: Broad Vector Recall - Run vector search on entire table (no strict filters)
+ * - Phase 2: Intent-Based Soft Reranking - Rerank candidates in memory based on intent matching
+ * 
+ * This approach ensures high recall and prevents zero-result scenarios while maintaining precision
+ * through semantic similarity and soft intent matching.
  */
 export function searchProducts(): Tool {
   const searchProductsSchema = z
@@ -419,11 +566,7 @@ export function searchProducts(): Tool {
             .enum(['TEEN', 'ADULT', 'SENIOR'])
             .optional()
             .describe('Filter by age group (TEEN, ADULT, SENIOR)'),
-          color: z
-            .string()
-            .optional()
-            .describe("Filter by color (e.g., 'Black', 'Navy', 'White', 'Beige')"),
-          brand: z.string().optional().describe('Filter by brand name'),
+
         })
         .strict()
         .default({}),
@@ -434,7 +577,7 @@ export function searchProducts(): Tool {
   return new Tool({
     name: 'searchProducts',
     description:
-      'Searches the Broadway product catalog to find products matching the query. Uses text search on name, brand, and description combined with filters for gender, age group, color, and brand. Returns product recommendations with name, brand, image, and description. Use this to recommend specific products from our catalog during styling advice.',
+      'Searches the Broadway product catalog to find products matching the query. Uses hybrid retrieval with broad vector recall and intent-based reranking. Returns product recommendations with name, brand, image, and description. Use this to recommend specific products from our catalog during styling advice.',
     schema: searchProductsSchema,
     func: async ({ query, filters = {}, limit = 5 }: z.infer<typeof searchProductsSchema>) => {
       if (query.trim() === '') {
@@ -442,157 +585,424 @@ export function searchProducts(): Tool {
       }
 
       try {
-        const model = new OpenAIEmbeddings({
+        // Step 1: Query Understanding - Extract structured attributes from natural language
+        const queryAttrs = await understandQuery(query, {
+          gender: filters.gender,
+          ageGroup: filters.ageGroup,
+        });
+        
+        // Build intent object for soft reranking (explicit filters take precedence)
+        const intent: QueryAttributes = {
+          gender: filters.gender || queryAttrs.gender || null,
+          ageGroup: filters.ageGroup || queryAttrs.ageGroup || null,
+          category: queryAttrs.category || null,
+          subCategory: queryAttrs.subCategory || null,
+          color: queryAttrs.color || null, // Normalized color from AI
+          // Note: brand is handled via semantic similarity, not strict filtering
+        };
+
+        // Step 2: Generate query embedding
+        const embeddingModel = new OpenAIEmbeddings({
           model: 'text-embedding-3-small',
         });
-        const embeddedQuery = await model.embedQuery(query);
+        const embeddedQuery = await embeddingModel.embedQuery(query);
         const vector = JSON.stringify(embeddedQuery);
 
-        // Check if any products have embeddings first
-        const embeddingCount = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-          'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL',
-        );
-        const hasEmbeddings = Number(embeddingCount[0].count) > 0;
+        // Helper function to convert enum name to database value
+        // Prisma maps: MALE -> "male", FEMALE -> "female", OTHER -> "other"
+        const enumToDbValue = (enumValue: string | null): string | null => {
+          if (!enumValue) return null;
+          return enumValue.toLowerCase();
+        };
 
-        let resultsMap = new Map<
-          string,
-          { item: ProductRow; score: number; sources: string[] }
-        >();
+        // Convert gender enum to database value for querying
+        const genderDbValue = intent.gender ? enumToDbValue(intent.gender) : null;
+        const ageGroupDbValue = intent.ageGroup ? enumToDbValue(intent.ageGroup) : null;
+        
+        // Normalize color early to check if this is a color-focused query
+        const normalizedColor = intent.color ? intent.color.toLowerCase().trim() : null;
 
-        if (hasEmbeddings) {
-          // Build base conditions for semantic search, incorporating gender and ageGroup
-          const semanticConditions: string[] = ['"embedding" IS NOT NULL'];
-          const semanticParams: (string | number)[] = [];
-          let semanticParamIndex = 1;
+        // Phase 1: Broad Vector Recall - Get candidates WITHOUT strict gender filter
+        // This ensures we always get results, even if gender filter is too restrictive
 
-          if (filters?.gender) {
-            semanticParams.push(filters.gender.toLowerCase());
-            semanticConditions.push(`"gender"::text = $${semanticParamIndex++}`);
-          }
 
-          if (filters?.ageGroup) {
-            semanticParams.push(filters.ageGroup.toLowerCase());
-            semanticConditions.push(`"ageGroup"::text = $${semanticParamIndex++}`);
-          }
 
-          const semanticWhereClause = semanticConditions.join(' AND ');
 
-          // Perform semantic search
-          const semanticQuery = `
-            SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors,
-                   ("embedding" <=> $${semanticParamIndex}::vector) as distance
-            FROM "Product"
-            WHERE ${semanticWhereClause}
-            ORDER BY "embedding" <=> $${semanticParamIndex}::vector
-            LIMIT ${limit * 2}
-          `;
 
-          const semanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
-            semanticQuery,
-            ...semanticParams,
-            vector,
-          );
 
-          for (const item of semanticResults) {
-            const { distance, ...itemData } = item;
-            const score = Math.max(0, 1 - distance); // 0 to 1 score
-            resultsMap.set(item.id, {
-              item: itemData,
-              score: score * 0.9, // Weight semantic search highly
-              sources: ['semantic'],
-            });
-          }
+
+
+        const baseConditions: string[] = [
+          '"isActive" = true',
+          '"embedding" IS NOT NULL',
+          // Note: Don't filter imageUrl at SQL level - filter in JavaScript to see what's actually in DB
+        ];
+        const baseParams: (string | number)[] = [];
+        let paramIndex = 1;
+
+        // Apply soft filters (category, subCategory, etc.) but NOT gender/ageGroup/color as hard filters
+        // Gender, ageGroup, and color will be used for reranking in Phase 2
+        // Filter out generic category words that shouldn't be used as hard filters
+        // Also, if the query is primarily about color, don't apply category filters (they're too restrictive)
+        const genericCategoryWords = ['fashion', 'clothing', 'items', 'products', 'apparel', 'wear'];
+        const isColorQuery = normalizedColor !== null; // If we have a normalized color, it's likely a color-focused query
+        
+        // Only apply category filter if:
+        // 1. Category is not generic
+        // 2. Query is not primarily color-focused (color queries should be broad)
+        if (intent.category && 
+            !genericCategoryWords.includes(intent.category.toLowerCase().trim()) &&
+            !isColorQuery) {
+          baseConditions.push(`"category" ILIKE $${paramIndex++}`);
+          baseParams.push(`%${intent.category}%`);
         }
-
-
+        // Same logic for subCategory and productType - skip if color query
+        if (intent.subCategory && !isColorQuery) {
+          baseConditions.push(`"subCategory" ILIKE $${paramIndex++}`);
+          baseParams.push(`%${intent.subCategory}%`);
+        }
+        if (intent.productType && !isColorQuery) {
+          baseConditions.push(`"productType" ILIKE $${paramIndex++}`);
+          baseParams.push(`%${intent.productType}%`);
+        }
+        if (queryAttrs.brand) { // Use queryAttrs.brand as filters.brand was removed from schema
+          baseConditions.push(`"brandName" ILIKE $${paramIndex++}`);
+          baseParams.push(`%${queryAttrs.brand}%`);
+        }
+        // Note: Color is NOT added as a hard filter - it will be used for soft reranking
         
-                const finalSortedResults = Array.from(resultsMap.values())
-                  .sort((a, b) => b.score - a.score)
-                  .slice(0, limit)
-                  .map((result) => ({
-                    name: result.item.name,
-                    brand: result.item.brandName,
-                    gender: result.item.gender,
-                    ageGroup: result.item.ageGroup,
-                    description: result.item.description,
-                    colors: result.item.colors,
-                    imageUrl: result.item.imageUrl,
-                  }));
+        const whereClause = baseConditions.join(' AND ');
+        const vectorParamIndex = paramIndex;
 
-                // If no results after semantic and text search, fall back to recent active products with filters
-                if (finalSortedResults.length === 0) {
-                  logger.debug(
-                    { query, filters },
-                    'No results found after all searches, returning fallback products',
-                  );
+        // Vector similarity search - retrieve top 200 candidates for reranking
+        // Use alias to ensure consistent column name in results
+        const vectorRecallQuery = `
+          SELECT id, barcode, name, "brandName", gender, "ageGroup", description, 
+                 "imageUrl" as "imageUrl", colors,
+                 category, "subCategory", "productType", style, occasion, fit, season, "popularityScore", "createdAt",
+                 ("embedding" <=> $${vectorParamIndex}::vector) as distance,
+                 (1 - ("embedding" <=> $${vectorParamIndex}::vector)) as similarity
+          FROM "Product"
+          WHERE ${whereClause}
+          ORDER BY "embedding" <=> $${vectorParamIndex}::vector
+          LIMIT 200
+        `;
 
-                  const fallbackConditions: string[] = [
-                    `"isActive" = true`,
-                    `"imageUrl" IS NOT NULL`,
-                    `"imageUrl" != ''`
-                  ];
-                  const fallbackParams: (string | number)[] = [];
-                  let fallbackParamIndex = 1;
+        // Log the actual query for debugging
+        logger.debug(
+          {
+            query,
+            filters,
+            whereClause,
+            baseParamsCount: baseParams.length,
+            vectorParamIndex,
+          },
+          'Executing vector recall query',
+        );
+
+        const vectorCandidates = await prisma.$queryRawUnsafe<any[]>(
+          vectorRecallQuery,
+          ...baseParams,
+          vector,
+        );
         
-                  if (filters?.gender) {
-                    fallbackParams.push(filters.gender.toLowerCase());
-                    fallbackConditions.push(`"gender"::text = $${fallbackParamIndex++}`);
-                  }          
-                  if (filters?.ageGroup) {
-                    fallbackParams.push(filters.ageGroup.toLowerCase());
-                    fallbackConditions.push(`"ageGroup"::text = $${fallbackParamIndex++}`);
-                  }
-                  if (filters?.color) { // Include color filter in final fallback
-                    fallbackParams.push(`%${filters.color.toLowerCase()}%`);
-                    fallbackConditions.push(`LOWER(ARRAY_TO_STRING(colors, ',')) LIKE $${fallbackParamIndex++}`);
-                  }
-                  if (filters?.brand) { // Include brand filter in final fallback
-                    fallbackParams.push(`%${filters.brand.toLowerCase()}%`);
-                    fallbackConditions.push(`LOWER("brandName") LIKE $${fallbackParamIndex++}`);
-                  }
-                        
-                  const fallbackWhereClause = fallbackConditions.join(' AND ');
-        
-                  const fallbackQuery = `
-                    SELECT id, barcode, name, "brandName" as "brandName", gender, "ageGroup" as "ageGroup", description, "imageUrl", colors
-                    FROM "Product"
-                    WHERE ${fallbackWhereClause}
-                    ORDER BY "createdAt" DESC
-                    LIMIT ${limit}
-                  `;
-        
-                  const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery, ...fallbackParams);
-                  if (fallbackResults.length > 0) {
-                    logger.info(
-                      { query, filters, resultCount: fallbackResults.length },
-                      'Product search completed (fallback to recent products)',
-                    );
-
-                    return fallbackResults.map((item) => ({
-                      name: item.name,
-                      brand: item.brandName,
-                      gender: item.gender,
-                      ageGroup: item.ageGroup,
-                      description: item.description,
-                      colors: item.colors,
-                      imageUrl: item.imageUrl,
-                    }));
-                  }
-
-                  logger.warn(
-                    { query, filters },
-                    'Fallback search returned no products - database may be empty',
-                  );
-                  return [];
-                }
-
+        // Map to ProductSemanticRow - handle both camelCase and lowercase column names
+        // PostgreSQL with $queryRawUnsafe returns column names as-is (case-sensitive when quoted)
+        const mappedCandidates: ProductSemanticRow[] = vectorCandidates.map((row: any) => {
+          // Try all possible case variations for imageUrl
+          const imageUrl = row.imageUrl || 
+                          row.imageurl || 
+                          row['imageUrl'] || 
+                          row['imageurl'] ||
+                          (Object.keys(row).find(k => k.toLowerCase() === 'imageurl') ? row[Object.keys(row).find(k => k.toLowerCase() === 'imageurl')!] : null) ||
+                          '';
+          
+          return {
+            ...row,
+            imageUrl: imageUrl,
+          };
+        });
 
         logger.info(
-          { query, filters, resultCount: finalSortedResults.length },
-          'Product search completed',
+          {
+            query,
+            filters,
+            candidates: mappedCandidates.length,
+            whereClause,
+          },
+          'Phase 1 vector recall completed.',
         );
 
-        return finalSortedResults;
+        // normalizedColor already defined above
+
+        // Fallback: If vector search returns 0, try text-based search
+        if (vectorCandidates.length === 0) {
+          logger.warn(
+            { query, filters, whereClause },
+            'Vector search returned 0 candidates, trying text-based fallback',
+          );
+
+          // Text-based fallback search - use normalized color if available, otherwise use original query
+          const searchTerms: string[] = [];
+          const searchParams: string[] = [];
+          let paramIdx = 1;
+
+          // Add original query term
+          searchTerms.push(`(LOWER(name) LIKE $${paramIdx} OR LOWER(description) LIKE $${paramIdx} OR LOWER("brandName") LIKE $${paramIdx})`);
+          searchParams.push(`%${query.toLowerCase()}%`);
+          paramIdx++;
+
+          // Add normalized color term if available (separate from query)
+          if (normalizedColor && normalizedColor !== query.toLowerCase()) {
+            searchTerms.push(`EXISTS (SELECT 1 FROM unnest(colors) AS color WHERE LOWER(color) LIKE $${paramIdx})`);
+            searchParams.push(`%${normalizedColor}%`);
+            paramIdx++;
+          } else {
+            // If no normalized color, search colors with original query
+            searchTerms.push(`EXISTS (SELECT 1 FROM unnest(colors) AS color WHERE LOWER(color) LIKE $1)`);
+          }
+
+          const textSearchQuery = `
+            SELECT id, barcode, name, "brandName", gender, "ageGroup", description, "imageUrl", colors,
+                   category, "subCategory", "productType", style, occasion, fit, season, "popularityScore", "createdAt",
+                   0.5 as distance,
+                   0.5 as similarity
+            FROM "Product"
+            WHERE "isActive" = true
+              AND "imageUrl" IS NOT NULL
+              AND "imageUrl" != ''
+              AND LENGTH(TRIM("imageUrl")) > 0
+              AND ("imageUrl" LIKE 'http://%' OR "imageUrl" LIKE 'https://%' OR "imageUrl" LIKE 'data:%')
+              AND (${searchTerms.join(' OR ')})
+            LIMIT 200
+          `;
+
+          const textCandidates = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
+            textSearchQuery,
+            ...searchParams,
+          );
+
+          logger.info(
+            { query, textCandidates: textCandidates.length },
+            'Text-based fallback search completed',
+          );
+
+          if (textCandidates.length === 0) {
+            return []; // Return empty if both searches fail
+          }
+
+          // Use text candidates for reranking (normalizedColor already defined above)
+          const rerankedCandidates = textCandidates.map((candidate) => {
+            let score = candidate.similarity; // Start with base similarity score
+
+            // Gender matching boost (strong preference)
+            if (genderDbValue && candidate.gender) {
+              const candidateGenderDb = enumToDbValue(candidate.gender);
+              if (candidateGenderDb === genderDbValue) {
+                score += 0.3; // Strong boost for gender match
+              } else if (candidateGenderDb === null || candidateGenderDb === 'other' || candidateGenderDb === 'unisex') {
+                score += 0.1; // Small boost for unisex/other products
+              }
+            }
+
+            // AgeGroup matching boost
+            if (ageGroupDbValue && candidate.ageGroup) {
+              const candidateAgeDb = enumToDbValue(candidate.ageGroup);
+              if (candidateAgeDb === ageGroupDbValue) {
+                score += 0.15; // Boost for age group match
+              }
+            }
+
+            // Color matching boost (using AI-normalized color)
+            if (normalizedColor && candidate.colors && candidate.colors.length > 0) {
+              const candidateColors = candidate.colors.map(c => c.toLowerCase().trim());
+              // Check for exact match
+              if (candidateColors.includes(normalizedColor)) {
+                score += 0.25; // Strong boost for exact color match
+              } else {
+                // Check for partial match (color name contains normalized color or vice versa)
+                const hasPartialMatch = candidateColors.some(c => 
+                  c.includes(normalizedColor) || normalizedColor.includes(c)
+                );
+                if (hasPartialMatch) {
+                  score += 0.1; // Moderate boost for partial color match
+                }
+              }
+            }
+
+            return {
+              ...candidate,
+              rerankScore: score,
+            };
+          });
+
+          // Sort by rerank score and take top results
+          // Filter out products with empty/null imageUrl before mapping
+          const finalResults = rerankedCandidates
+            .sort((a, b) => b.rerankScore - a.rerankScore)
+            .filter((result) => {
+              // Filter out products with empty or invalid imageUrls
+              const imageUrl = result.imageUrl;
+              return imageUrl && 
+                     typeof imageUrl === 'string' && 
+                     imageUrl.trim().length > 0 &&
+                     (imageUrl.startsWith('http://') || 
+                      imageUrl.startsWith('https://') || 
+                      imageUrl.startsWith('data:'));
+            })
+            .slice(0, limit)
+            .map((result) => ({
+              name: result.name,
+              brand: result.brandName,
+              gender: result.gender,
+              ageGroup: result.ageGroup,
+              description: result.description,
+              colors: result.colors,
+              imageUrl: result.imageUrl, // Already validated above
+            }));
+
+          logger.info(
+            {
+              query,
+              filters,
+              resultCount: finalResults.length,
+              textCandidatesCount: textCandidates.length,
+              genderFilter: genderDbValue,
+              ageGroupFilter: ageGroupDbValue,
+              normalizedColor: normalizedColor,
+              method: 'text-fallback',
+            },
+            'Product search completed (text fallback + intent-based reranking)',
+          );
+
+          return finalResults;
+        }
+
+        // Phase 2: Intent-Based Soft Reranking
+        // Boost products matching gender/ageGroup/color, but don't exclude others
+        // normalizedColor already defined above
+        
+        const rerankedCandidates = mappedCandidates.map((candidate) => {
+          let score = candidate.similarity; // Start with semantic similarity score
+
+          // Gender matching boost (strong preference)
+          if (genderDbValue && candidate.gender) {
+            const candidateGenderDb = enumToDbValue(candidate.gender);
+            if (candidateGenderDb === genderDbValue) {
+              score += 0.3; // Strong boost for gender match
+            } else if (candidateGenderDb === null || candidateGenderDb === 'other' || candidateGenderDb === 'unisex') {
+              score += 0.1; // Small boost for unisex/other products
+            }
+            // No penalty for mismatch - we want to show results even if not perfect match
+          }
+
+          // AgeGroup matching boost
+          if (ageGroupDbValue && candidate.ageGroup) {
+            const candidateAgeDb = enumToDbValue(candidate.ageGroup);
+            if (candidateAgeDb === ageGroupDbValue) {
+              score += 0.15; // Boost for age group match
+            }
+          }
+
+          // Color matching boost (using AI-normalized color)
+          if (normalizedColor && candidate.colors && candidate.colors.length > 0) {
+            const candidateColors = candidate.colors.map(c => c.toLowerCase().trim());
+            // Check for exact match
+            if (candidateColors.includes(normalizedColor)) {
+              score += 0.25; // Strong boost for exact color match
+            } else {
+              // Check for partial match (color name contains normalized color or vice versa)
+              const hasPartialMatch = candidateColors.some(c => 
+                c.includes(normalizedColor) || normalizedColor.includes(c)
+              );
+              if (hasPartialMatch) {
+                score += 0.1; // Moderate boost for partial color match
+              }
+            }
+          }
+
+          return {
+            ...candidate,
+            rerankScore: score,
+          };
+        });
+
+        // Sort by rerank score and take top results
+        // Filter out products with empty/null imageUrl before mapping
+        const beforeFilter = rerankedCandidates.length;
+        const finalResults = rerankedCandidates
+          .sort((a, b) => b.rerankScore - a.rerankScore)
+          .filter((result) => {
+            // Filter out products with empty or invalid imageUrls
+            const imageUrl = result.imageUrl;
+            const isValid = imageUrl && 
+                   typeof imageUrl === 'string' && 
+                   imageUrl.trim().length > 0 &&
+                   (imageUrl.startsWith('http://') || 
+                    imageUrl.startsWith('https://') || 
+                    imageUrl.startsWith('data:'));
+            
+            if (!isValid) {
+              logger.debug(
+                {
+                  query,
+                  productName: result.name,
+                  imageUrl: imageUrl,
+                  imageUrlType: typeof imageUrl,
+                  imageUrlLength: imageUrl ? imageUrl.length : 0,
+                },
+                'Filtering out product with invalid/empty imageUrl',
+              );
+            }
+            
+            return isValid;
+          })
+          .slice(0, limit)
+          .map((result: any) => {
+            // Handle PostgreSQL column name case sensitivity
+            // PostgreSQL might return "imageUrl" or "imageurl" depending on quoting
+            const imageUrl = result.imageUrl || result.imageurl || result['imageUrl'] || '';
+            
+            // Debug: Log the raw result to see what we're getting
+            logger.debug(
+              {
+                query,
+                productName: result.name,
+                rawImageUrl: imageUrl,
+                imageUrlType: typeof imageUrl,
+                imageUrlLength: imageUrl ? imageUrl.length : 0,
+                allKeys: Object.keys(result),
+                hasImageUrl: !!result.imageUrl,
+                hasImageurl: !!result.imageurl,
+              },
+              'Mapping product result',
+            );
+            
+            return {
+              name: result.name,
+              brand: result.brandName || result.brandname,
+              gender: result.gender,
+              ageGroup: result.ageGroup || result.agegroup,
+              description: result.description,
+              colors: result.colors || [],
+              imageUrl: imageUrl, // Handle case sensitivity
+            };
+          });
+
+        logger.info(
+          {
+            query,
+            filters,
+            resultCount: finalResults.length,
+            vectorCandidatesCount: vectorCandidates.length,
+            genderFilter: genderDbValue,
+            ageGroupFilter: ageGroupDbValue,
+            normalizedColor: normalizedColor,
+          },
+          'Product search completed (vector recall + intent-based reranking)',
+        );
+
+        return finalResults;
       } catch (err: unknown) {
         logger.error({ query, filters, err: (err as Error)?.message }, 'Failed to search products');
         throw new InternalServerError('Failed to search products', {
