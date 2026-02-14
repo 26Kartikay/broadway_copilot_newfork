@@ -44,11 +44,6 @@ type ProductSemanticRow = ProductRow & { distance: number; similarity: number };
 
 // Query understanding output
 interface QueryAttributes {
-  category?: string | null;
-  subCategory?: string | null;
-  productType?: string | null;
-  gender?: string | null;
-  ageGroup?: string | null;
   color?: string | null;
   brand?: string | null;
   style?: string | null;
@@ -430,11 +425,6 @@ export function fetchRelevantMemories(userId: string): Tool {
 async function understandQuery(query: string, existingFilters: { gender?: string | undefined; ageGroup?: string | undefined }): Promise<QueryAttributes> {
   try {
     const querySchema = z.object({
-      category: z.string().nullable().optional().describe('Main product category from hierarchy: "Clothing & Fashion", "Beauty & Personal Care", "Health & Wellness", "Jewellery & Accessories", "Footwear", "Bags & Luggage"'),
-      subCategory: z.string().nullable().optional().describe('Product subcategory from hierarchy (e.g., "Tops", "Bottoms", "Skincare", "Footwear", "Jewellery")'),
-      productType: z.string().nullable().optional().describe('Specific product type from hierarchy (e.g., "T-Shirts", "Jeans", "Moisturizers", "Sneakers", "Handbags")'),
-      gender: z.enum(['MALE', 'FEMALE', 'OTHER']).nullable().optional().describe('Gender if mentioned in query'),
-      ageGroup: z.enum(['TEEN', 'ADULT', 'SENIOR']).nullable().optional().describe('Age group if mentioned in query'),
       color: z.string().nullable().optional().describe('Color mentioned in query (e.g., "Black", "Navy", "White")'),
       brand: z.string().nullable().optional().describe('Brand name if mentioned in query'),
       style: z.string().nullable().optional().describe('Style mentioned (e.g., "casual", "formal", "sporty")'),
@@ -485,6 +475,7 @@ async function understandQuery(query: string, existingFilters: { gender?: string
       },
     };
 
+
     const systemPrompt = new SystemMessage(
       'You are a product search query analyzer. Extract structured attributes from natural language product search queries. ' +
       'Only extract attributes that are explicitly mentioned or clearly implied in the query. ' +
@@ -496,19 +487,7 @@ async function understandQuery(query: string, existingFilters: { gender?: string
       '- Preserve specific color names when they are standard (e.g., "rust", "terracotta", "burgundy")' +
       '- For ambiguous colors, provide the most common standard name' +
       '- Return the normalized color name in lowercase' +
-      '\n\nCATEGORY/SUBCATEGORY/PRODUCT TYPE EXTRACTION RULES:' +
-      '- Use the following hierarchy to extract categories, subcategories, and product types:' +
-      JSON.stringify(categoryHierarchy, null, 2) +
-      '\n- DO NOT extract generic words like "fashion", "clothing", "items", "products" as category' +
-      '- Extract category from the main categories listed above (e.g., "Clothing & Fashion", "Beauty & Personal Care")' +
-      '- Extract subCategory from the subcategories within the main category (e.g., "Tops", "Bottoms", "Skincare")' +
-      '- Extract productType from the specific product types within the subcategory (e.g., "T-Shirts", "Jeans", "Moisturizers")' +
-      '- Match product types exactly as they appear in the hierarchy (case-sensitive)' +
-      '- If the query says "fashion items" or "clothing", return null for category (these are too generic)' +
-      '- Return null for category/subCategory/productType if you cannot determine a specific match from the hierarchy' +
-      '\n\nOTHER NORMALIZATION:' +
-      '- Gender: "MALE" not "male" or "men", "FEMALE" not "female" or "women"' +
-      '- AgeGroup: "ADULT" not "adult" or "adults", "TEEN" not "teen", "SENIOR" not "senior"'
+      '\n\nOTHER NORMALIZATION:'
     );
 
     const userMessage = new UserMessage(
@@ -521,12 +500,8 @@ async function understandQuery(query: string, existingFilters: { gender?: string
     const result = await structuredModel.run(systemPrompt, [userMessage], traceBuffer, 'query-understanding');
     
     // Convert undefined to null to match QueryAttributes type
+    // Note: category, subCategory, productType, gender, ageGroup are no longer extracted
     return {
-      category: result.category ?? null,
-      subCategory: result.subCategory ?? null,
-      productType: result.productType ?? null,
-      gender: result.gender ?? null,
-      ageGroup: result.ageGroup ?? null,
       color: result.color ?? null,
       brand: result.brand ?? null,
       style: result.style ?? null,
@@ -558,18 +533,10 @@ export function searchProducts(): Tool {
       query: z.string().describe('Natural language product search query'),
       filters: z
         .object({
-          gender: z
-            .enum(['MALE', 'FEMALE', 'OTHER'])
-            .optional()
-            .describe('Filter by gender (MALE, FEMALE, OTHER)'),
-          ageGroup: z
-            .enum(['TEEN', 'ADULT', 'SENIOR'])
-            .optional()
-            .describe('Filter by age group (TEEN, ADULT, SENIOR)'),
-
+          gender: z.enum(['male', 'female', 'other']).optional(),
+          ageGroup: z.enum(['teen', 'adult', 'senior']).optional(),
         })
-        .strict()
-        .default({}),
+        .strict(),
       limit: z.number().int().positive().default(5),
     })
     .strict();
@@ -591,14 +558,16 @@ export function searchProducts(): Tool {
           ageGroup: filters.ageGroup,
         });
         
-        // Build intent object for soft reranking (explicit filters take precedence)
-        const intent: QueryAttributes = {
-          gender: filters.gender || queryAttrs.gender || null,
-          ageGroup: filters.ageGroup || queryAttrs.ageGroup || null,
-          category: queryAttrs.category || null,
-          subCategory: queryAttrs.subCategory || null,
+        // Build intent object for soft reranking
+        // Note: gender and ageGroup come from filters (tool schema), not from query understanding
+        // category, subCategory, productType are no longer extracted
+        const intent = {
+          gender: filters.gender || null,
+          ageGroup: filters.ageGroup || null,
           color: queryAttrs.color || null, // Normalized color from AI
-          // Note: brand is handled via semantic similarity, not strict filtering
+          brand: queryAttrs.brand || null,
+          style: queryAttrs.style || null,
+          occasion: queryAttrs.occasion || null,
         };
 
         // Step 2: Generate query embedding
@@ -622,8 +591,8 @@ export function searchProducts(): Tool {
         // Normalize color early to check if this is a color-focused query
         const normalizedColor = intent.color ? intent.color.toLowerCase().trim() : null;
 
-        // Phase 1: Broad Vector Recall - Get candidates WITHOUT strict gender filter
-        // This ensures we always get results, even if gender filter is too restrictive
+        // Phase 1: Broad Vector Recall - Get candidates with gender filter applied
+        // Gender filter excludes opposite gender but allows matching gender, unisex/other, or null
 
 
 
@@ -640,36 +609,25 @@ export function searchProducts(): Tool {
         const baseParams: (string | number)[] = [];
         let paramIndex = 1;
 
-        // Apply soft filters (category, subCategory, etc.) but NOT gender/ageGroup/color as hard filters
-        // Gender, ageGroup, and color will be used for reranking in Phase 2
-        // Filter out generic category words that shouldn't be used as hard filters
-        // Also, if the query is primarily about color, don't apply category filters (they're too restrictive)
-        const genericCategoryWords = ['fashion', 'clothing', 'items', 'products', 'apparel', 'wear'];
-        const isColorQuery = normalizedColor !== null; // If we have a normalized color, it's likely a color-focused query
-        
-        // Only apply category filter if:
-        // 1. Category is not generic
-        // 2. Query is not primarily color-focused (color queries should be broad)
-        if (intent.category && 
-            !genericCategoryWords.includes(intent.category.toLowerCase().trim()) &&
-            !isColorQuery) {
-          baseConditions.push(`"category" ILIKE $${paramIndex++}`);
-          baseParams.push(`%${intent.category}%`);
+        // Apply gender filter as hard constraint to prevent mis-gendered recommendations
+        // Allow matching gender, unisex/other, or null (but exclude opposite gender)
+        if (genderDbValue) {
+          if (genderDbValue === 'male') {
+            // For male users: include male, unisex, other, or null (exclude female)
+            baseConditions.push(`(gender = 'male' OR gender IS NULL OR gender = 'other')`);
+          } else if (genderDbValue === 'female') {
+            // For female users: include female, unisex, other, or null (exclude male)
+            baseConditions.push(`(gender = 'female' OR gender IS NULL OR gender = 'other')`);
+          }
+          // Note: 'other' gender from filters will allow all products (no filter applied)
         }
-        // Same logic for subCategory and productType - skip if color query
-        if (intent.subCategory && !isColorQuery) {
-          baseConditions.push(`"subCategory" ILIKE $${paramIndex++}`);
-          baseParams.push(`%${intent.subCategory}%`);
-        }
-        if (intent.productType && !isColorQuery) {
-          baseConditions.push(`"productType" ILIKE $${paramIndex++}`);
-          baseParams.push(`%${intent.productType}%`);
-        }
-        if (queryAttrs.brand) { // Use queryAttrs.brand as filters.brand was removed from schema
+
+        // Apply brand filter if mentioned in query
+        // Note: ageGroup and color are NOT added as hard filters - they will be used for soft reranking in Phase 2
+        if (queryAttrs.brand) {
           baseConditions.push(`"brandName" ILIKE $${paramIndex++}`);
           baseParams.push(`%${queryAttrs.brand}%`);
         }
-        // Note: Color is NOT added as a hard filter - it will be used for soft reranking
         
         const whereClause = baseConditions.join(' AND ');
         const vectorParamIndex = paramIndex;
@@ -762,6 +720,16 @@ export function searchProducts(): Tool {
             searchTerms.push(`EXISTS (SELECT 1 FROM unnest(colors) AS color WHERE LOWER(color) LIKE $1)`);
           }
 
+          // Build gender filter for text search (same logic as vector search)
+          let genderFilterClause = '';
+          if (genderDbValue) {
+            if (genderDbValue === 'male') {
+              genderFilterClause = ` AND (gender = 'male' OR gender IS NULL OR gender = 'other')`;
+            } else if (genderDbValue === 'female') {
+              genderFilterClause = ` AND (gender = 'female' OR gender IS NULL OR gender = 'other')`;
+            }
+          }
+
           const textSearchQuery = `
             SELECT id, barcode, name, "brandName", gender, "ageGroup", description, "imageUrl", colors,
                    category, "subCategory", "productType", style, occasion, fit, season, "popularityScore", "createdAt",
@@ -773,6 +741,7 @@ export function searchProducts(): Tool {
               AND "imageUrl" != ''
               AND LENGTH(TRIM("imageUrl")) > 0
               AND ("imageUrl" LIKE 'http://%' OR "imageUrl" LIKE 'https://%' OR "imageUrl" LIKE 'data:%')
+              ${genderFilterClause}
               AND (${searchTerms.join(' OR ')})
             LIMIT 200
           `;

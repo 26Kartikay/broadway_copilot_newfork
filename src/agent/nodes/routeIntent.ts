@@ -29,7 +29,7 @@ const LLMOutputSchema = z.object({
     'skin_lab',
     'fashion_quiz',
   ]),
-  missingProfileField: z.enum(['gender', 'age_group']).nullable(),
+  missingProfileField: z.enum(['gender', 'age_group', 'fitPreference']).nullable(),
 });
 
 export async function routeIntent(state: GraphState): Promise<GraphState> {
@@ -300,14 +300,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
     let { intent, missingProfileField } = response;
 
-    if (missingProfileField === 'gender' && (user.inferredGender || user.confirmedGender)) {
-      missingProfileField = null;
-    } else if (
-      missingProfileField === 'age_group' &&
-      (user.inferredAgeGroup || user.confirmedAgeGroup)
-    ) {
-      missingProfileField = null;
-    }
+
 
     return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
   } catch (err: unknown) {

@@ -117,16 +117,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const tonalityInstructions =
       tonalityInstructionsMap[state.selectedTonality as keyof typeof tonalityInstructionsMap];
 
-    const gender = state.user.confirmedGender;
-    const ageGroup = state.user.confirmedAgeGroup;
-    let userContext = 'an adult';
-    if (gender && ageGroup) {
-      userContext = `a ${ageGroup.toLowerCase()} ${gender.toLowerCase()}`;
-    } else if (gender) {
-      userContext = `an adult ${gender.toLowerCase()}`;
-    } else if (ageGroup) {
-      userContext = `a ${ageGroup.toLowerCase()}`;
-    }
+    let userContext = '';
 
     let systemPromptText = systemPromptTextRaw.replace(
       '{tonality_instructions}',
