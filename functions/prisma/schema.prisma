@@ -16,14 +16,16 @@ enum MessageRole {
   TOOL
 }
 enum Gender {
-  MALE @map("male")
-  FEMALE @map("female")
-  OTHER @map("other")
+  MALE
+  FEMALE
 }
 enum AgeGroup {
-  TEEN @map("teen")
-  ADULT @map("adult")
-  SENIOR @map("senior")
+  AGE_13_17
+  AGE_18_25
+  AGE_26_35
+  AGE_36_45
+  AGE_46_55
+  AGE_55_PLUS
 }
 enum PendingType {
   NONE
@@ -32,24 +34,10 @@ enum PendingType {
   ASK_USER_INFO
   FEEDBACK
   TONALITY_SELECTION
-  STYLE_STUDIO_MENU
+  STYLE_STUDIO_MENU  
   THIS_OR_THAT_IMAGE_INPUT
   THIS_OR_THAT_FIRST_IMAGE
   THIS_OR_THAT_SECOND_IMAGE
-  FASHION_QUIZ_START
-  FASHION_QUIZ_QUESTION_1
-  FASHION_QUIZ_QUESTION_2
-  FASHION_QUIZ_QUESTION_3
-  FASHION_QUIZ_QUESTION_4
-  FASHION_QUIZ_QUESTION_5
-  FASHION_QUIZ_QUESTION_6
-  FASHION_QUIZ_QUESTION_7
-  FASHION_QUIZ_QUESTION_8
-  FASHION_QUIZ_QUESTION_9
-  FASHION_QUIZ_QUESTION_10
-  FASHION_QUIZ_RESULTS
-  SAVE_COLOR_ANALYSIS
-  CONFIRM_PRODUCT_RECOMMENDATION
 }
 enum TaskType {
   SEND_FEEDBACK_REQUEST
@@ -96,17 +84,10 @@ enum Tonality {
   friendly
   hype_bff
 }
-
-enum Fit {
-  LOW @map("low")
-  MEDIUM @map("medium")
-  HIGH @map("high")
-}
 // --- CORE ---
 
 model User {
   id          String @id @default(cuid())
-  appUserId   String @unique
   whatsappId  String @unique
   profileName String @default("")
 
@@ -114,13 +95,9 @@ model User {
   inferredAgeGroup  AgeGroup?
   confirmedGender   Gender?
   confirmedAgeGroup AgeGroup?
-  fitPreference     Fit?
 
   lastVibeCheckAt     DateTime?
   lastColorAnalysisAt DateTime?
-
-  lastSyncedAt DateTime?
-  syncVersion  BigInt?
 
   createdAt DateTime @default(now())
   
@@ -136,7 +113,6 @@ model User {
   graphRuns     GraphRun[]
 
   @@index([createdAt])
-  @@index([appUserId])
 }
 
 model Conversation {
@@ -171,8 +147,6 @@ model Message {
 
   content          Json[] @default([])
   additionalKwargs Json?
-
-  thisOrThatFirstImageId String?
 
   memoriesProcessed Boolean @default(false)
   wardrobeProcessed Boolean @default(false)
@@ -301,49 +275,52 @@ model WardrobeItem {
 // --- PRODUCT CATALOG ---
 
 model Product {
-  id          String   @id @default(cuid())
-  barcode     String?
+  id        String @id @default(cuid())
+  handleId  String @unique                    // URL-friendly product identifier
+  barcode   String?                           // Product barcode/SKU
   
-  name        String
-  brandName   String
+  name      String                            // article_name
+  brand     String                            // Brand name
   
-  gender      Gender?
-  ageGroup    AgeGroup?
-  description String?
-  imageUrl    String?
-  colors      String[]
+  // Category & Type
+  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
+  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
   
-  // Structured attributes for hybrid retrieval
-  category        String?
-  subCategory     String?
-  productType     String?
-  style           String?
-  occasion        String?
-  fit             String?
-  season          String?
-  popularityScore Float?  @default(0.0)
+  // Parsed from component string (for fast filtering)
+  style       String?                         // Athleisure, Minimal, Streetwear, etc.
+  fit         String?                         // Oversized, Slim, Regular, etc.
+  colors      String[]                        // Black, Navy, Red, etc.
+  patterns    String?                         // Solid, Graphics, Stripes, etc.
+  occasions   String[]                        // Casual, Work, Party, etc.
   
-  embedding      Unsupported("vector")?
-  embeddingModel String?
-  embeddingDim   Int?
-  embeddingAt    DateTime?
+  // Full component tags as JSON (for category-specific tags)
+  componentTags Json                          // All parsed tags from component string
   
-  isActive    Boolean  @default(true)
+  // URLs
+  imageUrl    String                          // Product image URL
+  productLink String                          // Link to product page on broadwaylive.in
+  
+  // Vector search
+  searchDoc        String      @db.Text       // Combined text for embedding generation
+  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
+  
+  // Metadata
+  isActive    Boolean  @default(true)         // Whether product is available
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  @@index([name])
-  @@index([brandName])
-  @@index([gender])
-  @@index([ageGroup])
-  @@index([colors])
+  // Indexes for fast filtering
+  @@index([category])
+  @@index([generalTag])
+  @@index([style])
+  @@index([fit])
+  @@index([patterns])
+  @@index([brand])
   @@index([isActive])
   @@index([createdAt])
-  @@index([category])
-  @@index([subCategory])
-  @@index([productType])
-  @@index([brandName, category])
-  @@index([isActive, gender, ageGroup])
 }
 
 // --- AGENT & LOGGING ---
