@@ -198,21 +198,50 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       // Insert into database
       console.log(`💾 Inserting product ${product.barcode} into database...`);
       
-      const created = await prisma.product.create({
-        data: {
-          barcode: product.barcode,
-          name: product.name,
-          brandName: product.brandName,
-          gender: product.gender,
-          ageGroup: product.ageGroup,
-          description: product.description,
-          imageUrl: product.imageUrl,
-          colors: product.colors,
-          isActive: true,
-        },
-      });
-
-      imported++;
+      try {
+        const created = await prisma.product.create({
+          data: {
+            barcode: product.barcode,
+            name: product.name,
+            brandName: product.brandName,
+            gender: product.gender,
+            ageGroup: product.ageGroup,
+            description: product.description,
+            imageUrl: product.imageUrl,
+            colors: product.colors,
+            isActive: true,
+          },
+        });
+        imported++;
+      } catch (createError: any) {
+        // If enum error, try again with null gender/ageGroup
+        if (createError?.message?.includes('enum') || createError?.code === 'P2022') {
+          console.warn(`⚠️ Enum error for product ${product.barcode}. Retrying with null gender/ageGroup...`);
+          try {
+            await prisma.product.create({
+              data: {
+                barcode: product.barcode,
+                name: product.name,
+                brandName: product.brandName,
+                gender: null, // Set to null if enum doesn't match
+                ageGroup: null, // Set to null if enum doesn't match
+                description: product.description,
+                imageUrl: product.imageUrl,
+                colors: product.colors,
+                isActive: true,
+              },
+            });
+            imported++;
+            console.log(`✅ Imported with null gender/ageGroup: ${product.barcode}`);
+          } catch (retryError: any) {
+            // If still fails, it's a different error
+            throw retryError;
+          }
+        } else {
+          // Re-throw if it's not an enum error
+          throw createError;
+        }
+      }
 
     } catch (err: any) {
       // Handle unique constraint errors gracefully
