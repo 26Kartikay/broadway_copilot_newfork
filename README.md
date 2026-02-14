@@ -221,36 +221,54 @@ The product catalog is stored in the `Product` table with vector embeddings for 
 
 ```prisma
 model Product {
-  id          String    @id @default(cuid())
-  barcode     String    @unique                    // Product barcode/SKU (from CSV)
-  name        String                                // Product name (from CSV)
-  brandName   String    @map("brand_name")          // Brand name (from CSV)
-  gender      Gender?                               // Gender (MALE, FEMALE, OTHER) - optional
-  ageGroup    AgeGroup? @map("age_group")          // Age group (TEEN, ADULT, SENIOR) - optional
-  description String    @db.Text                    // Product description (from CSV)
-  imageUrl    String                                // Product image URL (from CSV)
-  colors      String[]                              // Colors array (from CSV, comma-separated)
+  id        String @id @default(cuid())
+  handleId  String @unique                    // URL-friendly product identifier
+  barcode   String?                           // Product barcode/SKU
+  
+  name      String                            // article_name
+  brand     String                            // Brand name
+  
+  // Category & Type
+  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
+  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
+  
+  // Parsed from component string (for fast filtering)
+  style       String?                         // Athleisure, Minimal, Streetwear, etc.
+  fit         String?                         // Oversized, Slim, Regular, etc.
+  colors      String[]                        // Black, Navy, Red, etc.
+  patterns    String?                         // Solid, Graphics, Stripes, etc.
+  occasions   String[]                        // Casual, Work, Party, etc.
+  
+  // Full component tags as JSON (for category-specific tags)
+  componentTags Json                          // All parsed tags from component string
+  
+  // URLs
+  imageUrl    String                          // Product image URL
+  productLink String                          // Link to product page on broadwaylive.in
+  
+  // Vector search
+  searchDoc        String      @db.Text       // Combined text for embedding generation
+  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
   
   // Metadata
-  isActive    Boolean   @default(true)              // Whether product is available
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive    Boolean  @default(true)         // Whether product is available
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   
-  @@index([brandName])
-  @@index([gender])
-  @@index([ageGroup])
-  @@index([isActive])
-  @@index([createdAt])
+  @@index([category])
 }
 ```
 
 #### Importing Products
 
 Import products from a CSV or JSON file. The script automatically:
-- Parses product data from CSV columns
-- Maps gender and age values to enums
-- Splits comma-separated colors into arrays
-- Stores products in the database
+- Parses product data and component tags
+- Generates search documents from product attributes
+- Creates vector embeddings using OpenAI
+- Stores products in the database with embeddings
 
 **Basic import (skips existing products):**
 ```bash
@@ -263,16 +281,19 @@ npx ts-node scripts/importProducts.ts --file=data/products.csv --clear
 ```
 
 **Required CSV columns:**
-- `barcode` – Product barcode/SKU
-- `name` – Product name
-- `brand name` – Brand name
-- `image` – Product image URL
+- `handle_id` – Unique product identifier
+- `article_name` – Product name
+- `brand` – Brand name
+- `general_tags` – Product type tags
+- `category` – Main category
+- `component_tags` – Tags string (e.g., "STYLE: Athleisure, COLOR: Black")
+- `images` – Product image URL
+- `product_url` – Link to product page
 
 **Optional columns:**
-- `gender` – Gender (MALE, FEMALE, OTHER)
-- `age` – Age group (TEEN, ADULT, SENIOR)
-- `description` – Product description
-- `color` – Comma-separated list of colors
+- `barcode` – Product barcode/SKU
+- `id` – Auto-generated ID (ignored)
+- `tagged_at` – Timestamp (ignored)
 
 #### Deleting Products
 

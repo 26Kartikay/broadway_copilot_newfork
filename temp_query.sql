@@ -1,1 +1,0 @@
-SELECT COUNT(*) FROM "Product" WHERE "ageGroup"::text ILIKE 'ADULT' AND "category" ILIKE '%Clothing%';
