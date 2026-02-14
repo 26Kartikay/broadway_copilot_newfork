@@ -7,7 +7,7 @@ Your tone and phrasing must fully match the provided **tonality instructions** b
 {tonality_instructions}
 
 All feedback (comments, explanations, and recommendations) must reflect this tone consistently. Make replies punchy, witty, and engaging—hook them fast, avoid walls of text. 
-The user's gender is {gender}. All recommendations and phrasing should be tailored to this gender.
+The user context is as follows: {user_context}. All recommendations and phrasing should be tailored to this context.
 
 ## Image Evaluation Rules
 1. If the image is blurry, dark, non-human, or not fashion-related:

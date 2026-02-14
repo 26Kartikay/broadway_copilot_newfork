@@ -1,7 +1,9 @@
-import { WardrobeItem, WardrobeItemCategory, ProductCategory } from '@prisma/client';
+import { WardrobeItem, WardrobeItemCategory } from '@prisma/client';
 import { z } from 'zod';
 
-import { OpenAIEmbeddings, Tool } from '../lib/ai';
+import { ChatOpenAI, OpenAIEmbeddings, SystemMessage, Tool, UserMessage } from '../lib/ai';
+import type { TraceBuffer } from '../agent/tracing';
+import { createId } from '@paralleldrive/cuid2';
 
 import { prisma } from '../lib/prisma';
 import { BadRequestError, InternalServerError } from '../utils/errors';
@@ -13,22 +15,40 @@ import { logger } from '../utils/logger';
 
 type ProductRow = {
   id: string;
-  handleId: string;
+  barcode: string;
   name: string;
-  brand: string;
-  category: ProductCategory;
-  generalTag: string;
-  style: string | null;
-  fit: string | null;
-  colors: string[];
-  patterns: string | null;
-  occasions: string[];
+  brandName: string;
+  gender: string | null;
+  ageGroup: string | null;
+  description: string;
   imageUrl: string;
-  productLink: string;
-  searchDoc: string;
+  colors: string[];
+  category: string | null;
+  subCategory: string | null;
+  productType: string | null;
+  style: string | null;
+  occasion: string | null;
+  fit: string | null;
+  season: string | null;
+  popularityScore: number | null;
+  createdAt: Date;
 };
 
-type ProductSemanticRow = ProductRow & { distance: number };
+interface ProductWithScore {
+  item: ProductRow;
+  score: number;
+  sources: string[];
+}
+
+type ProductSemanticRow = ProductRow & { distance: number; similarity: number };
+
+// Query understanding output
+interface QueryAttributes {
+  color?: string | null;
+  brand?: string | null;
+  style?: string | null;
+  occasion?: string | null;
+}
 
 type WardrobeRow = Pick<
   WardrobeItem,
@@ -44,7 +64,6 @@ type WardrobeRow = Pick<
   | 'keywords'
   | 'searchDoc'
 >;
-
 
 type SemanticResultRow = WardrobeRow & { distance: number };
 type KeywordResultRow = WardrobeRow & { keyword_matches: number | null };
@@ -114,10 +133,9 @@ export function searchWardrobe(userId: string): Tool {
 
         const baseWhere = baseConditions.join(' AND ');
         const resultsMap = new Map<
-  string,
-  { item: WardrobeRow; score: number; sources: string[] }
->();
-
+          string,
+          { item: WardrobeRow; score: number; sources: string[] }
+        >();
 
         // 1. Semantic Search (Vector Similarity)
         const embeddingCount = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
@@ -281,9 +299,7 @@ export function searchWardrobe(userId: string): Tool {
 export function fetchColorAnalysis(userId: string): Tool {
   // Use z.object({}) without passthrough to avoid OpenAI schema issues
   // The schema processor will add the required type and properties
-  const fetchColorAnalysisSchema = z
-    .object({})
-    .describe('No parameters. Must be called with {}.');
+  const fetchColorAnalysisSchema = z.object({}).describe('No parameters. Must be called with {}.');
 
   return new Tool({
     name: 'fetchColorAnalysis',
@@ -404,411 +420,558 @@ export function fetchRelevantMemories(userId: string): Tool {
 // ============================================================================
 
 /**
- * Tool for searching the Broadway product catalog.
- * Uses hybrid search combining semantic similarity and structured filters.
- * Returns product recommendations with images and purchase links.
+ * Extracts structured attributes from a natural language query using LLM.
+ */
+async function understandQuery(query: string, existingFilters: { gender?: string | undefined; ageGroup?: string | undefined }): Promise<QueryAttributes> {
+  try {
+    const querySchema = z.object({
+      color: z.string().nullable().optional().describe('Color mentioned in query (e.g., "Black", "Navy", "White")'),
+      brand: z.string().nullable().optional().describe('Brand name if mentioned in query'),
+      style: z.string().nullable().optional().describe('Style mentioned (e.g., "casual", "formal", "sporty")'),
+      occasion: z.string().nullable().optional().describe('Occasion mentioned (e.g., "work", "party", "everyday")'),
+    });
+
+    const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
+    const structuredModel = model.withStructuredOutput(querySchema);
+
+    // Create minimal trace buffer for LLM call
+    const traceBuffer: TraceBuffer = {
+      nodeRuns: [{
+        id: createId(),
+        nodeName: 'query-understanding',
+        startTime: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }],
+      llmTraces: [],
+    };
+
+    const categoryHierarchy = {
+      'Clothing & Fashion': {
+        'Tops': ['T-Shirts', 'Shirts', 'Blouses', 'Crop Tops', 'Tanks', 'Hoodies', 'Sweatshirts', 'Kurtas', 'Tunics', 'Kaftan', 'Jackets', 'Coats', 'Blazers', 'Shrugs', 'Sweaters', 'Cardigans'],
+        'Bottoms': ['Jeans', 'Trousers', 'Joggers', 'Shorts', 'Skirts', 'Palazzos', 'Skort', 'Sweatpants'],
+      },
+      'Beauty & Personal Care': {
+        'Skincare': ['Moisturizers', 'Cleansers', 'Toners', 'Serums', 'Essences', 'Sunscreens', 'Face Masks', 'Eye Creams'],
+        'Makeup': ['Foundations', 'Concealers', 'Blush', 'Bronzer', 'Highlighter', 'Lipsticks', 'Lip Balms', 'Mascaras', 'Eyeliners'],
+        'Hair Care': ['Shampoo', 'Conditioner', 'Hair Masks', 'Hair Oils', 'Hair Serums', 'Styling Products'],
+        'Fragrance': ['Perfume', 'Body Mist', 'Deodorants'],
+        'Men\'s Grooming': ['Beard Care', 'Shaving'],
+        'Body Care': [],
+      },
+      'Health & Wellness': {
+        'Nutrition & Supplements': ['Protein & Amino Acids', 'Vitamins & Minerals', 'Herbal & Ayurvedic', 'Weight Management', 'Sleep & Recovery', 'Immunity Booster'],
+        'Smart Healthtech & Electronics': ['Smart Rings', 'Smart Bands', 'Fitness Trackers', 'Smart Scales', 'Smart mirrors', 'Gym Equipments'],
+      },
+      'Jewellery & Accessories': {
+        'Jewellery': ['Necklaces', 'Earrings', 'Rings', 'Bracelets'],
+        'Watches': [],
+      },
+      'Footwear': {
+        'Footwear': ['Sneakers', 'Casual Shoes', 'Sports Shoes', 'Boots', 'Sandals', 'Heels', 'Flats', 'Shoes', 'Low-tops', 'High-tops', 'Flip Flops', 'Gym Shoes', 'Formal Shoes', 'Slippers'],
+      },
+      'Bags & Luggage': {
+        'Bags & Luggage': ['Backpacks', 'Handbags', 'Totes', 'Wallets', 'Luggage', 'Sling Bags', 'Suitcases', 'Messenger Bags', 'Travel Accessories', 'Laptop Sleeves'],
+      },
+    };
+
+
+    const systemPrompt = new SystemMessage(
+      'You are a product search query analyzer. Extract structured attributes from natural language product search queries. ' +
+      'Only extract attributes that are explicitly mentioned or clearly implied in the query. ' +
+      'Return null for any attribute that cannot be determined from the query. ' +
+      '\n\nIMPORTANT COLOR NORMALIZATION RULES:' +
+      '- Normalize color names to standard fashion/retail color names' +
+      '- Examples: "rust" -> "rust", "terracotta" -> "terracotta" or "orange", "burnt orange" -> "burnt orange" or "orange"' +
+      '- "burgundy" -> "burgundy" or "maroon", "navy" -> "navy" or "blue", "beige" -> "beige" or "tan"' +
+      '- Preserve specific color names when they are standard (e.g., "rust", "terracotta", "burgundy")' +
+      '- For ambiguous colors, provide the most common standard name' +
+      '- Return the normalized color name in lowercase' +
+      '\n\nOTHER NORMALIZATION:'
+    );
+
+    const userMessage = new UserMessage(
+      `Query: "${query}"\n\n` +
+      (existingFilters.gender ? `Existing gender filter: ${existingFilters.gender}\n` : '') +
+      (existingFilters.ageGroup ? `Existing age group filter: ${existingFilters.ageGroup}\n` : '') +
+      '\nExtract all relevant product attributes from this query.'
+    );
+
+    const result = await structuredModel.run(systemPrompt, [userMessage], traceBuffer, 'query-understanding');
+    
+    // Convert undefined to null to match QueryAttributes type
+    // Note: category, subCategory, productType, gender, ageGroup are no longer extracted
+    return {
+      color: result.color ?? null,
+      brand: result.brand ?? null,
+      style: result.style ?? null,
+      occasion: result.occasion ?? null,
+    };
+  } catch (err) {
+    logger.warn({ query, err: (err as Error)?.message }, 'Query understanding failed, continuing without extracted attributes');
+    return {};
+  }
+}
+
+
+
+
+
+/**
+ * Tool for searching the Broadway product catalog using hybrid retrieval.
+ * 
+ * Architecture:
+ * - Phase 1: Broad Vector Recall - Run vector search on entire table (no strict filters)
+ * - Phase 2: Intent-Based Soft Reranking - Rerank candidates in memory based on intent matching
+ * 
+ * This approach ensures high recall and prevents zero-result scenarios while maintaining precision
+ * through semantic similarity and soft intent matching.
  */
 export function searchProducts(): Tool {
-  const searchProductsSchema = z.object({
-  query: z.string().describe("Natural language product search query"),
-  filters: z.object({
-    category: z
-      .enum([
-        'CLOTHING_FASHION',
-        'BEAUTY_PERSONAL_CARE',
-        'HEALTH_WELLNESS',
-        'JEWELLERY_ACCESSORIES',
-        'FOOTWEAR',
-        'BAGS_LUGGAGE',
-      ])
-      .optional()
-      .describe(
-        'Filter by product category. Valid values: CLOTHING_FASHION (shirts, pants, dresses), BEAUTY_PERSONAL_CARE (skincare, makeup), HEALTH_WELLNESS (supplements), JEWELLERY_ACCESSORIES (sunglasses, watches, jewelry, bags, belts, scarves), FOOTWEAR (shoes, sandals, boots), BAGS_LUGGAGE (suitcases, backpacks, travel bags). IMPORTANT: For accessories like sunglasses, use JEWELLERY_ACCESSORIES not ACCESSORIES.'
-      ),
-    style: z.string().optional().describe(
-      "Filter by style aesthetic (e.g., 'Athleisure', 'Minimal', 'Streetwear', 'Classic', 'Boho')"
-    ),
-    fit: z.string().optional().describe(
-      "Filter by fit/silhouette (e.g., 'Oversized', 'Slim', 'Regular', 'Relaxed')"
-    ),
-    color: z.string().optional().describe(
-      "Filter by color (e.g., 'Black', 'Navy', 'White', 'Beige')"
-    ),
-    occasion: z.string().optional().describe(
-      "Filter by occasion (e.g., 'Casual', 'Work', 'Party', 'Gym', 'Travel')"
-    ),
-    brand: z.string().optional().describe('Filter by brand name'),
-  }).strict().default({}),
-  limit: z.number().int().positive().default(5),
-}).strict();
+  const searchProductsSchema = z
+    .object({
+      query: z.string().describe('Natural language product search query'),
+      filters: z
+        .object({
+          gender: z.enum(['male', 'female', 'other']).optional(),
+          ageGroup: z.enum(['teen', 'adult', 'senior']).optional(),
+        })
+        .strict(),
+      limit: z.number().int().positive().default(5),
+    })
+    .strict();
 
   return new Tool({
-  name: 'searchProducts',
-  description:
-    'Searches the Broadway product catalog to find products matching the query. Uses semantic search combined with filters for style, fit, color, occasion, and category. Returns product recommendations with name, brand, image, and purchase link. Use this to recommend specific products from our catalog during styling advice. CRITICAL: For accessories (sunglasses, watches, jewelry, belts, scarves), always use category "JEWELLERY_ACCESSORIES", never use "ACCESSORIES".',
-  schema: searchProductsSchema,
+    name: 'searchProducts',
+    description:
+      'Searches the Broadway product catalog to find products matching the query. Uses hybrid retrieval with broad vector recall and intent-based reranking. Returns product recommendations with name, brand, image, and description. Use this to recommend specific products from our catalog during styling advice.',
+    schema: searchProductsSchema,
     func: async ({ query, filters = {}, limit = 5 }: z.infer<typeof searchProductsSchema>) => {
       if (query.trim() === '') {
         throw new BadRequestError('Search query is required');
       }
 
       try {
-        const model = new OpenAIEmbeddings({
+        // Step 1: Query Understanding - Extract structured attributes from natural language
+        const queryAttrs = await understandQuery(query, {
+          gender: filters.gender,
+          ageGroup: filters.ageGroup,
+        });
+        
+        // Build intent object for soft reranking
+        // Note: gender and ageGroup come from filters (tool schema), not from query understanding
+        // category, subCategory, productType are no longer extracted
+        const intent = {
+          gender: filters.gender || null,
+          ageGroup: filters.ageGroup || null,
+          color: queryAttrs.color || null, // Normalized color from AI
+          brand: queryAttrs.brand || null,
+          style: queryAttrs.style || null,
+          occasion: queryAttrs.occasion || null,
+        };
+
+        // Step 2: Generate query embedding
+        const embeddingModel = new OpenAIEmbeddings({
           model: 'text-embedding-3-small',
         });
+        const embeddedQuery = await embeddingModel.embedQuery(query);
+        const vector = JSON.stringify(embeddedQuery);
 
-        // Build filter conditions
-        const conditions: string[] = ['"isActive" = true'];
-        const params: (string | number)[] = [];
+        // Helper function to convert enum name to database value
+        // Prisma maps: MALE -> "male", FEMALE -> "female", OTHER -> "other"
+        const enumToDbValue = (enumValue: string | null): string | null => {
+          if (!enumValue) return null;
+          return enumValue.toLowerCase();
+        };
+
+        // Convert gender enum to database value for querying
+        const genderDbValue = intent.gender ? enumToDbValue(intent.gender) : null;
+        const ageGroupDbValue = intent.ageGroup ? enumToDbValue(intent.ageGroup) : null;
+        
+        // Normalize color early to check if this is a color-focused query
+        const normalizedColor = intent.color ? intent.color.toLowerCase().trim() : null;
+
+        // Phase 1: Broad Vector Recall - Get candidates with gender filter applied
+        // Gender filter excludes opposite gender but allows matching gender, unisex/other, or null
+
+
+
+
+
+
+
+
+        const baseConditions: string[] = [
+          '"isActive" = true',
+          '"embedding" IS NOT NULL',
+          // Note: Don't filter imageUrl at SQL level - filter in JavaScript to see what's actually in DB
+        ];
+        const baseParams: (string | number)[] = [];
         let paramIndex = 1;
 
-        if (filters?.category) {
-          params.push(filters.category);
-          conditions.push(`"category"::text = $${paramIndex++}`);
+        // Apply gender filter as hard constraint to prevent mis-gendered recommendations
+        // Allow matching gender, unisex/other, or null (but exclude opposite gender)
+        if (genderDbValue) {
+          if (genderDbValue === 'male') {
+            // For male users: include male, unisex, other, or null (exclude female)
+            baseConditions.push(`(gender = 'male' OR gender IS NULL OR gender = 'other')`);
+          } else if (genderDbValue === 'female') {
+            // For female users: include female, unisex, other, or null (exclude male)
+            baseConditions.push(`(gender = 'female' OR gender IS NULL OR gender = 'other')`);
+          }
+          // Note: 'other' gender from filters will allow all products (no filter applied)
         }
 
-        if (filters?.style) {
-          // Use LIKE for partial matching to be more lenient
-          params.push(`%${filters.style.toLowerCase()}%`);
-          conditions.push(`LOWER("style") LIKE $${paramIndex++}`);
+        // Apply brand filter if mentioned in query
+        // Note: ageGroup and color are NOT added as hard filters - they will be used for soft reranking in Phase 2
+        if (queryAttrs.brand) {
+          baseConditions.push(`"brandName" ILIKE $${paramIndex++}`);
+          baseParams.push(`%${queryAttrs.brand}%`);
         }
+        
+        const whereClause = baseConditions.join(' AND ');
+        const vectorParamIndex = paramIndex;
 
-        if (filters?.fit) {
-          // Use LIKE for partial matching to be more lenient
-          params.push(`%${filters.fit.toLowerCase()}%`);
-          conditions.push(`LOWER("fit") LIKE $${paramIndex++}`);
-        }
+        // Vector similarity search - retrieve top 200 candidates for reranking
+        // Use alias to ensure consistent column name in results
+        const vectorRecallQuery = `
+          SELECT id, barcode, name, "brandName", gender, "ageGroup", description, 
+                 "imageUrl" as "imageUrl", colors,
+                 category, "subCategory", "productType", style, occasion, fit, season, "popularityScore", "createdAt",
+                 ("embedding" <=> $${vectorParamIndex}::vector) as distance,
+                 (1 - ("embedding" <=> $${vectorParamIndex}::vector)) as similarity
+          FROM "Product"
+          WHERE ${whereClause}
+          ORDER BY "embedding" <=> $${vectorParamIndex}::vector
+          LIMIT 200
+        `;
 
-        if (filters?.color) {
-          // Use LIKE for partial matching on colors array
-          params.push(`%${filters.color.toLowerCase()}%`);
-          conditions.push(
-            `EXISTS (
-              SELECT 1 FROM unnest("colors") AS col 
-              WHERE LOWER(col::text) LIKE $${paramIndex}
-            )`
-          );
-          paramIndex++;
-        }
-
-        if (filters?.occasion) {
-          // Handle compound occasions like "office casual party" by checking if any
-          // occasion in the product's occasions array appears as a substring in the filter.
-          // This allows "office casual party" to match products tagged with "Casual" or "Party"
-          const occasionLower = filters.occasion.toLowerCase();
-          params.push(occasionLower);
-          conditions.push(
-            `EXISTS (
-              SELECT 1 FROM unnest("occasions") AS occ 
-              WHERE $${paramIndex} LIKE '%' || LOWER(occ::text) || '%'
-            )`
-          );
-          paramIndex++;
-        }
-
-        if (filters?.brand) {
-          params.push(filters.brand.toLowerCase());
-          conditions.push(`LOWER("brand") = $${paramIndex++}`);
-        }
-
-        const whereClause = conditions.join(' AND ');
-const resultsMap = new Map<
-  string,
-  { item: ProductRow; score: number; sources: string[] }
->();
-
-
-        // 1. Semantic Search (Vector Similarity) - Primary method
-        const embeddingCount = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-          'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL AND "isActive" = true',
+        // Log the actual query for debugging
+        logger.debug(
+          {
+            query,
+            filters,
+            whereClause,
+            baseParamsCount: baseParams.length,
+            vectorParamIndex,
+          },
+          'Executing vector recall query',
         );
 
-        if (Number(embeddingCount[0].count) > 0) {
-          const embedded = await model.embedQuery(query);
-          const vector = JSON.stringify(embedded);
-
-          const semanticQuery = `
-            SELECT id, "handleId", name, brand, category, "generalTag", 
-                   style, fit, colors, patterns, occasions,
-                   "imageUrl", "productLink", "searchDoc",
-                   ("embedding" <=> $${paramIndex}::vector) as distance
-            FROM "Product"
-            WHERE "embedding" IS NOT NULL AND ${whereClause}
-            ORDER BY "embedding" <=> $${paramIndex}::vector
-            LIMIT ${Math.min(limit * 3, 30)}
-          `;
-
-          const semanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
-            semanticQuery,
-            ...params,
-            vector,
-          );
-
-          for (const item of semanticResults) {
-            const { distance, ...itemData } = item;
-            const score = Math.max(0, 1 - distance);
-            resultsMap.set(item.id, {
-              item: itemData,
-              score: score * 0.7, // Weight semantic search at 70%
-              sources: ['semantic'],
-            });
-          }
-        }
-
-        // 2. Text Search (Fallback / Boost)
-        const searchTerms = query
-          .toLowerCase()
-          .split(/\s+/)
-          .filter((term) => term.length > 2);
-
-        if (searchTerms.length > 0) {
-          const textConditions = searchTerms.map(
-            (_, i) =>
-              `(LOWER(name) LIKE $${paramIndex + i} OR LOWER("searchDoc") LIKE $${paramIndex + i} OR LOWER(brand) LIKE $${paramIndex + i})`,
-          );
-          const textParams = searchTerms.map((term) => `%${term}%`);
-
-          const textQuery = `
-            SELECT id, "handleId", name, brand, category, "generalTag",
-                   style, fit, colors, patterns, occasions,
-                   "imageUrl", "productLink", "searchDoc"
-            FROM "Product"
-            WHERE ${whereClause} AND (${textConditions.join(' OR ')})
-            LIMIT ${Math.min(limit * 2, 20)}
-          `;
-
-          const textResults = await prisma.$queryRawUnsafe<ProductRow[]>(
-            textQuery,
-            ...params,
-            ...textParams,
-          );
-
-          for (const item of textResults) {
-            const nameMatches = searchTerms.filter(
-              (term) =>
-                item.name.toLowerCase().includes(term) ||
-                item.brand.toLowerCase().includes(term) ||
-                (item.searchDoc && item.searchDoc.toLowerCase().includes(term)),
-            ).length;
-
-            const score = Math.min(1, nameMatches / searchTerms.length);
-
-            const existing = resultsMap.get(item.id);
-            if (existing) {
-              existing.score += score * 0.3;
-              existing.sources.push('text');
-            } else {
-              resultsMap.set(item.id, {
-                item,
-                score: score * 0.3,
-                sources: ['text'],
-              });
-            }
-          }
-        }
-
-        // Sort by combined score and return top results
-        const sortedResults = Array.from(resultsMap.values())
-          .sort((a, b) => b.score - a.score)
-          .slice(0, limit)
-          .map((result) => ({
-            name: result.item.name,
-            brand: result.item.brand,
-            type: result.item.generalTag,
-            style: result.item.style,
-            fit: result.item.fit,
-            colors: result.item.colors,
-            occasions: result.item.occasions,
-            imageUrl: result.item.imageUrl,
-            productLink: result.item.productLink,
-          }));
-
-        // If no results found with filters, try again without optional filters (fallback to lenient search)
-        if (sortedResults.length === 0 && (filters?.style || filters?.fit || filters?.color || filters?.occasion || filters?.brand)) {
-          logger.debug({ query, filters }, 'No results with filters, trying without optional filters');
+        const vectorCandidates = await prisma.$queryRawUnsafe<any[]>(
+          vectorRecallQuery,
+          ...baseParams,
+          vector,
+        );
+        
+        // Map to ProductSemanticRow - handle both camelCase and lowercase column names
+        // PostgreSQL with $queryRawUnsafe returns column names as-is (case-sensitive when quoted)
+        const mappedCandidates: ProductSemanticRow[] = vectorCandidates.map((row: any) => {
+          // Try all possible case variations for imageUrl
+          const imageUrl = row.imageUrl || 
+                          row.imageurl || 
+                          row['imageUrl'] || 
+                          row['imageurl'] ||
+                          (Object.keys(row).find(k => k.toLowerCase() === 'imageurl') ? row[Object.keys(row).find(k => k.toLowerCase() === 'imageurl')!] : null) ||
+                          '';
           
-          // Build lenient conditions (only category filter, if provided)
-          const lenientConditions: string[] = ['"isActive" = true'];
-          const lenientParams: (string | number)[] = [];
-          let lenientParamIndex = 1;
+          return {
+            ...row,
+            imageUrl: imageUrl,
+          };
+        });
 
-          // Only keep category filter as it's more important
-          if (filters?.category) {
-            lenientParams.push(filters.category);
-            lenientConditions.push(`"category"::text = $${lenientParamIndex++}`);
-          }
+        logger.info(
+          {
+            query,
+            filters,
+            candidates: mappedCandidates.length,
+            whereClause,
+          },
+          'Phase 1 vector recall completed.',
+        );
 
-          const lenientWhereClause = lenientConditions.join(' AND ');
-          const lenientResultsMap = new Map<
-            string,
-            { item: ProductRow; score: number; sources: string[] }
-          >();
+        // normalizedColor already defined above
 
-          // Try semantic search without strict filters
-          const embeddingCount = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-            'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL AND "isActive" = true',
+        // Fallback: If vector search returns 0, try text-based search
+        if (vectorCandidates.length === 0) {
+          logger.warn(
+            { query, filters, whereClause },
+            'Vector search returned 0 candidates, trying text-based fallback',
           );
 
-          if (Number(embeddingCount[0].count) > 0) {
-            const embedded = await model.embedQuery(query);
-            const vector = JSON.stringify(embedded);
+          // Text-based fallback search - use normalized color if available, otherwise use original query
+          const searchTerms: string[] = [];
+          const searchParams: string[] = [];
+          let paramIdx = 1;
 
-            const lenientSemanticQuery = `
-              SELECT id, "handleId", name, brand, category, "generalTag", 
-                     style, fit, colors, patterns, occasions,
-                     "imageUrl", "productLink", "searchDoc",
-                     ("embedding" <=> $${lenientParamIndex}::vector) as distance
-              FROM "Product"
-              WHERE "embedding" IS NOT NULL AND ${lenientWhereClause}
-              ORDER BY "embedding" <=> $${lenientParamIndex}::vector
-              LIMIT ${Math.min(limit * 3, 30)}
-            `;
+          // Add original query term
+          searchTerms.push(`(LOWER(name) LIKE $${paramIdx} OR LOWER(description) LIKE $${paramIdx} OR LOWER("brandName") LIKE $${paramIdx})`);
+          searchParams.push(`%${query.toLowerCase()}%`);
+          paramIdx++;
 
-            const lenientSemanticResults = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
-              lenientSemanticQuery,
-              ...lenientParams,
-              vector,
-            );
+          // Add normalized color term if available (separate from query)
+          if (normalizedColor && normalizedColor !== query.toLowerCase()) {
+            searchTerms.push(`EXISTS (SELECT 1 FROM unnest(colors) AS color WHERE LOWER(color) LIKE $${paramIdx})`);
+            searchParams.push(`%${normalizedColor}%`);
+            paramIdx++;
+          } else {
+            // If no normalized color, search colors with original query
+            searchTerms.push(`EXISTS (SELECT 1 FROM unnest(colors) AS color WHERE LOWER(color) LIKE $1)`);
+          }
 
-            for (const item of lenientSemanticResults) {
-              const { distance, ...itemData } = item;
-              const score = Math.max(0, 1 - distance);
-              lenientResultsMap.set(item.id, {
-                item: itemData,
-                score: score * 0.7,
-                sources: ['semantic'],
-              });
+          // Build gender filter for text search (same logic as vector search)
+          let genderFilterClause = '';
+          if (genderDbValue) {
+            if (genderDbValue === 'male') {
+              genderFilterClause = ` AND (gender = 'male' OR gender IS NULL OR gender = 'other')`;
+            } else if (genderDbValue === 'female') {
+              genderFilterClause = ` AND (gender = 'female' OR gender IS NULL OR gender = 'other')`;
             }
           }
 
-          // Try text search without strict filters
-          const searchTerms = query
-            .toLowerCase()
-            .split(/\s+/)
-            .filter((term) => term.length > 2);
+          const textSearchQuery = `
+            SELECT id, barcode, name, "brandName", gender, "ageGroup", description, "imageUrl", colors,
+                   category, "subCategory", "productType", style, occasion, fit, season, "popularityScore", "createdAt",
+                   0.5 as distance,
+                   0.5 as similarity
+            FROM "Product"
+            WHERE "isActive" = true
+              AND "imageUrl" IS NOT NULL
+              AND "imageUrl" != ''
+              AND LENGTH(TRIM("imageUrl")) > 0
+              AND ("imageUrl" LIKE 'http://%' OR "imageUrl" LIKE 'https://%' OR "imageUrl" LIKE 'data:%')
+              ${genderFilterClause}
+              AND (${searchTerms.join(' OR ')})
+            LIMIT 200
+          `;
 
-          if (searchTerms.length > 0) {
-            const textConditions = searchTerms.map(
-              (_, i) =>
-                `(LOWER(name) LIKE $${lenientParamIndex + i} OR LOWER("searchDoc") LIKE $${lenientParamIndex + i} OR LOWER(brand) LIKE $${lenientParamIndex + i})`,
-            );
-            const textParams = searchTerms.map((term) => `%${term}%`);
+          const textCandidates = await prisma.$queryRawUnsafe<ProductSemanticRow[]>(
+            textSearchQuery,
+            ...searchParams,
+          );
 
-            const lenientTextQuery = `
-              SELECT id, "handleId", name, brand, category, "generalTag",
-                     style, fit, colors, patterns, occasions,
-                     "imageUrl", "productLink", "searchDoc"
-              FROM "Product"
-              WHERE ${lenientWhereClause} AND (${textConditions.join(' OR ')})
-              LIMIT ${Math.min(limit * 2, 20)}
-            `;
+          logger.info(
+            { query, textCandidates: textCandidates.length },
+            'Text-based fallback search completed',
+          );
 
-            const lenientTextResults = await prisma.$queryRawUnsafe<ProductRow[]>(
-              lenientTextQuery,
-              ...lenientParams,
-              ...textParams,
-            );
+          if (textCandidates.length === 0) {
+            return []; // Return empty if both searches fail
+          }
 
-            for (const item of lenientTextResults) {
-              const nameMatches = searchTerms.filter(
-                (term) =>
-                  item.name.toLowerCase().includes(term) ||
-                  item.brand.toLowerCase().includes(term) ||
-                  (item.searchDoc && item.searchDoc.toLowerCase().includes(term)),
-              ).length;
+          // Use text candidates for reranking (normalizedColor already defined above)
+          const rerankedCandidates = textCandidates.map((candidate) => {
+            let score = candidate.similarity; // Start with base similarity score
 
-              const score = Math.min(1, nameMatches / searchTerms.length);
+            // Gender matching boost (strong preference)
+            if (genderDbValue && candidate.gender) {
+              const candidateGenderDb = enumToDbValue(candidate.gender);
+              if (candidateGenderDb === genderDbValue) {
+                score += 0.3; // Strong boost for gender match
+              } else if (candidateGenderDb === null || candidateGenderDb === 'other' || candidateGenderDb === 'unisex') {
+                score += 0.1; // Small boost for unisex/other products
+              }
+            }
 
-              const existing = lenientResultsMap.get(item.id);
-              if (existing) {
-                existing.score += score * 0.3;
-                existing.sources.push('text');
+            // AgeGroup matching boost
+            if (ageGroupDbValue && candidate.ageGroup) {
+              const candidateAgeDb = enumToDbValue(candidate.ageGroup);
+              if (candidateAgeDb === ageGroupDbValue) {
+                score += 0.15; // Boost for age group match
+              }
+            }
+
+            // Color matching boost (using AI-normalized color)
+            if (normalizedColor && candidate.colors && candidate.colors.length > 0) {
+              const candidateColors = candidate.colors.map(c => c.toLowerCase().trim());
+              // Check for exact match
+              if (candidateColors.includes(normalizedColor)) {
+                score += 0.25; // Strong boost for exact color match
               } else {
-                lenientResultsMap.set(item.id, {
-                  item,
-                  score: score * 0.3,
-                  sources: ['text'],
-                });
+                // Check for partial match (color name contains normalized color or vice versa)
+                const hasPartialMatch = candidateColors.some(c => 
+                  c.includes(normalizedColor) || normalizedColor.includes(c)
+                );
+                if (hasPartialMatch) {
+                  score += 0.1; // Moderate boost for partial color match
+                }
+              }
+            }
+
+            return {
+              ...candidate,
+              rerankScore: score,
+            };
+          });
+
+          // Sort by rerank score and take top results
+          // Filter out products with empty/null imageUrl before mapping
+          const finalResults = rerankedCandidates
+            .sort((a, b) => b.rerankScore - a.rerankScore)
+            .filter((result) => {
+              // Filter out products with empty or invalid imageUrls
+              const imageUrl = result.imageUrl;
+              return imageUrl && 
+                     typeof imageUrl === 'string' && 
+                     imageUrl.trim().length > 0 &&
+                     (imageUrl.startsWith('http://') || 
+                      imageUrl.startsWith('https://') || 
+                      imageUrl.startsWith('data:'));
+            })
+            .slice(0, limit)
+            .map((result) => ({
+              name: result.name,
+              brand: result.brandName,
+              gender: result.gender,
+              ageGroup: result.ageGroup,
+              description: result.description,
+              colors: result.colors,
+              imageUrl: result.imageUrl, // Already validated above
+            }));
+
+          logger.info(
+            {
+              query,
+              filters,
+              resultCount: finalResults.length,
+              textCandidatesCount: textCandidates.length,
+              genderFilter: genderDbValue,
+              ageGroupFilter: ageGroupDbValue,
+              normalizedColor: normalizedColor,
+              method: 'text-fallback',
+            },
+            'Product search completed (text fallback + intent-based reranking)',
+          );
+
+          return finalResults;
+        }
+
+        // Phase 2: Intent-Based Soft Reranking
+        // Boost products matching gender/ageGroup/color, but don't exclude others
+        // normalizedColor already defined above
+        
+        const rerankedCandidates = mappedCandidates.map((candidate) => {
+          let score = candidate.similarity; // Start with semantic similarity score
+
+          // Gender matching boost (strong preference)
+          if (genderDbValue && candidate.gender) {
+            const candidateGenderDb = enumToDbValue(candidate.gender);
+            if (candidateGenderDb === genderDbValue) {
+              score += 0.3; // Strong boost for gender match
+            } else if (candidateGenderDb === null || candidateGenderDb === 'other' || candidateGenderDb === 'unisex') {
+              score += 0.1; // Small boost for unisex/other products
+            }
+            // No penalty for mismatch - we want to show results even if not perfect match
+          }
+
+          // AgeGroup matching boost
+          if (ageGroupDbValue && candidate.ageGroup) {
+            const candidateAgeDb = enumToDbValue(candidate.ageGroup);
+            if (candidateAgeDb === ageGroupDbValue) {
+              score += 0.15; // Boost for age group match
+            }
+          }
+
+          // Color matching boost (using AI-normalized color)
+          if (normalizedColor && candidate.colors && candidate.colors.length > 0) {
+            const candidateColors = candidate.colors.map(c => c.toLowerCase().trim());
+            // Check for exact match
+            if (candidateColors.includes(normalizedColor)) {
+              score += 0.25; // Strong boost for exact color match
+            } else {
+              // Check for partial match (color name contains normalized color or vice versa)
+              const hasPartialMatch = candidateColors.some(c => 
+                c.includes(normalizedColor) || normalizedColor.includes(c)
+              );
+              if (hasPartialMatch) {
+                score += 0.1; // Moderate boost for partial color match
               }
             }
           }
 
-          // Get results from lenient search
-          const lenientSortedResults = Array.from(lenientResultsMap.values())
-            .sort((a, b) => b.score - a.score)
-            .slice(0, limit)
-            .map((result) => ({
-              name: result.item.name,
-              brand: result.item.brand,
-              type: result.item.generalTag,
-              style: result.item.style,
-              fit: result.item.fit,
-              colors: result.item.colors,
-              occasions: result.item.occasions,
-              imageUrl: result.item.imageUrl,
-              productLink: result.item.productLink,
-            }));
+          return {
+            ...candidate,
+            rerankScore: score,
+          };
+        });
 
-          if (lenientSortedResults.length > 0) {
-            logger.info(
-              { query, filters, resultCount: lenientSortedResults.length },
-              'Product search completed (lenient fallback)',
+        // Sort by rerank score and take top results
+        // Filter out products with empty/null imageUrl before mapping
+        const beforeFilter = rerankedCandidates.length;
+        const finalResults = rerankedCandidates
+          .sort((a, b) => b.rerankScore - a.rerankScore)
+          .filter((result) => {
+            // Filter out products with empty or invalid imageUrls
+            const imageUrl = result.imageUrl;
+            const isValid = imageUrl && 
+                   typeof imageUrl === 'string' && 
+                   imageUrl.trim().length > 0 &&
+                   (imageUrl.startsWith('http://') || 
+                    imageUrl.startsWith('https://') || 
+                    imageUrl.startsWith('data:'));
+            
+            if (!isValid) {
+              logger.debug(
+                {
+                  query,
+                  productName: result.name,
+                  imageUrl: imageUrl,
+                  imageUrlType: typeof imageUrl,
+                  imageUrlLength: imageUrl ? imageUrl.length : 0,
+                },
+                'Filtering out product with invalid/empty imageUrl',
+              );
+            }
+            
+            return isValid;
+          })
+          .slice(0, limit)
+          .map((result: any) => {
+            // Handle PostgreSQL column name case sensitivity
+            // PostgreSQL might return "imageUrl" or "imageurl" depending on quoting
+            const imageUrl = result.imageUrl || result.imageurl || result['imageUrl'] || '';
+            
+            // Debug: Log the raw result to see what we're getting
+            logger.debug(
+              {
+                query,
+                productName: result.name,
+                rawImageUrl: imageUrl,
+                imageUrlType: typeof imageUrl,
+                imageUrlLength: imageUrl ? imageUrl.length : 0,
+                allKeys: Object.keys(result),
+                hasImageUrl: !!result.imageUrl,
+                hasImageurl: !!result.imageurl,
+              },
+              'Mapping product result',
             );
-            return lenientSortedResults;
-          }
-        }
-
-        // Final fallback: if still no results after all attempts, return recent active products
-        // This ensures we always return products
-        if (sortedResults.length === 0) {
-          logger.debug({ query, filters }, 'No results found after all searches, returning fallback products');
-          
-          const fallbackQuery = `
-            SELECT id, "handleId", name, brand, category, "generalTag",
-                   style, fit, colors, patterns, occasions,
-                   "imageUrl", "productLink", "searchDoc"
-            FROM "Product"
-            WHERE "isActive" = true
-              AND "imageUrl" IS NOT NULL 
-              AND "productLink" IS NOT NULL
-              AND "imageUrl" != ''
-              AND "productLink" != ''
-            ORDER BY "createdAt" DESC
-            LIMIT ${limit}
-          `;
-
-          const fallbackResults = await prisma.$queryRawUnsafe<ProductRow[]>(fallbackQuery);
-
-          if (fallbackResults.length > 0) {
-            logger.info(
-              { query, filters, resultCount: fallbackResults.length },
-              'Product search completed (fallback to recent products)',
-            );
-
-            return fallbackResults.map((item) => ({
-              name: item.name,
-              brand: item.brand,
-              type: item.generalTag,
-              style: item.style,
-              fit: item.fit,
-              colors: item.colors,
-              occasions: item.occasions,
-              imageUrl: item.imageUrl,
-              productLink: item.productLink,
-            }));
-          }
-
-          // If even fallback returns no results, return empty array (shouldn't happen in practice)
-          logger.warn({ query, filters }, 'Fallback search returned no products - database may be empty');
-          return [];
-        }
+            
+            return {
+              name: result.name,
+              brand: result.brandName || result.brandname,
+              gender: result.gender,
+              ageGroup: result.ageGroup || result.agegroup,
+              description: result.description,
+              colors: result.colors || [],
+              imageUrl: imageUrl, // Handle case sensitivity
+            };
+          });
 
         logger.info(
-          { query, filters, resultCount: sortedResults.length },
-          'Product search completed',
+          {
+            query,
+            filters,
+            resultCount: finalResults.length,
+            vectorCandidatesCount: vectorCandidates.length,
+            genderFilter: genderDbValue,
+            ageGroupFilter: ageGroupDbValue,
+            normalizedColor: normalizedColor,
+          },
+          'Product search completed (vector recall + intent-based reranking)',
         );
 
-        return sortedResults;
+        return finalResults;
       } catch (err: unknown) {
         logger.error({ query, filters, err: (err as Error)?.message }, 'Failed to search products');
         throw new InternalServerError('Failed to search products', {

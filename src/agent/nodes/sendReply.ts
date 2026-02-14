@@ -74,7 +74,9 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       : null;
 
   const additionalKwargs = {
-    ...(state.productRecommendationContext && { productRecommendationContext: state.productRecommendationContext }),
+    ...(state.productRecommendationContext && {
+      productRecommendationContext: state.productRecommendationContext,
+    }),
     ...(state.seasonalPaletteToSave && { seasonalPaletteToSave: state.seasonalPaletteToSave }),
   };
 
@@ -89,7 +91,8 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       content: formattedContent,
       pending: pendingToPersist,
       selectedTonality: selectedTonalityToPersality,
-      additionalKwargs: Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
+      additionalKwargs:
+        Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
     },
   });
 

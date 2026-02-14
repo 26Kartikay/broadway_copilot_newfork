@@ -135,12 +135,12 @@ export function ensureRequiredArrays(schema: any): any {
   // Handle object types
   if (schema.type === 'object') {
     const processed: any = { ...schema };
-    
+
     // Ensure 'type' is always present (OpenAI requirement)
     if (!processed.type) {
       processed.type = 'object';
     }
-    
+
     // If it has properties, process them
     if (processed.properties && Object.keys(processed.properties).length > 0) {
       // Recursively process nested properties first
@@ -149,7 +149,7 @@ export function ensureRequiredArrays(schema: any): any {
         processedProperties[key] = ensureRequiredArrays(value);
       }
       processed.properties = processedProperties;
-      
+
       // OpenAI strict mode requires: if you have properties, you MUST have a 'required' array
       // And if you have a 'required' array, it must include ALL property keys
       // This is unusual but appears to be OpenAI's requirement
@@ -169,12 +169,12 @@ export function ensureRequiredArrays(schema: any): any {
         processed.properties = {};
       }
     }
-    
+
     // If additionalProperties is present, ensure type is also present (OpenAI requirement)
     if ('additionalProperties' in processed && !processed.type) {
       processed.type = 'object';
     }
-    
+
     return processed;
   }
 
@@ -189,21 +189,23 @@ export function ensureRequiredArrays(schema: any): any {
   // Handle anyOf - often used for optional fields (e.g., z.object({}).optional())
   if (schema.anyOf) {
     const processedAnyOf = schema.anyOf.map((item: any) => ensureRequiredArrays(item));
-    
+
     // If anyOf contains an object type, ensure it's properly processed
-    const objectItem = processedAnyOf.find((item: any) => item.type === 'object' && item.properties);
+    const objectItem = processedAnyOf.find(
+      (item: any) => item.type === 'object' && item.properties,
+    );
     if (objectItem && objectItem.properties && Object.keys(objectItem.properties).length > 0) {
       if (!('required' in objectItem)) {
         objectItem.required = [];
       }
     }
-    
+
     return {
       ...schema,
       anyOf: processedAnyOf,
     };
   }
-  
+
   // Recursively process oneOf, allOf
   if (schema.oneOf) {
     return {
@@ -223,10 +225,10 @@ export function ensureRequiredArrays(schema: any): any {
 
 export function toOpenAIToolSpec(tool: Tool): OpenAIFunctionTool {
   const rawSchema = z.toJSONSchema(tool.schema) as Record<string, unknown>;
-  
+
   // Post-process to ensure OpenAI compatibility (required arrays for nested objects)
   let processedSchema = ensureRequiredArrays(rawSchema);
-  
+
   // Final safety check: if additionalProperties exists without type, fix it
   if (typeof processedSchema === 'object' && processedSchema !== null) {
     if ('additionalProperties' in processedSchema && !processedSchema.type) {
@@ -237,7 +239,7 @@ export function toOpenAIToolSpec(tool: Tool): OpenAIFunctionTool {
       };
     }
   }
-  
+
   return {
     type: 'function',
     name: tool.name,

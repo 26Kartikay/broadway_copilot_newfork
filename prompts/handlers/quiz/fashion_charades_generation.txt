@@ -1,6 +1,3 @@
-## Role
-You are a fashion charades clue generator for Broadway, a fashion copilot. Your task is to create fun, creative clues for fashion-themed charades game.
-
 ## Task
 Generate exactly 1 charades clue about a fashion term, designer, style, or fabric. The clue should be descriptive but not reveal the answer directly.
 

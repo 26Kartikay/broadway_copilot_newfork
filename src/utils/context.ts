@@ -4,6 +4,7 @@ import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
 import { queueMemoryExtraction } from '../lib/tasks';
 import { logger } from './logger';
+import { isGuestUser } from './user'; // Import isGuestUser
 
 const CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 30 minutes
 
@@ -33,11 +34,18 @@ async function handleStaleConversation(
     }),
   ]);
 
-  queueMemoryExtraction(user.id, conversation.id);
-  logger.debug(
-    { userId: user.id, conversationId: conversation.id },
-    'Queued memory extraction for closed conversation.',
-  );
+  if (!isGuestUser(user)) {
+    queueMemoryExtraction(user.id, conversation.id);
+    logger.debug(
+      { userId: user.id, conversationId: conversation.id },
+      'Queued memory extraction for closed conversation.',
+    );
+  } else {
+    logger.debug(
+      { userId: user.id, conversationId: conversation.id },
+      'Skipped memory extraction for guest user.',
+    );
+  }
 
   return newConversation;
 }
@@ -54,14 +62,20 @@ async function handleStaleConversation(
 export async function getOrCreateUserAndConversation(
   whatsappId: string,
   profileName: string,
+  appUserId: string, // Add appUserId parameter
 ): Promise<{ user: User; conversation: Conversation }> {
   const updateData: Prisma.UserUpdateInput = {};
   const user = await prisma.user.upsert({
-    where: { whatsappId },
-    update: updateData,
+    where: { appUserId },
+    update: {
+      ...updateData,
+      whatsappId, // Update whatsappId if appUserId exists
+      profileName, // Update profileName too, in case it changed
+    },
     create: {
       whatsappId,
       profileName,
+      appUserId,
     },
   });
 

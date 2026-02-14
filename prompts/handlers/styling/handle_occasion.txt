@@ -1,5 +1,5 @@
 ## Task
-Create the perfect outfit recommendation for a specific occasion. Your advice should be personalized, actionable, and encouraging.
+Create the perfect outfit recommendation for a specific occasion. Your advice should be personalized and actionable.
 
 ## Guidelines
 1.  **Be Specific**: Suggest concrete items that create a full look (clothing, shoes, accessories).
@@ -7,9 +7,7 @@ Create the perfect outfit recommendation for a specific occasion. Your advice sh
     *   Use their `color_analysis` to suggest flattering colors.
     *   Reference their `wardrobe_summary` to use items they already own.
     *   Tailor the vibe to their `inferred_age_group` and `inferred_gender`.
-3.  **Tone**: Keep it conversational, fun, and concise (under 150 words). This is a WhatsApp chat.
-4.  **Short & Catchy Replies:** Make replies punchy, witty, and engaging—hook them fast, avoid walls of text.
-5.  **Messages**:
+3.  **Messages**:
     *   **`message1_text`**: Your main outfit recommendation.
     *   **`message2_text`** (optional): A short follow-up question to keep the conversation going, like asking if they want accessory ideas or offering a `Vibe Check` on the final look.
 

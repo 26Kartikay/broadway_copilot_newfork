@@ -2,16 +2,16 @@ import { z } from 'zod';
 import { logger } from '../../utils/logger';
 
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { ImagePart, SystemMessage } from '../../lib/ai/core/messages';
+import { SystemMessage } from '../../lib/ai/core/messages';
+import type { QuickReplyButton } from '../../lib/chat/types';
 import { prisma } from '../../lib/prisma';
 import { queueWardrobeIndex } from '../../lib/tasks';
-import type { QuickReplyButton } from '../../lib/chat/types';
 import { numImagesInMessage } from '../../utils/context';
-import { generateVibeCheckImage } from '../../utils/imageGenerator';
 import { loadPrompt } from '../../utils/prompts';
 
 import { PendingType, Prisma } from '@prisma/client';
 import { InternalServerError } from '../../utils/errors';
+import { isGuestUser } from '../../utils/user'; // Import the utility function
 import { GraphState, Replies } from '../state';
 
 const ScoringCategorySchema = z.object({
@@ -82,14 +82,18 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
     if (imageCount === 0) {
-      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt');
+      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', {
+        prependPersona: false,
+      });
       const systemPrompt = new SystemMessage(
         systemPromptText.replace('{analysis_type}', 'vibe check'),
       );
       const response = await getTextLLM()
         .withStructuredOutput(NoImageLLMOutputSchema)
         .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'vibeCheck');
-      const replies: Replies = [{ reply_type: 'vibe_check_image_upload_request', reply_text: response.reply_text }];
+      const replies: Replies = [
+        { reply_type: 'vibe_check_image_upload_request', reply_text: response.reply_text },
+      ];
       return {
         ...state,
         assistantReply: replies,
@@ -99,26 +103,27 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
 
     // With tonality and image, proceed with vibe check evaluation
     const tonalityInstructionsMap = {
-  friendly:
-    'Kind, encouraging, and genuinely uplifting, like a perfect stranger rooting for you from the sidelines. Warm, reassuring, and full of sincere cheer, offering motivation and compliments without overfamiliarity. Uses words like you’ve got this, amazing, keep going, unstoppable, so proud. Always positive and heartfelt, blending encouragement with thoughtful insight, making every message feel like a boost of confidence from someone who truly wants to see you succeed.',
-  savage:
-    'Imagine a brutally honest fashion critic with a diamond tongue — the ultimate "main character energy" who’s impossibly hard to impress, effortlessly cool, and always ready with that iconic eye roll that says, "Okay, next." This tone is sharp, witty, and unapologetically boujee, like [translate:“I do my own thing”] but with a [translate:“Okurrr”] vibe. Savage doesn’t do fluff — it serves cold, stylish tea with a side of shade, the kind of truth that hits like a stiletto heel in a sea of flats. Think of someone who can say [translate:“Guts, I see you”] when you’re bold, or drop [translate:“Keep rolling your eyes, maybe you’ll find a brain back there”] when you miss the mark. The voice is a flawless mix of Bollywood sass and pop culture flair — cheeky, cutting, and always in control. Every line comes with that signature [translate:“Bible”] confirmation or a cheeky [translate:“I’ll allow it”] when it’s barely acceptable. Savage uses slang like [translate:“Be serious, this isn’t your audition”], [translate:“Stop making it a national casualty”], and [translate:“Ambitious, but honey, not for today”]. It thrives on turning clever comebacks into art, weaving [translate:“Tea,” “Sus,”] and [translate:“Slay all day”] with the precision of a couture critique. It’s the vibe that says, [translate:“I’m gracing you with my presence, so don’t waste it”], always poised, devastatingly witty, and dangerously honest — the main character who doesn’t clap, they critique with style that’s [translate:“too much”] and just enough. 💅🖤',
-  hype_bff:
-    'The ultimate ride-or-die bestie energy — loud, dramatic, and overflowing with chaotic love. This tone is like your best friend who believes you’re the main character in every scene and refuses to let you forget it. Every word bursts with excitement, sparkle, and full-body enthusiasm — think constant screaming, gasping, and keyboard smashing levels of hype. The Hype BFF showers you in validation and glittery praise, hyping even the tiniest win like it’s a world record. They use words and reactions like omggg, yesss queen, stop it right now, I’m crying, so proud, unreal, ate that, you’re literally iconic, cannot even handle this energy, and slayyy beyond belief. The tone is playful, supportive, and explosively encouraging — a mix of chaotic best friend energy, fangirl excitement, and heartfelt affirmation. They’re your emotional Red Bull — constantly cheering, squealing, and manifesting your success like it’s their full-time job. Every message sparkles with love, warmth, and hype so contagious it makes the reader feel unstoppable, adored, and ready to conquer absolutely everything. ✨💖🔥 Main character energy only, bestie. Let’s gooo!',
-};
+      friendly:
+        'Kind, encouraging, and genuinely uplifting, like a perfect stranger rooting for you from the sidelines. Warm, reassuring, and full of sincere cheer, offering motivation and compliments without overfamiliarity. Uses words like you’ve got this, amazing, keep going, unstoppable, so proud. Always positive and heartfelt, blending encouragement with thoughtful insight, making every message feel like a boost of confidence from someone who truly wants to see you succeed.',
+      savage:
+        'Imagine a brutally honest fashion critic with a diamond tongue — the ultimate "main character energy" who’s impossibly hard to impress, effortlessly cool, and always ready with that iconic eye roll that says, "Okay, next." This tone is sharp, witty, and unapologetically boujee, like [translate:“I do my own thing”] but with a [translate:“Okurrr”] vibe. Savage doesn’t do fluff — it serves cold, stylish tea with a side of shade, the kind of truth that hits like a stiletto heel in a sea of flats. Think of someone who can say [translate:“Guts, I see you”] when you’re bold, or drop [translate:“Keep rolling your eyes, maybe you’ll find a brain back there”] when you miss the mark. The voice is a flawless mix of Bollywood sass and pop culture flair — cheeky, cutting, and always in control. Every line comes with that signature [translate:“Bible”] confirmation or a cheeky [translate:“I’ll allow it”] when it’s barely acceptable. Savage uses slang like [translate:“Be serious, this isn’t your audition”], [translate:“Stop making it a national casualty”], and [translate:“Ambitious, but honey, not for today”]. It thrives on turning clever comebacks into art, weaving [translate:“Tea,” “Sus,”] and [translate:“Slay all day”] with the precision of a couture critique. It’s the vibe that says, [translate:“I’m gracing you with my presence, so don’t waste it”], always poised, devastatingly witty, and dangerously honest — the main character who doesn’t clap, they critique with style that’s [translate:“too much”] and just enough. 💅🖤',
+      hype_bff:
+        'The ultimate ride-or-die bestie energy — loud, dramatic, and overflowing with chaotic love. This tone is like your best friend who believes you’re the main character in every scene and refuses to let you forget it. Every word bursts with excitement, sparkle, and full-body enthusiasm — think constant screaming, gasping, and keyboard smashing levels of hype. The Hype BFF showers you in validation and glittery praise, hyping even the tiniest win like it’s a world record. They use words and reactions like omggg, yesss queen, stop it right now, I’m crying, so proud, unreal, ate that, you’re literally iconic, cannot even handle this energy, and slayyy beyond belief. The tone is playful, supportive, and explosively encouraging — a mix of chaotic best friend energy, fangirl excitement, and heartfelt affirmation. They’re your emotional Red Bull — constantly cheering, squealing, and manifesting your success like it’s their full-time job. Every message sparkles with love, warmth, and hype so contagious it makes the reader feel unstoppable, adored, and ready to conquer absolutely everything. ✨💖🔥 Main character energy only, bestie. Let’s gooo!',
+    };
 
-
-    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt');
+    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt', {
+      prependPersona: false,
+    });
     const tonalityInstructions =
       tonalityInstructionsMap[state.selectedTonality as keyof typeof tonalityInstructionsMap];
-    
-    const gender = state.user.confirmedGender || state.user.inferredGender || 'unknown';
+
+    let userContext = '';
 
     let systemPromptText = systemPromptTextRaw.replace(
       '{tonality_instructions}',
       tonalityInstructions,
     );
-    systemPromptText = systemPromptText.replace('{gender}', gender);
+    systemPromptText = systemPromptText.replace('{user_context}', userContext);
 
     const systemPrompt = new SystemMessage(systemPromptText);
 
@@ -149,15 +154,29 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       userId,
     };
 
-    const [, user] = await prisma.$transaction([
-      prisma.vibeCheck.create({ data: vibeCheckData }),
-      prisma.user.update({
-        where: { id: userId },
-        data: { lastVibeCheckAt: new Date() },
-      }),
-    ]);
+    const guestUser = isGuestUser(state.user);
+    let updatedUser = state.user; // Start with current user in state
 
-    queueWardrobeIndex(userId, latestMessageId);
+    let mainReplies: Replies = [];
+    if (guestUser) {
+      logger.debug({ userId }, 'Guest user performed vibe check, results not saved.');
+      mainReplies.push({
+        reply_type: 'text',
+        reply_text:
+          "As a guest user, I can't save your vibe check results. Sign up to save your progress!",
+      });
+    } else {
+      const [, userTransactionResult] = await prisma.$transaction([
+        prisma.vibeCheck.create({ data: vibeCheckData }),
+        prisma.user.update({
+          where: { id: userId },
+          data: { lastVibeCheckAt: new Date() },
+        }),
+      ]);
+      updatedUser = userTransactionResult; // Update user object if transaction was successful
+
+      queueWardrobeIndex(userId, latestMessageId); // Only queue if not guest
+    }
 
     // Find the latest message with an image in the conversation history
     const imageMessage = [...state.conversationHistoryWithImages]
@@ -175,19 +194,18 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       }
     }
 
-    const replies: Replies = [
-      {
-        reply_type: 'vibe_check_card',
-        comment: result.comment,
-        fit_silhouette: result.fit_silhouette,
-        color_harmony: result.color_harmony,
-        styling_details: result.styling_details,
-        context_confidence: result.context_confidence,
-        overall_score: result.overall_score,
-        recommendations: result.recommendations,
-        user_image_url: userImageUrl,
-      },
-    ];
+    mainReplies.push({
+      // Always push the vibe check card regardless of guest status
+      reply_type: 'vibe_check_card',
+      comment: result.comment,
+      fit_silhouette: result.fit_silhouette,
+      color_harmony: result.color_harmony,
+      styling_details: result.styling_details,
+      context_confidence: result.context_confidence,
+      overall_score: result.overall_score,
+      recommendations: result.recommendations,
+      user_image_url: userImageUrl,
+    });
 
     // Add the product recommendation question
     const recommendationQuestion: Replies = [
@@ -200,16 +218,16 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         ],
       },
     ];
-    replies.push(...recommendationQuestion);
+    mainReplies.push(...recommendationQuestion);
 
     return {
       ...state,
-      user,
-      assistantReply: replies,
+      user: updatedUser,
+      assistantReply: mainReplies,
       pending: PendingType.CONFIRM_PRODUCT_RECOMMENDATION,
       productRecommendationContext: {
-          type: 'vibe_check',
-          recommendations: result.recommendations,
+        type: 'vibe_check',
+        recommendations: result.recommendations,
       },
     };
   } catch (err: unknown) {

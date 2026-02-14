@@ -1,19 +1,35 @@
-import { z } from 'zod';
 import { PendingType } from '@prisma/client';
+import { z } from 'zod';
 import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
+import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, IntentLabel } from '../state';
-import { logger } from '../../utils/logger';
 
 const validTonalities = ['friendly', 'savage', 'hype_bff'];
-const otherValid = ['general', 'vibe_check', 'color_analysis', 'suggest', 'this_or_that','skin_lab', 'fashion_quiz'];
+const otherValid = [
+  'general',
+  'vibe_check',
+  'color_analysis',
+  'suggest',
+  'this_or_that',
+  'skin_lab',
+  'fashion_quiz',
+];
 
 const LLMOutputSchema = z.object({
-  intent: z.enum(['general', 'vibe_check', 'color_analysis', 'style_studio', 'this_or_that','skin_lab', 'fashion_quiz']),
-  missingProfileField: z.enum(['gender', 'age_group']).nullable(),
+  intent: z.enum([
+    'general',
+    'vibe_check',
+    'color_analysis',
+    'style_studio',
+    'this_or_that',
+    'skin_lab',
+    'fashion_quiz',
+  ]),
+  missingProfileField: z.enum(['gender', 'age_group', 'fitPreference']).nullable(),
 });
 
 export async function routeIntent(state: GraphState): Promise<GraphState> {
@@ -50,12 +66,15 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
         'FASHION_QUIZ_QUESTION_8',
         'FASHION_QUIZ_QUESTION_9',
         'FASHION_QUIZ_QUESTION_10',
-        'FASHION_QUIZ_RESULTS'
+        'FASHION_QUIZ_RESULTS',
       ];
       const isQuizPending = pending && quizPendingStates.includes(pending.toString());
       logger.debug({ buttonPayload, pending, isQuizPending }, 'Checking quiz button routing');
       if (isQuizPending) {
-        logger.debug({ buttonPayload, pending }, 'Fashion quiz/charades button clicked - staying in quiz flow');
+        logger.debug(
+          { buttonPayload, pending },
+          'Fashion quiz/charades button clicked - staying in quiz flow',
+        );
         return {
           ...state,
           intent: 'fashion_quiz',
@@ -172,8 +191,14 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     };
   }
 
-  if (userMessage === 'fashion_quiz' || userMessage === 'fashion quiz' || userMessage === 'quiz' ||
-      userMessage === 'fashion_charades' || userMessage === 'fashion charades' || userMessage === 'charades') {
+  if (
+    userMessage === 'fashion_quiz' ||
+    userMessage === 'fashion quiz' ||
+    userMessage === 'quiz' ||
+    userMessage === 'fashion_charades' ||
+    userMessage === 'fashion charades' ||
+    userMessage === 'charades'
+  ) {
     logger.debug({ userId }, 'Explicit text match: fashion charades.');
     return {
       ...state,
@@ -190,10 +215,16 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
     // Allow greetings like "hey" to exit the game and show menu
     const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
     if (GREETING_REGEX.test(userMessage)) {
-      logger.debug({ userId, userMessage }, 'Greeting during fashion charades - allowing normal routing to exit game');
+      logger.debug(
+        { userId, userMessage },
+        'Greeting during fashion charades - allowing normal routing to exit game',
+      );
       // Allow normal routing to continue (will go to LLM routing)
     } else {
-      logger.debug({ userId, userMessage }, 'Non-greeting text input during active fashion charades game - routing to fashion_quiz');
+      logger.debug(
+        { userId, userMessage },
+        'Non-greeting text input during active fashion charades game - routing to fashion_quiz',
+      );
       return {
         ...state,
         intent: 'fashion_quiz',
@@ -257,7 +288,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   const canDoColorAnalysis = colorMinutesAgo === -1 || colorMinutesAgo >= 30;
 
   try {
-    const systemPromptText = await loadPrompt('routing/route_intent.txt');
+    const systemPromptText = await loadPrompt('routing/route_intent.txt', user);
     const formattedSystemPrompt = systemPromptText
       .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
       .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
@@ -269,14 +300,7 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
     let { intent, missingProfileField } = response;
 
-    if (missingProfileField === 'gender' && (user.inferredGender || user.confirmedGender)) {
-      missingProfileField = null;
-    } else if (
-      missingProfileField === 'age_group' &&
-      (user.inferredAgeGroup || user.confirmedAgeGroup)
-    ) {
-      missingProfileField = null;
-    }
+
 
     return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
   } catch (err: unknown) {

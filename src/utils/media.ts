@@ -2,8 +2,8 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-import { extension as extFromMime } from 'mime-types';
 import { createCanvas, loadImage } from 'canvas';
+import { extension as extFromMime } from 'mime-types';
 
 import { BadRequestError, InternalServerError } from './errors';
 import { logger } from './logger';
@@ -53,7 +53,7 @@ export function bufferToDataUrl(buffer: Buffer, mimeType: string): string {
 
 /**
  * Compresses and resizes an image to reduce file size.
- * 
+ *
  * @param buffer - Image buffer
  * @param mimeType - Original MIME type
  * @param maxWidth - Maximum width in pixels (default: 1920)
@@ -76,11 +76,11 @@ export async function compressImage(
 
     // Load image from buffer
     const img = await loadImage(buffer);
-    
+
     // Calculate new dimensions while maintaining aspect ratio
     let width = img.width;
     let height = img.height;
-    
+
     if (width <= maxWidth && height <= maxHeight) {
       // Image is already small enough, return as-is
       return { buffer, mimeType };
@@ -141,7 +141,7 @@ export async function compressImage(
 
 /**
  * Processes media for use with AI models.
- * 
+ *
  * - If the URL is already a data URL, returns it as-is (works locally and in prod)
  * - If in production with public SERVER_URL, downloads and returns public URL
  * - If in development (localhost), downloads and converts to data URL for OpenAI compatibility
@@ -203,7 +203,10 @@ export async function processMediaForAI(
     } else {
       // Development: Use data URL since OpenAI can't access localhost
       aiUrl = bufferToDataUrl(buffer, actualMimeType);
-      logger.debug({ userId, filename, mimeType: actualMimeType }, 'Using data URL for AI (localhost)');
+      logger.debug(
+        { userId, filename, mimeType: actualMimeType },
+        'Using data URL for AI (localhost)',
+      );
     }
 
     logger.debug(
@@ -223,7 +226,7 @@ export async function processMediaForAI(
 /**
  * Converts a localhost URL from the database to a data URL for AI compatibility.
  * This handles old messages that were stored with localhost URLs.
- * 
+ *
  * @param url - URL that might be a localhost URL
  * @returns Data URL if localhost, original URL otherwise
  */
@@ -234,10 +237,8 @@ export async function convertLocalhostUrlToDataUrl(url: string): Promise<string>
   }
 
   // Check if it's a localhost URL that needs conversion
-  const isLocalhostUrl = 
-    url.includes('localhost') || 
-    url.includes('127.0.0.1') || 
-    url.includes('0.0.0.0');
+  const isLocalhostUrl =
+    url.includes('localhost') || url.includes('127.0.0.1') || url.includes('0.0.0.0');
 
   if (!isLocalhostUrl) {
     return url;
@@ -247,7 +248,7 @@ export async function convertLocalhostUrlToDataUrl(url: string): Promise<string>
     // Extract the file path from the URL (e.g., /uploads/userId/filename.ext)
     const urlObj = new URL(url);
     const uploadsMatch = urlObj.pathname.match(/^\/uploads\/([^/]+)\/(.+)$/);
-    
+
     if (!uploadsMatch || !uploadsMatch[1] || !uploadsMatch[2]) {
       logger.warn({ url }, 'Could not parse localhost URL for conversion');
       return url;
@@ -268,7 +269,7 @@ export async function convertLocalhostUrlToDataUrl(url: string): Promise<string>
     // Read the file and convert to data URL
     const buffer = await fs.readFile(filePath);
     const ext = path.extname(filename).toLowerCase().slice(1);
-    
+
     // Map extension to MIME type
     const mimeTypes: Record<string, string> = {
       jpg: 'image/jpeg',
@@ -283,7 +284,10 @@ export async function convertLocalhostUrlToDataUrl(url: string): Promise<string>
     logger.debug({ url, filePath }, 'Converted localhost URL to data URL');
     return dataUrl;
   } catch (err) {
-    logger.warn({ url, error: err instanceof Error ? err.message : String(err) }, 'Failed to convert localhost URL');
+    logger.warn(
+      { url, error: err instanceof Error ? err.message : String(err) },
+      'Failed to convert localhost URL',
+    );
     return url;
   }
 }

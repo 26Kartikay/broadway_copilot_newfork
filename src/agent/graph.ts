@@ -9,8 +9,10 @@ import {
   handleGeneral,
   handleProductRecommendationConfirmation,
   handleSaveColorAnalysis,
+  handleSkinLab,
   handleStyleStudio,
   handleStyling,
+  handleThisOrThat,
   ingestMessage,
   recordUserInfo,
   routeGeneral,
@@ -18,8 +20,6 @@ import {
   routeStyleStudio,
   sendReply,
   vibeCheck,
-  handleSkinLab,
-  handleThisOrThat,
 } from './nodes';
 import { GraphState } from './state';
 
@@ -73,7 +73,7 @@ export function buildAgentGraph() {
     .addConditionalEdges(
       'routeIntent',
       (s: GraphState) => {
-        if (s.missingProfileField) return 'askUserInfo';
+        if (s.missingProfileField && s.intent !== 'styling' && s.intent !== 'style_studio') return 'askUserInfo';
         switch (s.intent) {
           case 'skin_lab':
             return 'handleSkinLab';

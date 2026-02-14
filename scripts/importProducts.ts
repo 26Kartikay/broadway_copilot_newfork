@@ -8,273 +8,62 @@
  *   npx ts-node scripts/importProducts.ts --file=products.json
  * 
  * Required CSV columns:
- *   - handle_id: Unique product identifier
  *   - barcode: Product barcode/SKU
- *   - article_name: Product name
- *   - brand: Brand name
- *   - general_tags: Product type tags (T-shirt, Oversized, Casual, etc.)
- *   - category: Main category (Clothing & Fashion, Beauty & Personal Care, etc.)
- *   - component_tags: Tags string (e.g., "STYLE (Aesthetic Identity): Athleisure, COLOR PREFERENCES: Black")
- *   - images: Product image URL
- *   - product_url: Link to product page
- * 
- * Optional columns:
- *   - id: Auto-generated ID (ignored)
- *   - tagged_at: Timestamp (ignored)
- *   - description: Product description (included in embeddings)
+ *   - name: Product name
+ *   - brand name: Brand name
+ *   - gender: Gender (MALE, FEMALE, OTHER) - optional
+ *   - age: Age group (TEEN, ADULT, SENIOR) - optional
+ *   - description: Product description - optional
+ *   - image: Product image URL
+ *   - color: Comma-separated list of colors - optional
  */
 
 import 'dotenv/config';
-import { PrismaClient, ProductCategory } from '@prisma/client';
+import Papa from 'papaparse';
+import { PrismaClient, Gender, AgeGroup } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
-import OpenAI from 'openai';
+// Removed OpenAI import as embeddings are no longer generated
 
 const prisma = new PrismaClient();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Removed openai client initialization
 
-// Configuration
-const BATCH_SIZE = 100; // Products per batch for embedding
-const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIM = 1536;
+// Removed BATCH_SIZE, EMBEDDING_MODEL, EMBEDDING_DIM as they are no longer needed.
 
-// ============================================================================
-// CATEGORY MAPPING
-// ============================================================================
+// Removed CATEGORY_MAP as category field is no longer in Product model.
 
-const CATEGORY_MAP: Record<string, ProductCategory> = {
-  'Clothing & Fashion': 'CLOTHING_FASHION',
-  'Clothing & STYLE': 'CLOTHING_FASHION',
-  'Beauty & Personal Care': 'BEAUTY_PERSONAL_CARE',
-  'Beauty & F': 'BEAUTY_PERSONAL_CARE',
-  'Health & Wellness': 'HEALTH_WELLNESS',
-  'Health & V': 'HEALTH_WELLNESS',
-  'Jewellery & Accessories': 'JEWELLERY_ACCESSORIES',
-  'Footwear': 'FOOTWEAR',
-  'Bags & Luggage': 'BAGS_LUGGAGE',
-};
+// Removed ParsedComponent interface and parseComponent function as component_tags are no longer processed.
 
 // ============================================================================
-// COMPONENT PARSER
-// ============================================================================
-
-interface ParsedComponent {
-  style?: string;
-  fit?: string;
-  colors: string[];
-  patterns?: string;
-  occasions: string[];
-  allTags: Record<string, string | string[]>;
-}
-
-/**
- * Parses the component string into structured fields.
- * 
- * Input: "STYLE (Aesthetic Identity): Athleisure, FIT / SILHOUETTE: Oversized, COLOR PREFERENCES: Black, PATTERNS: Graphics, OCCASION: Casual"
- * Output: { style: "Athleisure", fit: "Oversized", colors: ["Black"], patterns: "Graphics", occasions: ["Casual"], allTags: {...} }
- */
-function parseComponent(component: string): ParsedComponent {
-  const result: ParsedComponent = {
-    colors: [],
-    occasions: [],
-    allTags: {},
-  };
-
-  if (!component || typeof component !== 'string') {
-    return result;
-  }
-
-  // Split by comma, but be careful with values that might contain commas
-  const pairs = component.split(/,\s*(?=[A-Z])/);
-
-  for (const pair of pairs) {
-    const colonIndex = pair.indexOf(':');
-    if (colonIndex === -1) continue;
-
-    const key = pair.substring(0, colonIndex).trim();
-    const value = pair.substring(colonIndex + 1).trim();
-
-    if (!key || !value) continue;
-
-    // Store in allTags
-    result.allTags[key] = value;
-
-    // Map to structured fields
-    const keyLower = key.toLowerCase();
-
-    if (keyLower.includes('style') || keyLower.includes('aesthetic')) {
-      result.style = value;
-    } else if (keyLower.includes('fit') || keyLower.includes('silhouette')) {
-      result.fit = value;
-    } else if (keyLower.includes('color')) {
-      // Colors might be comma-separated within the value
-      result.colors = value.split(/[,&]/).map(c => c.trim()).filter(Boolean);
-    } else if (keyLower.includes('pattern')) {
-      result.patterns = value;
-    } else if (keyLower.includes('occasion')) {
-      result.occasions = value.split(/[,&]/).map(o => o.trim()).filter(Boolean);
-    }
-  }
-
-  return result;
-}
-
-// ============================================================================
-// SEARCH DOCUMENT BUILDER
+// PRODUCT DATA INTERFACES
 // ============================================================================
 
 interface ProductData {
-  handleId: string;
-  barcode?: string;
+  barcode: string;
   name: string;
-  brand: string;
-  category: ProductCategory;
-  generalTag: string;
-  style?: string;
-  fit?: string;
-  colors: string[];
-  patterns?: string;
-  occasions: string[];
-  componentTags: Record<string, string | string[]>;
+  brandName: string;
+  gender?: Gender;
+  ageGroup?: AgeGroup;
+  description: string;
   imageUrl: string;
-  productLink: string;
-  description?: string;
+  colors: string[];
 }
 
-/**
- * Builds a search document for embedding generation.
- * Combines all relevant product information into a single string.
- */
-function buildSearchDoc(product: ProductData): string {
-  const parts: string[] = [
-    product.name,
-    `Brand: ${product.brand}`,
-    `Type: ${product.generalTag}`,
-  ];
-
-  if (product.style) {
-    parts.push(`Style: ${product.style}`);
-  }
-  if (product.fit) {
-    parts.push(`Fit: ${product.fit}`);
-  }
-  if (product.colors.length > 0) {
-    parts.push(`Colors: ${product.colors.join(', ')}`);
-  }
-  if (product.patterns) {
-    parts.push(`Pattern: ${product.patterns}`);
-  }
-  if (product.occasions.length > 0) {
-    parts.push(`Occasions: ${product.occasions.join(', ')}`);
-  }
-
-  // Add description if available
-  if (product.description && product.description.trim()) {
-    parts.push(`Description: ${product.description.trim()}`);
-  }
-
-  // Add any additional tags from componentTags
-  for (const [key, value] of Object.entries(product.componentTags)) {
-    const normalizedKey = key.toLowerCase();
-    // Skip keys we've already processed
-    if (
-      normalizedKey.includes('style') ||
-      normalizedKey.includes('fit') ||
-      normalizedKey.includes('color') ||
-      normalizedKey.includes('pattern') ||
-      normalizedKey.includes('occasion')
-    ) {
-      continue;
-    }
-    const valueStr = Array.isArray(value) ? value.join(', ') : value;
-    parts.push(`${key}: ${valueStr}`);
-  }
-
-  return parts.join('. ');
-}
-
-// ============================================================================
-// EMBEDDING GENERATION
-// ============================================================================
-
-/**
- * Generates embeddings for a batch of texts.
- */
-async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  const response = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: texts,
-  });
-
-  return response.data.map(d => d.embedding);
-}
-
-// ============================================================================
-// CSV PARSER
-// ============================================================================
-
-/**
- * Simple CSV parser that handles quoted fields.
- */
-function parseCSV(content: string): Record<string, string>[] {
-  const lines = content.split('\n').filter(line => line.trim());
-  if (lines.length < 2) return [];
-
-  const headers = parseCSVLine(lines[0]);
-  const rows: Record<string, string>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
-    const row: Record<string, string> = {};
-    
-    for (let j = 0; j < headers.length; j++) {
-      row[headers[j]] = values[j] || '';
-    }
-    
-    rows.push(row);
-  }
-
-  return rows;
-}
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  result.push(current.trim());
-  return result;
-}
+// Removed buildSearchDoc function as searchDoc is no longer in Product model.
 
 // ============================================================================
 // MAIN IMPORT FUNCTION
 // ============================================================================
 
 interface RawProduct {
-  handle_id: string;
-  barcode?: string;
-  article_name: string;
-  brand: string;
-  general_tags: string;      // Changed: was general_tag
-  category: string;
-  component_tags: string;    // Changed: was component
-  tagged_at?: string;        // New: optional timestamp
-  images: string;            // Changed: was image_url
-  product_url: string;       // Changed: was product_link
-  description?: string;      // Product description
+  barcode: string;
+  name: string;
+  brandName: string; // Use camelCase to match CSV header
+  gender?: string;
+  age?: string;
+  description?: string;
+  imageUrl: string;
+  color?: string; // This will be a comma-separated string
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
@@ -284,8 +73,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
   console.log(`📦 Attempting to load file from: ${absolutePath}`);
   
   if (!fs.existsSync(absolutePath)) {
-    // Fallback check for production structure
-    const fallbackPath = path.resolve(process.cwd(), filePath); // This fallback might still be useful
+    const fallbackPath = path.resolve(process.cwd(), filePath);
     console.log(`trying fallback: ${fallbackPath}`);
     if(!fs.existsSync(fallbackPath)) throw new Error(`File not found at ${absolutePath} or ${fallbackPath}`);
   }
@@ -305,7 +93,16 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
   if (filePath.endsWith('.json')) {
     rawProducts = JSON.parse(content);
   } else {
-    rawProducts = parseCSV(content) as unknown as RawProduct[];
+    const result = Papa.parse(content, {
+      header: true,
+      skipEmptyLines: true,
+      dynamicTyping: false,
+    });
+    rawProducts = result.data as RawProduct[];
+    if (result.errors.length > 0) {
+      console.warn('⚠️  Errors encountered during CSV parsing:');
+      console.warn(result.errors);
+    }
   }
 
   console.log(`📋 Found ${rawProducts.length} products to import`);
@@ -315,172 +112,103 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
   let skipped = 0;
   let errors = 0;
 
-  for (let i = 0; i < rawProducts.length; i += BATCH_SIZE) {
-    const batch = rawProducts.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(rawProducts.length / BATCH_SIZE);
+  for (let i = 0; i < rawProducts.length; i++) { // Process one by one since no embeddings batching
+    const raw = rawProducts[i];
+    const productNum = i + 1;
+    const totalProducts = rawProducts.length;
 
-    console.log(`\n🔄 Processing batch ${batchNum}/${totalBatches} (${batch.length} products)`);
+    console.log(`\n🔄 Processing product ${productNum}/${totalProducts}: ${raw.name || raw.barcode || 'unknown'}`);
 
     try {
-      // Transform raw products to structured format
-      const products: ProductData[] = [];
-      const seenHandleIds = new Set<string>(); // Track duplicates within batch
+
       
-      for (const raw of batch) {
-        // Skip if missing required fields (handle_id and article_name are required)
-        if (!raw.handle_id || !raw.article_name) {
-          console.warn(`⚠️ Skipping product with missing required fields: ${raw.handle_id || 'unknown'}`);
-          skipped++;
-          continue;
-        }
-        
-        // Use default brand if missing
-        const brand = raw.brand?.trim() || 'Unknown';
+      // Check for duplicates (within the entire set, as we're processing one by one)
+      const existing = await prisma.product.findFirst({
+        where: { barcode: raw.barcode },
+      });
 
-        // Check for duplicates within the batch
-        if (seenHandleIds.has(raw.handle_id)) {
-          console.log(`⏭️ Skipping duplicate handleId in batch: ${raw.handle_id}`);
-          skipped++;
-          continue;
-        }
-        seenHandleIds.add(raw.handle_id);
-
-        // Check if product already exists (only if not clearing)
-        if (!clearExisting) {
-          const existing = await prisma.product.findUnique({
-            where: { handleId: raw.handle_id },
-          });
-
-          if (existing) {
-            console.log(`⏭️ Skipping existing product: ${raw.handle_id}`);
-            skipped++;
-            continue;
-          }
-        }
-
-        // Parse component_tags string
-        const parsed = parseComponent(raw.component_tags || '');
-
-        // Map category
-        const category = CATEGORY_MAP[raw.category] || 'CLOTHING_FASHION';
-
-        products.push({
-          handleId: raw.handle_id,
-          barcode: raw.barcode || undefined,
-          name: raw.article_name,
-          brand: brand,
-          category,
-          generalTag: raw.general_tags || 'Unknown',
-          style: parsed.style,
-          fit: parsed.fit,
-          colors: parsed.colors,
-          patterns: parsed.patterns,
-          occasions: parsed.occasions,
-          componentTags: parsed.allTags,
-          imageUrl: raw.images || '',
-          productLink: raw.product_url || '',
-          description: raw.description?.trim() || undefined,
-        });
-      }
-
-      if (products.length === 0) {
+      if (existing) {
+        console.log(`⏭️ Skipping existing product: ${raw.barcode}`);
+        skipped++;
         continue;
       }
 
-      // Build search documents
-      const searchDocs = products.map(buildSearchDoc);
-
-      // Generate embeddings
-      console.log(`🧠 Generating embeddings for ${products.length} products...`);
-      const embeddings = await generateEmbeddings(searchDocs);
-
-      // Insert into database
-      console.log(`💾 Inserting ${products.length} products into database...`);
-      
-      for (let j = 0; j < products.length; j++) {
-        const product = products[j];
-        const embedding = embeddings[j];
-        const searchDoc = searchDocs[j];
-
-        try {
-          // Use upsert to handle race conditions or if product was added between check and insert
-          const created = await prisma.product.upsert({
-            where: { handleId: product.handleId },
-            update: {
-              // Update all fields in case product already exists
-              barcode: product.barcode,
-              name: product.name,
-              brand: product.brand,
-              category: product.category,
-              generalTag: product.generalTag,
-              style: product.style,
-              fit: product.fit,
-              colors: product.colors,
-              patterns: product.patterns,
-              occasions: product.occasions,
-              componentTags: product.componentTags,
-              imageUrl: product.imageUrl,
-              productLink: product.productLink,
-              searchDoc,
-              embeddingModel: EMBEDDING_MODEL,
-              embeddingDim: EMBEDDING_DIM,
-              embeddingAt: new Date(),
-            },
-            create: {
-              handleId: product.handleId,
-              barcode: product.barcode,
-              name: product.name,
-              brand: product.brand,
-              category: product.category,
-              generalTag: product.generalTag,
-              style: product.style,
-              fit: product.fit,
-              colors: product.colors,
-              patterns: product.patterns,
-              occasions: product.occasions,
-              componentTags: product.componentTags,
-              imageUrl: product.imageUrl,
-              productLink: product.productLink,
-              searchDoc,
-              embeddingModel: EMBEDDING_MODEL,
-              embeddingDim: EMBEDDING_DIM,
-              embeddingAt: new Date(),
-            },
-          });
-
-          // Update embedding using raw SQL (Prisma doesn't support vector type directly)
-          const vectorString = `[${embedding.join(',')}]`;
-          await prisma.$executeRawUnsafe(
-            `UPDATE "Product" SET embedding = $1::vector WHERE id = $2`,
-            vectorString,
-            created.id
-          );
-
-          imported++;
-        } catch (err: any) {
-          // Handle unique constraint errors gracefully
-          if (err?.code === 'P2002' && err?.meta?.target?.includes('handleId')) {
-            console.log(`⏭️ Skipping duplicate product (race condition): ${product.handleId}`);
-            skipped++;
-          } else {
-            console.error(`❌ Error inserting product ${product.handleId}:`, err);
-            errors++;
-          }
+      // Map gender and age to enums
+      let genderEnum: Gender | undefined;
+      if (raw.gender) {
+        const normalizedGender = raw.gender.toUpperCase() as Gender;
+        if (Object.values(Gender).includes(normalizedGender)) {
+          genderEnum = normalizedGender;
+        } else {
+          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${raw.barcode}. Skipping.`);
         }
       }
 
-      console.log(`✅ Batch ${batchNum} complete: ${products.length} processed`);
-
-      // Rate limiting for OpenAI API
-      if (i + BATCH_SIZE < rawProducts.length) {
-        console.log('⏳ Waiting 1 second for rate limiting...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      let ageGroupEnum: AgeGroup | undefined;
+      if (raw.age) {
+        const normalizedAge = raw.age.toUpperCase() as AgeGroup;
+        if (Object.values(AgeGroup).includes(normalizedAge)) {
+          ageGroupEnum = normalizedAge;
+        } else {
+          console.warn(`⚠️ Invalid age value "${raw.age}" for product ${raw.barcode}. Skipping.`);
+        }
       }
 
-    } catch (err) {
-      console.error(`❌ Error processing batch ${batchNum}:`, err);
-      errors += batch.length;
+      // Debug: Check what imageUrl value we're getting from CSV
+      if (imported < 3) {
+        console.log(`\n🔍 Debug product ${imported + 1}:`);
+        console.log(`   Raw keys: ${Object.keys(raw).join(', ')}`);
+        console.log(`   raw.imageUrl: ${raw.imageUrl}`);
+        console.log(`   raw['imageUrl']: ${(raw as any)['imageUrl']}`);
+        console.log(`   raw.image: ${(raw as any).image}`);
+      }
+      
+      // Access imageUrl - try multiple ways in case of column name issues
+      const imageUrlValue = raw.imageUrl || 
+                           (raw as any)['imageUrl'] || 
+                           (raw as any).image || 
+                           (raw as any)['image'] ||
+                           '';
+      
+      const product: ProductData = {
+        barcode: raw.barcode,
+        name: raw.name,
+        brandName: raw.brandName, // Access using string literal
+        gender: genderEnum,
+        ageGroup: ageGroupEnum,
+        description: raw.description || '',
+        imageUrl: imageUrlValue,
+        colors: raw.color ? raw.color.split(',').map(c => c.trim()).filter(Boolean) : [],
+      };
+
+      // Insert into database
+      console.log(`💾 Inserting product ${product.barcode} into database...`);
+      
+      const created = await prisma.product.create({
+        data: {
+          barcode: product.barcode,
+          name: product.name,
+          brandName: product.brandName,
+          gender: product.gender,
+          ageGroup: product.ageGroup,
+          description: product.description,
+          imageUrl: product.imageUrl,
+          colors: product.colors,
+          isActive: true,
+        },
+      });
+
+      imported++;
+
+    } catch (err: any) {
+      // Handle unique constraint errors gracefully
+      if (err?.code === 'P2002' && err?.meta?.target?.includes('barcode')) {
+        console.log(`⏭️ Skipping duplicate product (race condition): ${raw.barcode}`);
+        skipped++;
+      } else {
+        console.error(`❌ Error inserting product ${raw.barcode}:`, err);
+        errors++;
+      }
     }
   }
 

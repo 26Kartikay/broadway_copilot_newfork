@@ -1,24 +1,37 @@
-import { createCanvas, loadImage, registerFont, CanvasRenderingContext2D } from 'canvas';
+import { CanvasRenderingContext2D, createCanvas, loadImage, registerFont } from 'canvas';
+import colornames from 'colornames';
 import fs from 'fs/promises';
 import path from 'path';
-import colornames from 'colornames';
 
-import { InternalServerError } from './errors';
 import { logger } from './logger';
 import { ensureDir, userUploadDir } from './paths';
 
 // Register Poppins fonts for image generation
 try {
-  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'), { family: 'Poppins', weight: 'normal' });
-  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Medium.ttf'), { family: 'Poppins', weight: '500' });
-  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Bold.ttf'), { family: 'Poppins', weight: 'bold' });
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'), {
+    family: 'Poppins',
+    weight: 'normal',
+  });
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Medium.ttf'), {
+    family: 'Poppins',
+    weight: '500',
+  });
+  registerFont(path.join(process.cwd(), 'fonts', 'Poppins-Bold.ttf'), {
+    family: 'Poppins',
+    weight: 'bold',
+  });
   logger.info('Poppins fonts registered successfully');
 } catch (error) {
   logger.warn({ error: (error as Error)?.message }, 'Failed to register Poppins fonts');
 }
 
 // Helper function to set font with proper error handling
-function setFont(ctx: CanvasRenderingContext2D, size: number, weight: 'normal' | 'bold' | '500' = 'normal', scale: number = 1): void {
+function setFont(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  weight: 'normal' | 'bold' | '500' = 'normal',
+  scale: number = 1,
+): void {
   try {
     const fontSize = Math.round(size * scale);
     ctx.font = `${weight} ${fontSize}px Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
@@ -34,25 +47,25 @@ function setFont(ctx: CanvasRenderingContext2D, size: number, weight: 'normal' |
  */
 function colorNameToHex(colorName: string): string {
   const normalized = colorName.toLowerCase().trim();
-  
+
   // Try direct lookup first
   const directMatch = colornames(normalized);
   if (directMatch) return directMatch;
-  
+
   // Try with common variations
   const variations = [
     normalized.replace(/\s+/g, ''), // Remove spaces: "olive green" -> "olivegreen"
     normalized.replace(/\s+/g, '-'), // Replace spaces with hyphens: "olive green" -> "olive-green"
     normalized.replace(/\b(pastel|deep|light|dark|bright|soft|warm|cool|icy|muted)\b/g, '').trim(), // Remove descriptors
   ];
-  
+
   for (const variant of variations) {
     if (variant && variant !== normalized) {
       const match = colornames(variant);
       if (match) return match;
     }
   }
-  
+
   // Try partial matching - check if any color name contains the input or vice versa
   const allColors = colornames.all();
   for (const colorEntry of allColors) {
@@ -63,16 +76,17 @@ function colorNameToHex(colorName: string): string {
       if (colorEntry.value) return colorEntry.value;
     }
   }
-  
+
   // Try splitting compound names (e.g., "Olive Green" -> try "olive" and "green")
   const words = normalized.split(/\s+/);
   for (const word of words) {
-    if (word.length > 2) { // Skip very short words
+    if (word.length > 2) {
+      // Skip very short words
       const match = colornames(word);
       if (match) return match;
     }
   }
-  
+
   // Fallback to gray if no match found
   return '#808080';
 }
@@ -122,7 +136,8 @@ export async function generateColorAnalysisImage(
   const drawSwatches = (colors: any[], startX: number, startY: number) => {
     ctx.save();
     // No ctx.rotate() here so they appear straight
-    colors.slice(0, 4).forEach((color, index) => { // Limit to 4 swatches
+    colors.slice(0, 4).forEach((color, index) => {
+      // Limit to 4 swatches
       if (!color || !color.name || !color.hex) {
         logger.warn({ color, index }, 'Skipping color swatch due to missing data');
         return; // Skip if missing data
@@ -215,7 +230,7 @@ export async function generateColorAnalysisImage(
   const bannerScale = 0.75; // 1/4 size
   const bannerWidth = bannerTemplateImg.width * scale * bannerScale;
   const bannerHeight = bannerTemplateImg.height * scale * bannerScale;
-  const bannerX = (293 / 2 - bannerTemplateImg.width * bannerScale / 2) * scale; // Center horizontally (293px template width)
+  const bannerX = (293 / 2 - (bannerTemplateImg.width * bannerScale) / 2) * scale; // Center horizontally (293px template width)
   const bannerY = 235 * scale; // Updated Y position
 
   ctx.drawImage(bannerTemplateImg, bannerX, bannerY, bannerWidth, bannerHeight);
@@ -237,21 +252,21 @@ export async function generateColorAnalysisImage(
     ctx.restore();
   }
 
-
-
   // 5. Save and Return
   const userDir = userUploadDir(whatsappId);
   await ensureDir(userDir);
   const filename = `color_analysis_${Date.now()}.png`;
   const filepath = path.join(userDir, filename);
-  
+
   await fs.writeFile(filepath, canvas.toBuffer('image/png'));
 
   const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
   const relativePath = `/uploads/${sanitizedId}/${filename}`;
   const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '');
-  
-  return (serverUrl && !serverUrl.includes('localhost')) ? `${serverUrl}${relativePath}` : relativePath;
+
+  return serverUrl && !serverUrl.includes('localhost')
+    ? `${serverUrl}${relativePath}`
+    : relativePath;
 }
 
 /**
@@ -291,35 +306,30 @@ export async function generateVibeCheckImage(
 
   const fontFamily = 'Poppins, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-// 2. Draw Categories (scores) - positioned at 190px scaled Y coordinate
-const categoryTextY = 190 * scale; // Position at 190px scaled
+  // 2. Draw Categories (scores) - positioned at 190px scaled Y coordinate
+  const categoryTextY = 190 * scale; // Position at 190px scaled
 
-const categories = [
-  { score: data.fit_silhouette.score },
-  { score: data.styling_details.score },
-  { score: data.color_harmony.score },
-];
+  const categories = [
+    { score: data.fit_silhouette.score },
+    { score: data.styling_details.score },
+    { score: data.color_harmony.score },
+  ];
 
-const categoryXs = [72 * scale, 130 * scale, 200 * scale];
+  const categoryXs = [72 * scale, 130 * scale, 200 * scale];
 
-const categoryColors = ['#eb92aa', '#75cfe7', '#a57bc4'];
+  const categoryColors = ['#eb92aa', '#75cfe7', '#a57bc4'];
 
-ctx.save();
-ctx.font = `bold ${18 * scale}px Poppins`; // Bold font
-ctx.textAlign = 'center';
-ctx.textBaseline = 'middle'; // 🔥 CRITICAL FIX
+  ctx.save();
+  ctx.font = `bold ${18 * scale}px Poppins`; // Bold font
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle'; // 🔥 CRITICAL FIX
 
-categories.forEach((cat, i) => {
-  ctx.fillStyle = categoryColors[i]!;
-  ctx.fillText(
-    `${(cat.score ?? 0).toFixed(1)}`,
-    categoryXs[i]!,
-    categoryTextY
-  );
-});
+  categories.forEach((cat, i) => {
+    ctx.fillStyle = categoryColors[i]!;
+    ctx.fillText(`${(cat.score ?? 0).toFixed(1)}`, categoryXs[i]!, categoryTextY);
+  });
 
-ctx.restore();
-
+  ctx.restore();
 
   // 3. Draw User Image centered according to template - cropped to 80% height to show scores
   if (data.userImageUrl) {
@@ -411,7 +421,7 @@ ctx.restore();
   ctx.textAlign = 'center';
   ctx.fillText(`${data.overall_score.toFixed(1)}/10`, 0, 15 * scale); // Move 15px down total
   ctx.restore();
-  
+
   const userDir = userUploadDir(whatsappId);
   await ensureDir(userDir);
   const filename = `vibe_check_${Date.now()}.png`;
@@ -422,5 +432,7 @@ ctx.restore();
   const relativePath = `/uploads/${sanitizedId}/${filename}`;
   const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '');
 
-  return (serverUrl && !serverUrl.includes('localhost')) ? `${serverUrl}${relativePath}` : relativePath;
+  return serverUrl && !serverUrl.includes('localhost')
+    ? `${serverUrl}${relativePath}`
+    : relativePath;
 }

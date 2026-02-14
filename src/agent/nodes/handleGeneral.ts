@@ -8,7 +8,6 @@ import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories } from '../tools';
-import { getMainMenuReply } from './common'; // New import
 
 const LLMOutputSchema = z.object({
   message1_text: z.string().describe('The first text message response to the user.'),
@@ -73,7 +72,16 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
     // Chat Intent (unchanged)
     // ------------------------------------------
     if (generalIntent === 'chat') {
-      let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt');
+      let systemPromptText = await loadPrompt('handlers/general/handle_chat.txt', state.user);
+
+      // Inject user's name and gender into the system prompt for the LLM
+      if (user.profileName) {
+        systemPromptText += `\nThe user's name is ${user.profileName}.`;
+      }
+      if (user.confirmedGender) {
+        systemPromptText += `\nThe user's gender is ${user.confirmedGender}.`;
+      }
+
       systemPromptText += '\nPlease respond concisely, avoiding verbosity.';
 
       const tools = [fetchRelevantMemories(userId)];

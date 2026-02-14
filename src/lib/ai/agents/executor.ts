@@ -39,10 +39,10 @@ async function getFinalStructuredOutput<T extends ZodType>(
   if (lastMessage instanceof AssistantMessage) {
     const customPrompt = new SystemMessage(
       'You are parsing an assistant message that was generated in response to a user query. ' +
-        'Extract the relevant information from the assistant\'s response and format it as a JSON object ' +
+        "Extract the relevant information from the assistant's response and format it as a JSON object " +
         'that strictly adheres to the provided schema. ' +
         'The assistant message contains styling advice, product recommendations, or similar content. ' +
-        'Parse only the assistant\'s output, NOT the user\'s input. ' +
+        "Parse only the assistant's output, NOT the user's input. " +
         'Do not add any extra commentary or change any of the values.',
     );
 
@@ -137,20 +137,29 @@ export async function agentExecutor<T extends ZodType>(
     );
 
     logger.debug(
-      { nodeName: options.nodeName, iteration: i, toolCallsCount: toolCalls.length, toolNames: toolCalls.map(tc => tc.name) },
+      {
+        nodeName: options.nodeName,
+        iteration: i,
+        toolCallsCount: toolCalls.length,
+        toolNames: toolCalls.map((tc) => tc.name),
+      },
       'agentExecutor: LLM response received',
     );
 
     conversation.push(assistant);
 
     // Filter out structured output tool calls from the regular tool execution
-    const regularToolCalls = toolCalls.filter(tc => {
+    const regularToolCalls = toolCalls.filter((tc) => {
       // Skip structured output tool calls during the tool execution phase
-      const isStructuredOutput = tc.name === (runner as any).structuredOutputToolName || 
-                                 tc.name === 'structured_output' || 
-                                 tc.name === 'json';
+      const isStructuredOutput =
+        tc.name === (runner as any).structuredOutputToolName ||
+        tc.name === 'structured_output' ||
+        tc.name === 'json';
       if (isStructuredOutput) {
-        logger.debug({ nodeName: options.nodeName, toolName: tc.name }, 'agentExecutor: Skipping structured output tool call during execution phase');
+        logger.debug(
+          { nodeName: options.nodeName, toolName: tc.name },
+          'agentExecutor: Skipping structured output tool call during execution phase',
+        );
         return false;
       }
       return true;
@@ -163,22 +172,31 @@ export async function agentExecutor<T extends ZodType>(
     if (regularToolCalls.length === 0) {
       // Check if this is the first iteration and we have tools but none were called
       // This might indicate the model skipped tools - check if structured output tool was called instead
-      const structuredOutputCalled = toolCalls.some(tc => {
+      const structuredOutputCalled = toolCalls.some((tc) => {
         const name = tc.name.toLowerCase();
-        return name.includes('structured') || name === 'json' || name === options.nodeName.toLowerCase();
+        return (
+          name.includes('structured') || name === 'json' || name === options.nodeName.toLowerCase()
+        );
       });
-      
+
       if (i === 0 && !toolsWereCalled && structuredOutputCalled && options.tools.length > 0) {
         logger.warn(
-          { nodeName: options.nodeName, toolsAvailable: options.tools.map(t => t.name) },
+          { nodeName: options.nodeName, toolsAvailable: options.tools.map((t) => t.name) },
           'agentExecutor: Structured output tool called before regular tools - model may have skipped required tools',
         );
         // Force at least one more iteration by injecting a message asking to use tools
-        conversation.push(new UserMessage('Please use the available tools before providing your final response. The tools are required to complete this task.'));
+        conversation.push(
+          new UserMessage(
+            'Please use the available tools before providing your final response. The tools are required to complete this task.',
+          ),
+        );
         continue;
       }
-      
-      logger.debug({ nodeName: options.nodeName, iteration: i, toolsWereCalled }, 'agentExecutor: No regular tool calls, breaking loop');
+
+      logger.debug(
+        { nodeName: options.nodeName, iteration: i, toolsWereCalled },
+        'agentExecutor: No regular tool calls, breaking loop',
+      );
       break;
     }
 
@@ -248,7 +266,12 @@ export async function agentExecutor<T extends ZodType>(
       { nodeName: options.nodeName, maxLoops },
       'agentExecutor: maxLoops hit with trailing non-assistant message; forcing final assistant run',
     );
-    const { assistant } = await runner.run(systemPrompt, conversation, traceBuffer, options.nodeName);
+    const { assistant } = await runner.run(
+      systemPrompt,
+      conversation,
+      traceBuffer,
+      options.nodeName,
+    );
     conversation.push(assistant);
   }
 

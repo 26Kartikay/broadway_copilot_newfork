@@ -866,7 +866,17 @@
 <body>
   <div class="chat-container">
     <div class="chat-header">
-      <img src="https://www.broadwaylive.in/static/assets/static/broadway-footer-logo.18241cc16189.jpg" alt="Broadway Live" class="header-logo">
+      <img src="https://shop.broadwaylive.in/cdn/shop/files/Screen_Recording_2026-01-05_122811.gif?v=1767866062&width=180" alt="Broadway Live" class="header-logo">
+      <div style="margin-top: 10px; display: flex; justify-content: center; gap: 10px; align-items: center;">
+        <label for="userIdSelect" style="color: white; font-size: 12px;">User ID:</label>
+        <select id="userIdSelect" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555;">
+          <option value="guest_TEMP">Guest User</option>
+          <option value="kartikay1234">Kartikay (App User)</option>
+          <option value="shambhavi5678">Shambhavi (App User)</option>
+        </select>
+        <label for="profileNameInput" style="color: white; font-size: 12px;">Name:</label>
+        <input type="text" id="profileNameInput" value="Guest" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: 100px;">
+      </div>
     </div>
 
     <div class="messages-container" id="messagesContainer">
@@ -926,27 +936,29 @@
 
   <script>
     const API_URL = '/api/chat';
-    let userId = localStorage.getItem('broadway_user_id');
-    if (!userId) {
-      userId = 'user_' + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem('broadway_user_id', userId);
-    }
 
     let selectedImage = null;
     let isLoading = false;
 
+    // Generate a random guest ID once
+    const randomGuestId = 'guest_' + Math.random().toString(36).substring(2, 12);
+    
+    // Get current user ID and profile name from UI
+    function getCurrentUserId() {
+      const select = document.getElementById('userIdSelect');
+      return select ? select.value : randomGuestId;
+    }
+    
+    function getCurrentProfileName() {
+      const input = document.getElementById('profileNameInput');
+      return input ? input.value.trim() || undefined : undefined;
+    }
+    
     function autoResize(textarea) {
       textarea.style.height = 'auto';
       textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
     }
-    function handleFormSubmit(event) {
-  event.preventDefault();
-  if (!isLoading) {
-    sendMessage();
-  }
-  return false;
-}
-
+    
     function handleFormSubmit(event) {
       event.preventDefault();
       if (!isLoading) {
@@ -1156,8 +1168,9 @@
           content.innerHTML = `
             <div class="product-card-brand">${(product.brand || 'Broadway').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
             <div class="product-card-name">${(product.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${product.description ? `<div class="product-card-description">${product.description.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+            ${product.colors && product.colors.length > 0 ? `<div class="product-card-colors">Colors: ${product.colors.join(', ').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${product.reason ? `<div class="product-card-reason">${product.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
-            <a href="${product.productLink && isValidUrl(product.productLink) ? product.productLink : '#'}" target="_blank" class="product-card-link">View Product →</a>
           `;
           
           card.appendChild(img);
@@ -1397,9 +1410,9 @@
 
       // Prepare request
       const payload = {
-        userId: userId,
+        userId: getCurrentUserId(),
         text: text,
-        profileName: 'Guest'
+        profileName: getCurrentProfileName()
       };
 
       if (selectedImage) {
@@ -1450,20 +1463,34 @@
               recommendations: reply.recommendations || [],
               user_image_url: reply.user_image_url || null
             } : null;
-            const text = reply.reply_text || '';
+            const replyText = reply.reply_text || '';
             
             // Handle different reply types
             if (reply.reply_type === 'product_card') {
-              addMessage(text, false, null, null, products);
+              addMessage(replyText, false, null, null, products);
             } else if (reply.reply_type === 'color_analysis_card') {
               addMessage('', false, null, null, null, colorAnalysisCard);
             } else if (reply.reply_type === 'vibe_check_card') {
               addMessage('', false, null, null, null, null, null, vibeCheckCard);
             } else if (reply.reply_type === 'pdf') {
               const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
-              addMessage(text, false, buttons, imageUrl, null, null, pdfUrl);
+              addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
+            } else if (reply.reply_type === 'text') {
+              // Handle plain text replies
+              addMessage(replyText, false, buttons, null, null);
+            } else if (reply.reply_type === 'quick_reply' || reply.reply_type === 'list_picker') {
+              // Handle quick reply and list picker (both have buttons)
+              addMessage(replyText, false, buttons, imageUrl, null);
+            } else if (reply.reply_type === 'color_analysis_image_upload_request' || 
+                       reply.reply_type === 'vibe_check_image_upload_request') {
+              // Handle image upload requests (just show as text)
+              addMessage(replyText, false, buttons, null, null);
+            } else if (reply.reply_type === 'image') {
+              // Handle image replies
+              addMessage(replyText, false, buttons, imageUrl, null);
             } else {
-              addMessage(text, false, buttons, imageUrl, null);
+              // Fallback for any other reply types
+              addMessage(replyText, false, buttons, imageUrl, null);
             }
           });
         } else if (data.error) {
@@ -1492,10 +1519,10 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: userId,
+            userId: getCurrentUserId(),
             text: text,
             button: { text: text, payload: id },
-            profileName: 'Guest'
+            profileName: getCurrentProfileName()
           })
         });
 
@@ -1542,7 +1569,21 @@
             } else if (reply.reply_type === 'pdf') {
               const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
               addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
+            } else if (reply.reply_type === 'text') {
+              // Handle plain text replies
+              addMessage(replyText, false, buttons, null, null);
+            } else if (reply.reply_type === 'quick_reply' || reply.reply_type === 'list_picker') {
+              // Handle quick reply and list picker (both have buttons)
+              addMessage(replyText, false, buttons, imageUrl, null);
+            } else if (reply.reply_type === 'color_analysis_image_upload_request' || 
+                       reply.reply_type === 'vibe_check_image_upload_request') {
+              // Handle image upload requests (just show as text)
+              addMessage(replyText, false, buttons, null, null);
+            } else if (reply.reply_type === 'image') {
+              // Handle image replies
+              addMessage(replyText, false, buttons, imageUrl, null);
             } else {
+              // Fallback for any other reply types
               addMessage(replyText, false, buttons, imageUrl, null);
             }
           });
@@ -1556,6 +1597,24 @@
 
       isLoading = false;
     }
+
+    // Event listener for userIdSelect to update profileNameInput
+    document.addEventListener('DOMContentLoaded', () => {
+      const userIdSelect = document.getElementById('userIdSelect');
+      const profileNameInput = document.getElementById('profileNameInput');
+
+      if (userIdSelect && profileNameInput) {
+        userIdSelect.addEventListener('change', () => {
+          if (userIdSelect.value === 'guest_TEMP') {
+            profileNameInput.value = 'Guest';
+          } else if (userIdSelect.value === 'kartikay1234') {
+            profileNameInput.value = 'Kartikay';
+          } else if (userIdSelect.value === 'shambhavi5678') {
+            profileNameInput.value = 'Shambhavi';
+          }
+        });
+      }
+    });
 
     // Focus input on load
     const messageInput = document.getElementById('messageInput');

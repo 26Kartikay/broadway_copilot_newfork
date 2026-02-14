@@ -1,81 +1,74 @@
+import { PendingType } from '@prisma/client';
 import { z } from 'zod';
-import { getTextLLM, getVisionLLM } from '../../lib/ai';
-import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
 import { agentExecutor } from '../../lib/ai/agents/executor';
-import { SystemMessage, BaseMessage } from '../../lib/ai/core/messages';
+import { BaseMessage, SystemMessage } from '../../lib/ai/core/messages';
+import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
+import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
-import { InternalServerError } from '../../utils/errors';
 import { isValidImageUrl } from '../../utils/urlValidation';
 import { GraphState, Replies } from '../state';
-import { PendingType } from '@prisma/client';
-import { searchProducts, fetchColorAnalysis } from '../tools';
+import { fetchColorAnalysis, searchProducts } from '../tools';
 
 const StyleStudioOutputSchema = z.object({
   reply_text: z.string().min(1, 'Reply text is required'),
 });
 
 const styleStudioMenuButtons = [
-  { text: 'Style for any occasion', id: 'style_studio_occasion' },
-  { text: 'Vacation looks', id: 'style_studio_vacation' },
-  { text: 'General styling', id: 'style_studio_general' },
+  { text: 'Style for any occasion', id: 'style_studio_occasion' },
+  { text: 'Vacation looks', id: 'style_studio_vacation' },
+  { text: 'General styling', id: 'style_studio_general' },
 ];
 
 export async function handleStyleStudio(state: GraphState): Promise<GraphState> {
-  const { subIntent, conversationHistoryTextOnly, user, pending } = state;
-  const userId = user.id;
+  const { subIntent, conversationHistoryTextOnly, user, pending } = state;
+  const userId = user.id; // --- START OF CONTEXT CHECK AND TRUNCATION (FIXED) ---
 
-  // --- START OF CONTEXT CHECK AND TRUNCATION (FIXED) ---
-  let historyForLLM: BaseMessage[] = conversationHistoryTextOnly;
-  
-  if (subIntent && historyForLLM.length > 0) {
-    // Get the last message.
-    const latestUserMessage = historyForLLM.at(-1); 
-    
-    // Check 1 & 2: Ensure the message object exists AND its content is definitely a string
-    if (latestUserMessage && typeof latestUserMessage.content === 'string') {
-        
-        // FIX: Use 'as unknown as string' to correctly handle the complex MessageContent type
-        const isServiceSwitch = styleStudioMenuButtons.some(
-          button => (latestUserMessage.content as unknown as string).trim() === button.id
-        );
+  let historyForLLM: BaseMessage[] = conversationHistoryTextOnly;
+  if (subIntent && historyForLLM.length > 0) {
+    // Get the last message.
+    const latestUserMessage = historyForLLM.at(-1); // Check 1 & 2: Ensure the message object exists AND its content is definitely a string
+    if (latestUserMessage && typeof latestUserMessage.content === 'string') {
+      // FIX: Use 'as unknown as string' to correctly handle the complex MessageContent type
+      const isServiceSwitch = styleStudioMenuButtons.some(
+        (button) => (latestUserMessage.content as unknown as string).trim() === button.id,
+      );
 
-        if (isServiceSwitch) {
-          // If a switch was detected, truncate the history to ONLY include the latest message.
-          logger.debug({ userId, subIntent }, 'Sub-service switch detected via button payload. Truncating LLM history.');
-          
-          // We assert that latestUserMessage is a BaseMessage before array assignment
-          historyForLLM = [latestUserMessage as BaseMessage]; 
-        }
-    }
-  }
-  // --- END OF CONTEXT CHECK AND TRUNCATION (FIXED) ---
-
-  if (!subIntent) {
-    // Send menu if not already pending
-    if (pending !== PendingType.STYLE_STUDIO_MENU) {
-      const replies: Replies = [
-        {
-          reply_type: 'quick_reply',
-          reply_text: 'Welcome to Style Studio! Choose a styling service:',
-          buttons: styleStudioMenuButtons,
-        },
-      ];
-      return {
-        ...state,
-        assistantReply: replies,
-        pending: PendingType.STYLE_STUDIO_MENU,
-        lastHandledPayload: undefined,
-      };
-    } else {
-      // Possibly user repeated same menu state; do nothing
-      return { ...state, assistantReply: [] };
-    }
-  }
+      if (isServiceSwitch) {
+        // If a switch was detected, truncate the history to ONLY include the latest message.
+        logger.debug(
+          { userId, subIntent },
+          'Sub-service switch detected via button payload. Truncating LLM history.',
+        ); // We assert that latestUserMessage is a BaseMessage before array assignment
+        historyForLLM = [latestUserMessage as BaseMessage];
+      }
+    }
+  } // --- END OF CONTEXT CHECK AND TRUNCATION (FIXED) ---
+  if (!subIntent) {
+    // Send menu if not already pending
+    if (pending !== PendingType.STYLE_STUDIO_MENU) {
+      const replies: Replies = [
+        {
+          reply_type: 'quick_reply',
+          reply_text: 'Welcome to Style Studio! Choose a styling service:',
+          buttons: styleStudioMenuButtons,
+        },
+      ];
+      return {
+        ...state,
+        assistantReply: replies,
+        pending: PendingType.STYLE_STUDIO_MENU,
+        lastHandledPayload: undefined,
+      };
+    } else {
+      // Possibly user repeated same menu state; do nothing
+      return { ...state, assistantReply: [] };
+    }
+  }
 
   try {
     const intentKey = subIntent.replace('style_studio_', ''); // e.g. 'occasion', 'vacation', 'general'
-    const systemPromptText = await loadPrompt(`handlers/style_studio/${intentKey}.txt`);
+    const systemPromptText = await loadPrompt(`handlers/style_studio/${intentKey}.txt`, state.user);
     const systemPrompt = new SystemMessage(systemPromptText);
 
     // Use agentExecutor with product search tool
@@ -135,13 +128,11 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       result.reply_text = "I've prepared some styling recommendations for you.";
     }
 
-    const replies: Replies = [
-      { reply_type: 'text', reply_text: result.reply_text },
-    ];
+    const replies: Replies = [{ reply_type: 'text', reply_text: result.reply_text }];
 
     // Extract products directly from searchProducts tool results
-    const productResults = toolResults.filter(tr => tr.name === 'searchProducts');
-    
+    const productResults = toolResults.filter((tr) => tr.name === 'searchProducts');
+
     logger.debug(
       { userId, subIntent, productResultsCount: productResults.length, productResults },
       'Extracting products from tool results',
@@ -151,20 +142,22 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       name: string;
       brand: string;
       imageUrl: string;
-      productLink: string;
+      description?: string;
+      colors?: string[];
     }> = [];
 
     for (const toolResult of productResults) {
       logger.debug(
-        { 
-          userId, 
-          toolName: toolResult.name, 
-          resultType: typeof toolResult.result, 
+        {
+          userId,
+          toolName: toolResult.name,
+          resultType: typeof toolResult.result,
           isArray: Array.isArray(toolResult.result),
           resultLength: Array.isArray(toolResult.result) ? toolResult.result.length : 'N/A',
-          resultPreview: Array.isArray(toolResult.result) && toolResult.result.length > 0 
-            ? toolResult.result[0] 
-            : toolResult.result,
+          resultPreview:
+            Array.isArray(toolResult.result) && toolResult.result.length > 0
+              ? toolResult.result[0]
+              : toolResult.result,
         },
         'Processing tool result',
       );
@@ -180,9 +173,8 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         const products = toolResult.result.filter((p: any) => {
           // Filter out invalid products
           if (!p || typeof p !== 'object') return false;
-          if (!p.name || !p.brand || !p.productLink) return false;
-          
-          const productLinkLower = (p.productLink || '').toLowerCase().trim();
+          if (!p.name || !p.brand || !p.imageUrl) return false;
+
           const imageUrlLower = (p.imageUrl || '').toLowerCase().trim();
 
           // Skip placeholder URLs
@@ -194,16 +186,7 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
             'unknown',
           ];
 
-          if (
-            placeholderPatterns.some(pattern => 
-              productLinkLower.includes(pattern) || imageUrlLower.includes(pattern)
-            )
-          ) {
-            return false;
-          }
-
-          // Must have valid http(s) URL for product link
-          if (!productLinkLower.startsWith('http://') && !productLinkLower.startsWith('https://')) {
+          if (placeholderPatterns.some((pattern) => imageUrlLower.includes(pattern))) {
             return false;
           }
 
@@ -211,21 +194,20 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         });
 
         // Filter products: must have valid imageUrl
-        const validProducts = products.filter((p: any) => 
-          p && 
-          p.name && 
-          p.brand && 
-          p.productLink && 
-          isValidImageUrl(p.imageUrl)
+        const validProducts = products.filter(
+          (p: any) => p && p.name && p.brand && isValidImageUrl(p.imageUrl),
         );
-        
-        allProducts.push(...validProducts.map((p: any) => ({
-          name: p.name,
-          brand: p.brand,
-          imageUrl: p.imageUrl,
-          productLink: p.productLink,
-        })));
-        
+
+        allProducts.push(
+          ...validProducts.map((p: any) => ({
+            name: p.name,
+            brand: p.brand,
+            imageUrl: p.imageUrl,
+            description: p.description,
+            colors: p.colors,
+          })),
+        );
+
         logger.debug(
           { userId, productsFound: products.length, totalProducts: allProducts.length },
           'Products extracted from array result',
@@ -235,7 +217,7 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         try {
           const parsed = JSON.parse(toolResult.result);
           if (Array.isArray(parsed)) {
-            allProducts.push(...parsed.filter((p: any) => p.name && p.brand && p.productLink));
+            allProducts.push(...parsed.filter((p: any) => p.name && p.brand && p.imageUrl));
           }
         } catch {
           // Not JSON, skip
@@ -250,8 +232,9 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
 
     // Add product card if we have valid products (limit to 10)
     if (allProducts.length > 0) {
+      // Use name+brand as unique identifier for deduplication
       const uniqueProducts = Array.from(
-        new Map(allProducts.map(p => [p.productLink, p])).values()
+        new Map(allProducts.map((p) => [`${p.name}|${p.brand}`, p])).values(),
       ).slice(0, 10);
 
       // Filter out any products with invalid imageUrls one more time (safety check)
@@ -264,7 +247,8 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
             name: p.name,
             brand: p.brand,
             imageUrl: p.imageUrl,
-            productLink: p.productLink,
+            description: p.description,
+            colors: p.colors,
             reason: 'Recommended for your style needs',
           })),
         } as any);

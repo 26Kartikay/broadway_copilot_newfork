@@ -73,12 +73,15 @@
           const replies = data.replies || [];
           for (const r of replies) {
             if (r.reply_type === 'text') {
-              addBubble('assistant', r.reply_text);
+              addBubble('assistant', r.reply_text || '');
             } else if (r.reply_type === 'image') {
               addBubble('assistant', (r.reply_text ? r.reply_text + '<br/>' : '') + `<img class="img" src="${r.media_url}" alt="image"/>`);
             } else if (r.reply_type === 'quick_reply' || r.reply_type === 'list_picker') {
               const buttons = (r.buttons || []).map(b => `<button disabled>${b.text}</button>`).join(' ');
-              addBubble('assistant', `${r.reply_text}<div class="qr">${buttons}</div>`);
+              addBubble('assistant', `${r.reply_text || ''}<div class="qr">${buttons}</div>`);
+            } else if (r.reply_type === 'product_card') {
+              const productList = (r.products || []).map(p => `${p.name} (${p.brand})`).join(', ');
+              addBubble('assistant', `${r.reply_text || ''}<br/>Products: ${productList}`);
             } else if (r.reply_type === 'color_analysis_card') {
               const userImg = r.user_image_url ? `<img class="img" src="${r.user_image_url}" alt="User photo"/><br/>` : '';
               const colorTwins = r.color_twin && r.color_twin.length > 0 
@@ -88,6 +91,15 @@
             } else if (r.reply_type === 'vibe_check_card') {
               const userImg = r.user_image_url ? `<img class="img" src="${r.user_image_url}" alt="Outfit"/><br/>` : '';
               addBubble('assistant', `${userImg}Vibe Check: ${r.overall_score}/10<br/>${r.comment || ''}`);
+            } else if (r.reply_type === 'pdf') {
+              addBubble('assistant', (r.reply_text ? r.reply_text + '<br/>' : '') + `<iframe src="${r.media_url}" width="100%" height="500px"></iframe>`);
+            } else if (r.reply_type === 'color_analysis_image_upload_request' || 
+                       r.reply_type === 'vibe_check_image_upload_request') {
+              // Handle image upload requests as text
+              addBubble('assistant', r.reply_text || '');
+            } else {
+              // Fallback for any other reply types
+              addBubble('assistant', r.reply_text || JSON.stringify(r));
             }
           }
         } catch (e) {

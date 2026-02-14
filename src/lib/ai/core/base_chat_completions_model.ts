@@ -10,7 +10,7 @@ import z from 'zod';
 
 import { BaseChatModel } from './base_chat_model';
 import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from './messages';
-import { ToolCall, toOpenAIToolSpec, ensureRequiredArrays } from './tools';
+import { ensureRequiredArrays, ToolCall, toOpenAIToolSpec } from './tools';
 
 export abstract class BaseChatCompletionsModel extends BaseChatModel {
   protected _buildChatCompletionsParams(

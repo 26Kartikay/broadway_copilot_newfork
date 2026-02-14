@@ -260,14 +260,18 @@ export function validateChatRequest(request: ChatRequest): string[] {
 /**
  * Type guard to check if a reply is text-only.
  */
-export function isTextOnlyReply(reply: Reply): reply is Extract<Reply, { reply_type: 'text_only' }> {
+export function isTextOnlyReply(
+  reply: Reply,
+): reply is Extract<Reply, { reply_type: 'text_only' }> {
   return reply.reply_type === 'text_only';
 }
 
 /**
  * Type guard to check if a reply has buttons.
  */
-export function isButtonReply(reply: Reply): reply is Extract<Reply, { buttons: QuickReplyButton[] }> {
+export function isButtonReply(
+  reply: Reply,
+): reply is Extract<Reply, { buttons: QuickReplyButton[] }> {
   return 'buttons' in reply && Array.isArray(reply.buttons);
 }
 
@@ -288,7 +292,7 @@ export function isMediaReply(reply: Reply): reply is Extract<Reply, { media_url:
 export const EXAMPLE_TEXT_REQUEST: ChatRequest = {
   userId: 'user123',
   text: 'Hello, I need styling advice',
-  messageId: 'msg_001'
+  messageId: 'msg_001',
 };
 
 /**
@@ -297,11 +301,13 @@ export const EXAMPLE_TEXT_REQUEST: ChatRequest = {
 export const EXAMPLE_MEDIA_REQUEST: ChatRequest = {
   userId: 'user123',
   text: 'What do you think of this outfit?',
-  media: [{
-    url: 'https://example.com/image.jpg',
-    contentType: 'image/jpeg'
-  }],
-  messageId: 'msg_002'
+  media: [
+    {
+      url: 'https://example.com/image.jpg',
+      contentType: 'image/jpeg',
+    },
+  ],
+  messageId: 'msg_002',
 };
 
 /**
@@ -312,9 +318,9 @@ export const EXAMPLE_BUTTON_REQUEST: ChatRequest = {
   button: {
     text: 'Yes, show me more',
     payload: 'confirm_more_styles',
-    type: 'quick_reply'
+    type: 'quick_reply',
   },
-  messageId: 'msg_003'
+  messageId: 'msg_003',
 };
 
 /**
@@ -325,8 +331,8 @@ export const EXAMPLE_CHAT_RESPONSE: ChatResponse = {
     // Text-only greeting
     {
       reply_type: 'text_only',
-      reply_text: 'Hello! I\'m your personal stylist. What can I help you with today?',
-      expected_action: 'input_required'
+      reply_text: "Hello! I'm your personal stylist. What can I help you with today?",
+      expected_action: 'input_required',
     },
     // Quick reply buttons
     {
@@ -334,12 +340,12 @@ export const EXAMPLE_CHAT_RESPONSE: ChatResponse = {
       buttons: [
         { text: 'Find outfit ideas', id: 'outfit_ideas' },
         { text: 'Style my photo', id: 'style_photo' },
-        { text: 'Color analysis', id: 'color_analysis' }
+        { text: 'Color analysis', id: 'color_analysis' },
       ],
-      expected_action: 'button_click'
-    }
+      expected_action: 'button_click',
+    },
   ],
-  pending: null
+  pending: null,
 };
 
 // ================================
@@ -353,10 +359,7 @@ export const EXAMPLE_CHAT_RESPONSE: ChatResponse = {
  * @param messageId - Generated or provided message ID
  * @returns MessageInput compatible with the agent graph
  */
-export function chatRequestToMessageInput(
-  request: ChatRequest,
-  messageId: string,
-): MessageInput {
+export function chatRequestToMessageInput(request: ChatRequest, messageId: string): MessageInput {
   const input: MessageInput = {
     MessageSid: messageId,
     SmsSid: messageId,
@@ -400,4 +403,3 @@ export function chatRequestToMessageInput(
 
   return input;
 }
-

@@ -1,11 +1,11 @@
 /**
  * Seasonal Color Palette Data
- * 
+ *
  * Comprehensive mapping of 12 seasonal color palettes with:
  * - Top colors (20 individual colors with hex codes)
  * - Two-color combinations (10 combinations)
  * - Three-color combinations (10 combinations)
- * 
+ *
  * Based on Munsell Color Theory and Modern Seasonal Analysis Systems
  */
 
@@ -38,7 +38,8 @@ export interface PaletteData {
 
 export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   LIGHT_SPRING: {
-    description: 'Light, warm, clear coloring with golden undertones - perfect for soft, fresh colors that glow.',
+    description:
+      'Light, warm, clear coloring with golden undertones - perfect for soft, fresh colors that glow.',
     topColors: [
       { name: 'Peach Blossom', hex: '#FFB380' },
       { name: 'Coral Pink', hex: '#FF9A8A' },
@@ -89,7 +90,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   WARM_SPRING: {
-    description: 'Warm, golden, peachy coloring with medium contrast - ideal for rich, earthy tones that enhance your natural warmth.',
+    description:
+      'Warm, golden, peachy coloring with medium contrast - ideal for rich, earthy tones that enhance your natural warmth.',
     topColors: [
       { name: 'Tomato Red', hex: '#FF6347' },
       { name: 'Warm Coral', hex: '#FF7F50' },
@@ -140,7 +142,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   CLEAR_SPRING: {
-    description: 'Bright, clear, warm coloring with high contrast - best for vivid, saturated colors that make you shine.',
+    description:
+      'Bright, clear, warm coloring with high contrast - best for vivid, saturated colors that make you shine.',
     topColors: [
       { name: 'True Red', hex: '#FF0000' },
       { name: 'Bright Coral', hex: '#FF6B6B' },
@@ -191,7 +194,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   LIGHT_SUMMER: {
-    description: 'Light, cool, soft coloring with low contrast - perfect for gentle, muted pastels that complement your delicate features.',
+    description:
+      'Light, cool, soft coloring with low contrast - perfect for gentle, muted pastels that complement your delicate features.',
     topColors: [
       { name: 'Soft Pink', hex: '#FFB3BA' },
       { name: 'Rose Pink', hex: '#FFC0CB' },
@@ -242,7 +246,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   COOL_SUMMER: {
-    description: 'Cool, blue/pink undertones with medium contrast - ideal for soft, muted cool tones that enhance your natural elegance.',
+    description:
+      'Cool, blue/pink undertones with medium contrast - ideal for soft, muted cool tones that enhance your natural elegance.',
     topColors: [
       { name: 'Rose', hex: '#E0BBE4' },
       { name: 'Mauve', hex: '#D8BFD8' },
@@ -293,7 +298,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   SOFT_SUMMER: {
-    description: 'Soft, muted, cool-to-neutral coloring with low contrast - perfect for blended, harmonious colors that create balance.',
+    description:
+      'Soft, muted, cool-to-neutral coloring with low contrast - perfect for blended, harmonious colors that create balance.',
     topColors: [
       { name: 'Dusty Pink', hex: '#DCBEC0' },
       { name: 'Soft Rose', hex: '#C9A9A6' },
@@ -344,7 +350,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   SOFT_AUTUMN: {
-    description: 'Soft, warm, muted coloring with low contrast - ideal for earthy, blended tones that create a harmonious look.',
+    description:
+      'Soft, warm, muted coloring with low contrast - ideal for earthy, blended tones that create a harmonious look.',
     topColors: [
       { name: 'Soft Terracotta', hex: '#C97858' },
       { name: 'Warm Coral', hex: '#D17B67' },
@@ -395,7 +402,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   WARM_AUTUMN: {
-    description: 'Warm, golden, rich coloring with medium contrast - perfect for rich, earthy tones that enhance your natural warmth.',
+    description:
+      'Warm, golden, rich coloring with medium contrast - perfect for rich, earthy tones that enhance your natural warmth.',
     topColors: [
       { name: 'Burnt Orange', hex: '#CC5500' },
       { name: 'Rust', hex: '#B7410E' },
@@ -446,7 +454,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   DEEP_AUTUMN: {
-    description: 'Deep, warm, rich coloring with high contrast - best for intense, saturated warm tones that create dramatic impact.',
+    description:
+      'Deep, warm, rich coloring with high contrast - best for intense, saturated warm tones that create dramatic impact.',
     topColors: [
       { name: 'Deep Rust', hex: '#8B3A1E' },
       { name: 'Brick Red', hex: '#A0522D' },
@@ -497,7 +506,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   COOL_WINTER: {
-    description: 'Cool, deep coloring with high contrast - ideal for rich, cool tones that create striking elegance.',
+    description:
+      'Cool, deep coloring with high contrast - ideal for rich, cool tones that create striking elegance.',
     topColors: [
       { name: 'True Navy', hex: '#000080' },
       { name: 'Royal Blue', hex: '#002366' },
@@ -548,7 +558,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   CLEAR_WINTER: {
-    description: 'Clear, bright, cool coloring with high contrast - perfect for vivid, saturated cool colors that create bold impact.',
+    description:
+      'Clear, bright, cool coloring with high contrast - perfect for vivid, saturated cool colors that create bold impact.',
     topColors: [
       { name: 'True Red', hex: '#FF0000' },
       { name: 'Magenta', hex: '#FF00FF' },
@@ -599,7 +610,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
   },
 
   DEEP_WINTER: {
-    description: 'Deep, cool coloring with very high contrast - best for intense, rich cool tones that create powerful sophistication.',
+    description:
+      'Deep, cool coloring with very high contrast - best for intense, rich cool tones that create powerful sophistication.',
     topColors: [
       { name: 'Deep Navy', hex: '#00022E' },
       { name: 'Midnight Blue', hex: '#191970' },
@@ -663,4 +675,3 @@ export function getPaletteData(palette: SeasonalPalette): PaletteData {
 export function isValidPalette(palette: string): palette is SeasonalPalette {
   return palette in SEASONAL_PALETTES;
 }
-

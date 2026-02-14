@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
+import { logger } from '../../utils/logger';
 import { ConversationStatus, PendingType } from '@prisma/client';
 import { getTextLLM, SystemMessage } from '../../lib/ai';
 import { prisma } from '../../lib/prisma';
 import { queueMemoryExtraction } from '../../lib/tasks';
 import { loadPrompt } from '../../utils/prompts';
+import { isGuestUser } from '../../utils/user'; // Import isGuestUser
 import { GraphState, Replies } from '../state';
 
 const FEEDBACK_ACK_FALLBACK =
@@ -31,7 +33,7 @@ const LLMOutputSchema = z.object({
 
 export async function handleFeedback(state: GraphState): Promise<GraphState> {
   const { conversationId, conversationHistoryTextOnly, user } = state;
-  const systemPromptText = await loadPrompt('data/record_feedback.txt');
+  const systemPromptText = await loadPrompt('data/record_feedback.txt', user);
   const systemPrompt = new SystemMessage(systemPromptText);
 
   const trimmedHistory = conversationHistoryTextOnly.slice(-3);
@@ -65,7 +67,14 @@ export async function handleFeedback(state: GraphState): Promise<GraphState> {
       });
     });
 
-    queueMemoryExtraction(user.id, conversationId);
+    if (!isGuestUser(user)) {
+      queueMemoryExtraction(user.id, conversationId);
+    } else {
+      logger.debug(
+        { userId: user.id, conversationId },
+        'Skipped memory extraction for guest user from feedback.',
+      );
+    }
 
     replies = [
       {

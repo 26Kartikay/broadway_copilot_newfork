@@ -1,10 +1,10 @@
-import { z } from 'zod';
 import { PendingType } from '@prisma/client';
+import { z } from 'zod';
 import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
+import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
-import { InternalServerError } from '../../utils/errors';
 import { GraphState, Replies } from '../state';
 import { getMainMenuReply } from './common';
 
@@ -34,19 +34,21 @@ export const HintGenerationSchema = z.object({
 });
 
 function gameOver(state: GraphState, message: string): GraphState {
-    state.quizQuestions = undefined;
-    state.currentQuestionIndex = undefined;
-    state.pending = PendingType.NONE;
+  state.quizQuestions = undefined;
+  state.currentQuestionIndex = undefined;
+  state.pending = PendingType.NONE;
 
-    const gameOverReply: Replies = [{
-        reply_type: 'text',
-        reply_text: message,
-    }];
+  const gameOverReply: Replies = [
+    {
+      reply_type: 'text',
+      reply_text: message,
+    },
+  ];
 
-    const menuReply = getMainMenuReply();
+  const menuReply = getMainMenuReply();
 
-    state.assistantReply = [...gameOverReply, ...menuReply];
-    return state;
+  state.assistantReply = [...gameOverReply, ...menuReply];
+  return state;
 }
 
 export async function handleFashionCharades(state: GraphState): Promise<GraphState> {
@@ -66,9 +68,17 @@ export async function handleFashionCharades(state: GraphState): Promise<GraphSta
     }
 
     // Check if we have an active charades game
-    const hasActiveGame = state.quizQuestions && Array.isArray(state.quizQuestions) && state.quizQuestions.length > 0;
+    const hasActiveGame =
+      state.quizQuestions && Array.isArray(state.quizQuestions) && state.quizQuestions.length > 0;
 
-    logger.debug({ hasActiveGame, quizQuestions: state.quizQuestions, quizQuestionsLength: state.quizQuestions?.length }, 'Checking for active charades game');
+    logger.debug(
+      {
+        hasActiveGame,
+        quizQuestions: state.quizQuestions,
+        quizQuestionsLength: state.quizQuestions?.length,
+      },
+      'Checking for active charades game',
+    );
 
     if (!hasActiveGame) {
       // Start new charades game
@@ -91,7 +101,6 @@ export async function handleFashionCharades(state: GraphState): Promise<GraphSta
 
     // If no input provided, show the current clue again
     return await showCurrentClue(state);
-
   } catch (err) {
     logger.error({ userId, err }, 'Error in handleFashionCharades');
     throw new InternalServerError('Failed to handle fashion charades', { cause: err });
@@ -100,7 +109,7 @@ export async function handleFashionCharades(state: GraphState): Promise<GraphSta
 
 async function startNewCharadesRound(state: GraphState): Promise<GraphState> {
   // Generate a new charades clue
-  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_generation.txt');
+  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_generation.txt', user);
   const systemPrompt = new SystemMessage(systemPromptText);
 
   const response = await getTextLLM()
@@ -117,7 +126,11 @@ async function startNewCharadesRound(state: GraphState): Promise<GraphState> {
 }
 
 async function showCurrentClue(state: GraphState): Promise<GraphState> {
-  if (!state.quizQuestions || !Array.isArray(state.quizQuestions) || state.quizQuestions.length === 0) {
+  if (
+    !state.quizQuestions ||
+    !Array.isArray(state.quizQuestions) ||
+    state.quizQuestions.length === 0
+  ) {
     throw new Error('No active charades clue');
   }
 
@@ -136,9 +149,7 @@ async function showCurrentClue(state: GraphState): Promise<GraphState> {
     {
       reply_type: 'quick_reply',
       reply_text: clueText,
-      buttons: [
-        { text: '💡 Hint', id: 'hint' },
-      ],
+      buttons: [{ text: '💡 Hint', id: 'hint' }],
     },
   ];
 
@@ -150,7 +161,11 @@ async function showCurrentClue(state: GraphState): Promise<GraphState> {
 }
 
 async function provideHint(state: GraphState): Promise<GraphState> {
-  if (!state.quizQuestions || !Array.isArray(state.quizQuestions) || state.quizQuestions.length === 0) {
+  if (
+    !state.quizQuestions ||
+    !Array.isArray(state.quizQuestions) ||
+    state.quizQuestions.length === 0
+  ) {
     throw new Error('No active charades clue for hint');
   }
 
@@ -184,8 +199,12 @@ Keep the hint encouraging and fun, but don't reveal the answer directly.`;
 
   const systemPrompt = new SystemMessage(hintPrompt);
 
-  const hintResponse = await getTextLLM()
-    .run(systemPrompt, [], state.traceBuffer, 'handleFashionCharades');
+  const hintResponse = await getTextLLM().run(
+    systemPrompt,
+    [],
+    state.traceBuffer,
+    'handleFashionCharades',
+  );
 
   // Decrease hints remaining and lives
   const newHintsRemaining = hintsRemaining - 1;
@@ -193,7 +212,10 @@ Keep the hint encouraging and fun, but don't reveal the answer directly.`;
   clue.hintsRemaining = newHintsRemaining;
   clue.lives = newLives;
 
-  logger.debug({ hintsRemaining: newHintsRemaining, lives: newLives, clueAnswer: clue.answer }, 'Updated hint state');
+  logger.debug(
+    { hintsRemaining: newHintsRemaining, lives: newLives, clueAnswer: clue.answer },
+    'Updated hint state',
+  );
 
   // If lives reach 0, immediately reveal the answer
   if (newLives <= 0) {
@@ -205,16 +227,17 @@ Keep the hint encouraging and fun, but don't reveal the answer directly.`;
   const stars = '⭐'.repeat(Math.max(0, newHintsRemaining));
   const hintButtonText = '💡 Hint';
 
-  const hintText = hintResponse.assistant.content[0]?.type === 'text' ? hintResponse.assistant.content[0].text : 'Here\'s a hint for you!';
+  const hintText =
+    hintResponse.assistant.content[0]?.type === 'text'
+      ? hintResponse.assistant.content[0].text
+      : "Here's a hint for you!";
   const hintMessage = `💡 **Hint:** ${hintText}\n\n**Lives: ${newLives}**  ${stars}`;
 
   const replies: Replies = [
     {
       reply_type: 'quick_reply',
       reply_text: hintMessage,
-      buttons: [
-        { text: hintButtonText, id: 'hint' },
-      ],
+      buttons: [{ text: hintButtonText, id: 'hint' }],
     },
   ];
 
@@ -225,14 +248,18 @@ Keep the hint encouraging and fun, but don't reveal the answer directly.`;
 }
 
 async function evaluateCharadesGuess(state: GraphState, userGuess: string): Promise<GraphState> {
-  if (!state.quizQuestions || !Array.isArray(state.quizQuestions) || state.quizQuestions.length === 0) {
+  if (
+    !state.quizQuestions ||
+    !Array.isArray(state.quizQuestions) ||
+    state.quizQuestions.length === 0
+  ) {
     throw new Error('No active charades clue to evaluate');
   }
 
   const clue = state.quizQuestions[0] as z.infer<typeof CharadesClueSchema>;
 
   // Evaluate the guess using AI
-  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_scoring.txt');
+  const systemPromptText = await loadPrompt('handlers/quiz/fashion_charades_scoring.txt', user);
 
   const formattedPrompt = systemPromptText
     .replace('{correct_answer}', clue.answer)

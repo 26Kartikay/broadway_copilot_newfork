@@ -16,7 +16,7 @@ import { MODEL_COSTS } from '../config/costs';
 import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from '../core/messages';
 import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
-import { ToolCall, toOpenAIToolSpec, ensureRequiredArrays } from '../core/tools';
+import { ensureRequiredArrays, ToolCall, toOpenAIToolSpec } from '../core/tools';
 
 /**
  * A chat model that interacts with the OpenAI API.
