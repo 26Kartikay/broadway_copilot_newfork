@@ -9,14 +9,9 @@ import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
 import { connectPrisma } from './lib/prisma';
 import { connectRedis } from './lib/redis';
-import { authenticateInternal } from './middleware/auth'; // Import the new authentication middleware
 import { errorHandler } from './middleware/errors';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
-
-// Import the new internal controllers
-import { patchBotUser } from './internal/controllers/patchBotUser';
-import { upsertBotUser } from './internal/controllers/upsertBotUser';
 
 const app = express();
 app.set('trust proxy', true);
@@ -80,9 +75,9 @@ app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Internal API routes for bot user sync
-app.post('/internal/bot-users/upsert', authenticateInternal, upsertBotUser);
-app.patch('/internal/bot-users/:appUserId', authenticateInternal, patchBotUser);
+// Internal API routes for bot user sync - removed (controllers deleted)
+// app.post('/internal/bot-users/upsert', authenticateInternal, upsertBotUser);
+// app.patch('/internal/bot-users/:appUserId', authenticateInternal, patchBotUser);
 
 /**
  * Main chat endpoint for the app.

@@ -82,7 +82,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
     if (imageCount === 0) {
-      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', {
+      const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', state.user, {
         prependPersona: false,
       });
       const systemPrompt = new SystemMessage(
@@ -111,7 +111,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         'The ultimate ride-or-die bestie energy — loud, dramatic, and overflowing with chaotic love. This tone is like your best friend who believes you’re the main character in every scene and refuses to let you forget it. Every word bursts with excitement, sparkle, and full-body enthusiasm — think constant screaming, gasping, and keyboard smashing levels of hype. The Hype BFF showers you in validation and glittery praise, hyping even the tiniest win like it’s a world record. They use words and reactions like omggg, yesss queen, stop it right now, I’m crying, so proud, unreal, ate that, you’re literally iconic, cannot even handle this energy, and slayyy beyond belief. The tone is playful, supportive, and explosively encouraging — a mix of chaotic best friend energy, fangirl excitement, and heartfelt affirmation. They’re your emotional Red Bull — constantly cheering, squealing, and manifesting your success like it’s their full-time job. Every message sparkles with love, warmth, and hype so contagious it makes the reader feel unstoppable, adored, and ready to conquer absolutely everything. ✨💖🔥 Main character energy only, bestie. Let’s gooo!',
     };
 
-    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt', {
+    const systemPromptTextRaw = await loadPrompt('handlers/analysis/vibe_check.txt', state.user, {
       prependPersona: false,
     });
     const tonalityInstructions =
