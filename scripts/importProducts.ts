@@ -61,9 +61,11 @@ interface RawProduct {
   brandName: string; // Use camelCase to match CSV header
   gender?: string;
   age?: string;
+  ageGroup?: string; // CSV has ageGroup column
   description?: string;
   imageUrl: string;
   color?: string; // This will be a comma-separated string
+  colors?: string; // Alternative column name
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
@@ -134,23 +136,35 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       }
 
       // Map gender and age to enums
+      // Handle various input formats: "female", "FEMALE", "women", "male", "MALE", "men", etc.
       let genderEnum: Gender | undefined;
       if (raw.gender) {
-        const normalizedGender = raw.gender.toUpperCase() as Gender;
-        if (Object.values(Gender).includes(normalizedGender)) {
-          genderEnum = normalizedGender;
-        } else {
-          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${raw.barcode}. Skipping.`);
+        const genderLower = raw.gender.toLowerCase().trim();
+        // Map common variations to Prisma enum values
+        if (genderLower === 'female' || genderLower === 'women' || genderLower === 'woman' || genderLower === 'f') {
+          genderEnum = Gender.FEMALE;
+        } else if (genderLower === 'male' || genderLower === 'men' || genderLower === 'man' || genderLower === 'm') {
+          genderEnum = Gender.MALE;
+        } else if (genderLower === 'other' || genderLower === 'unisex' || genderLower === 'both') {
+          genderEnum = Gender.OTHER;
+        } else if (genderLower !== 'n/a' && genderLower !== 'na' && genderLower !== '') {
+          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${raw.barcode}. Skipping gender.`);
         }
       }
 
       let ageGroupEnum: AgeGroup | undefined;
-      if (raw.age) {
-        const normalizedAge = raw.age.toUpperCase() as AgeGroup;
-        if (Object.values(AgeGroup).includes(normalizedAge)) {
-          ageGroupEnum = normalizedAge;
-        } else {
-          console.warn(`⚠️ Invalid age value "${raw.age}" for product ${raw.barcode}. Skipping.`);
+      const ageValue = raw.ageGroup || raw.age; // Support both column names
+      if (ageValue) {
+        const ageLower = ageValue.toLowerCase().trim();
+        // Map common variations to Prisma enum values
+        if (ageLower === 'teen' || ageLower === 'teens' || ageLower === 'teenager') {
+          ageGroupEnum = AgeGroup.TEEN;
+        } else if (ageLower === 'adult' || ageLower === 'adults') {
+          ageGroupEnum = AgeGroup.ADULT;
+        } else if (ageLower === 'senior' || ageLower === 'seniors' || ageLower === 'elderly') {
+          ageGroupEnum = AgeGroup.SENIOR;
+        } else if (ageLower !== 'n/a' && ageLower !== 'na' && ageLower !== '') {
+          console.warn(`⚠️ Invalid ageGroup value "${ageValue}" for product ${raw.barcode}. Skipping ageGroup.`);
         }
       }
 
@@ -178,7 +192,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         ageGroup: ageGroupEnum,
         description: raw.description || '',
         imageUrl: imageUrlValue,
-        colors: raw.color ? raw.color.split(',').map(c => c.trim()).filter(Boolean) : [],
+        colors: (raw.colors || raw.color) ? String(raw.colors || raw.color).split(',').map(c => c.trim()).filter(Boolean) : [],
       };
 
       // Insert into database
