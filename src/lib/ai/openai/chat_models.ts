@@ -289,25 +289,6 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
       params.tool_choice = 'auto';
     }
 
-    if (this.structuredOutputSchema) {
-      const toolName = this.structuredOutputToolName;
-      const rawSchema = z.toJSONSchema(this.structuredOutputSchema) as Record<string, unknown>;
-      // Apply the same schema processing as tools to ensure OpenAI compatibility
-      const processedSchema = ensureRequiredArrays(rawSchema);
-      const tool: FunctionTool = {
-        type: 'function',
-        name: toolName,
-        description: 'Structured output formatter',
-        parameters: processedSchema,
-        strict: true,
-      };
-      params.tools = [...(params.tools ?? []), tool];
-      params.tool_choice = {
-        type: 'function',
-        name: toolName,
-      };
-    }
-
     return params;
   }
 
@@ -316,9 +297,13 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
     msgs: BaseMessage[],
   ): OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming {
     const params = super._buildChatCompletionsParams(systemPrompt, msgs);
-    if (this.params.responseFormat) {
+
+    if (this.structuredOutputSchema) {
+      params.response_format = { type: 'json_object' };
+    } else if (this.params.responseFormat) {
       params.response_format = this.params.responseFormat;
     }
+
     return params;
   }
 

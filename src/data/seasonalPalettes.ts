@@ -11,17 +11,17 @@
 
 export type SeasonalPalette =
   | 'LIGHT_SPRING'
-  | 'WARM_SPRING'
-  | 'CLEAR_SPRING'
+  | 'TRUE_SPRING'
+  | 'BRIGHT_SPRING'
   | 'LIGHT_SUMMER'
-  | 'COOL_SUMMER'
+  | 'TRUE_SUMMER'
   | 'SOFT_SUMMER'
   | 'SOFT_AUTUMN'
-  | 'WARM_AUTUMN'
-  | 'DEEP_AUTUMN'
-  | 'COOL_WINTER'
-  | 'CLEAR_WINTER'
-  | 'DEEP_WINTER';
+  | 'TRUE_AUTUMN'
+  | 'DARK_AUTUMN'
+  | 'TRUE_WINTER'
+  | 'BRIGHT_WINTER'
+  | 'DARK_WINTER';
 
 export interface ColorWithHex {
   name: string;
@@ -89,7 +89,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
     pdfPath: 'palettes/LIGHT_SPRING.pdf',
   },
 
-  WARM_SPRING: {
+  TRUE_SPRING: {
     description:
       'Warm, golden, peachy coloring with medium contrast - ideal for rich, earthy tones that enhance your natural warmth.',
     topColors: [
@@ -138,10 +138,10 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Coral, Olive & Camel',
       'Amber, Brown & Peacock',
     ],
-    pdfPath: 'palettes/WARM_SPRING.pdf',
+    pdfPath: 'palettes/TRUE_SPRING.pdf',
   },
 
-  CLEAR_SPRING: {
+  BRIGHT_SPRING: {
     description:
       'Bright, clear, warm coloring with high contrast - best for vivid, saturated colors that make you shine.',
     topColors: [
@@ -190,7 +190,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Hot Pink, Kelly Green & White',
       'Bright Blue, Orange & Lime',
     ],
-    pdfPath: 'palettes/CLEAR_SPRING.pdf',
+    pdfPath: 'palettes/BRIGHT_SPRING.pdf',
   },
 
   LIGHT_SUMMER: {
@@ -245,7 +245,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
     pdfPath: 'palettes/LIGHT_SUMMER.pdf',
   },
 
-  COOL_SUMMER: {
+  TRUE_SUMMER: {
     description:
       'Cool, blue/pink undertones with medium contrast - ideal for soft, muted cool tones that enhance your natural elegance.',
     topColors: [
@@ -294,7 +294,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Lavender, Steel Blue & Beige',
       'Seafoam, Plum & Gray',
     ],
-    pdfPath: 'palettes/COOL_SUMMER.pdf',
+    pdfPath: 'palettes/TRUE_SUMMER.pdf',
   },
 
   SOFT_SUMMER: {
@@ -401,7 +401,7 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
     pdfPath: 'palettes/SOFT_AUTUMN.pdf',
   },
 
-  WARM_AUTUMN: {
+  TRUE_AUTUMN: {
     description:
       'Warm, golden, rich coloring with medium contrast - perfect for rich, earthy tones that enhance your natural warmth.',
     topColors: [
@@ -450,10 +450,10 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Rust, Forest Green & Khaki',
       'Burnt Orange, Teal & Tan',
     ],
-    pdfPath: 'palettes/WARM_AUTUMN.pdf',
+    pdfPath: 'palettes/TRUE_AUTUMN.pdf',
   },
 
-  DEEP_AUTUMN: {
+  DARK_AUTUMN: {
     description:
       'Deep, warm, rich coloring with high contrast - best for intense, saturated warm tones that create dramatic impact.',
     topColors: [
@@ -502,10 +502,10 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Rust, Hunter Green & Bronze',
       'Brick, Olive & Beige',
     ],
-    pdfPath: 'palettes/DEEP_AUTUMN.pdf',
+    pdfPath: 'palettes/DARK_AUTUMN.pdf',
   },
 
-  COOL_WINTER: {
+  TRUE_WINTER: {
     description:
       'Cool, deep coloring with high contrast - ideal for rich, cool tones that create striking elegance.',
     topColors: [
@@ -554,10 +554,10 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Black, Plum & Icy Blue',
       'Royal Blue, Pine & White',
     ],
-    pdfPath: 'palettes/COOL_WINTER.pdf',
+    pdfPath: 'palettes/TRUE_WINTER.pdf',
   },
 
-  CLEAR_WINTER: {
+  BRIGHT_WINTER: {
     description:
       'Clear, bright, cool coloring with high contrast - perfect for vivid, saturated cool colors that create bold impact.',
     topColors: [
@@ -606,10 +606,10 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Kelly Green, Magenta & Gray',
       'Electric Blue, Fuchsia & Green',
     ],
-    pdfPath: 'palettes/CLEAR_WINTER.pdf',
+    pdfPath: 'palettes/BRIGHT_WINTER.pdf',
   },
 
-  DEEP_WINTER: {
+  DARK_WINTER: {
     description:
       'Deep, cool coloring with very high contrast - best for intense, rich cool tones that create powerful sophistication.',
     topColors: [
@@ -658,20 +658,14 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Midnight, Plum & White',
       'Navy, Pine & Magenta',
     ],
-    pdfPath: 'palettes/DEEP_WINTER.pdf',
+    pdfPath: 'palettes/DARK_WINTER.pdf',
   },
 };
 
-/**
- * Get palette data for a given seasonal palette
- */
-export function getPaletteData(palette: SeasonalPalette): PaletteData {
-  return SEASONAL_PALETTES[palette];
-}
-
-/**
- * Check if a string is a valid seasonal palette
- */
 export function isValidPalette(palette: string): palette is SeasonalPalette {
   return palette in SEASONAL_PALETTES;
+}
+
+export function getPaletteData(palette: SeasonalPalette): PaletteData {
+  return SEASONAL_PALETTES[palette];
 }

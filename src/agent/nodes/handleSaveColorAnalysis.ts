@@ -1,4 +1,6 @@
-import { PendingType, Prisma } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+import { Gender, PendingType, Prisma } from '@prisma/client';
 import { getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
 import { InternalServerError } from '../../utils/errors';
@@ -63,18 +65,37 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
       reply_text: replyText,
     });
 
-    // Only provide PDF if not a guest user AND saving was confirmed
-    if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
-      const paletteData = getPaletteData(paletteNameToSave);
-      const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
-      confirmationReplies.push({
-        // Then push the PDF
-        reply_type: 'pdf',
-        media_url: `${baseUrl}/${paletteData.pdfPath}`,
-        reply_text: 'Here is your color palette guide.',
-      });
-    }
-  } else {
+        // Only provide PDF if not a guest user AND saving was confirmed
+        if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
+          const userGender = state.user.confirmedGender || state.user.inferredGender;
+          const paletteData = getPaletteData(paletteNameToSave);
+          const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+    
+          let finalPdfPath = paletteData.pdfPath; // Default non-gendered path
+    
+          if (userGender) {
+            const genderString = userGender === Gender.MALE ? 'MEN' : 'WOMEN';
+            const genderSpecificPdfPath = `palettes/${paletteNameToSave}_${genderString}.pdf`;
+    
+            const absoluteGenderSpecificPath = path.join(process.cwd(), 'public', genderSpecificPdfPath);
+    
+            if (fs.existsSync(absoluteGenderSpecificPath)) {
+              finalPdfPath = genderSpecificPdfPath;
+              logger.debug({ userId, paletteNameToSave, genderSpecificPdfPath }, 'Gender-specific PDF found.');
+            } else {
+              logger.warn({ userId, paletteNameToSave, genderSpecificPdfPath }, 'Gender-specific PDF not found, falling back to general PDF.');
+            }
+          } else {
+            logger.debug({ userId, paletteNameToSave }, 'User gender not available, using general PDF.');
+          }
+    
+          confirmationReplies.push({
+            // Then push the PDF
+            reply_type: 'pdf',
+            media_url: `${baseUrl}/${finalPdfPath}`,
+            reply_text: 'Here is your color palette guide.',
+          });
+        }  } else {
     replyText = "No problem. I won't save your color palette.";
     logger.debug({ userId }, 'User declined to save color analysis result.');
     confirmationReplies.push({

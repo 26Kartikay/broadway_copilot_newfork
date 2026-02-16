@@ -15,53 +15,6 @@ import { Tool } from '../core/tools';
 const MAX_ITERATIONS = 5;
 
 /**
- * Parses the final assistant message into a structured JSON output.
- * It takes the last message, if it's from the assistant, and asks the model
- * to format it into the desired schema with a specific, direct prompt.
- *
- * @param runner The chat model instance.
- * @param conversation The full conversation history.
- * @param outputSchema The Zod schema for the final output.
- * @returns A promise that resolves to the structured output.
- */
-async function getFinalStructuredOutput<T extends ZodType>(
-  runner: BaseChatModel,
-  conversation: BaseMessage[],
-  outputSchema: T,
-  traceBuffer: TraceBuffer,
-  nodeName: string,
-): Promise<T['_output']> {
-  // Find the most recent assistant message (the conversation can end on a ToolMessage
-  // when we stop due to maxLoops).
-  const lastMessage = [...conversation].reverse().find((m) => m instanceof AssistantMessage);
-
-  // If the last message is an assistant's message, use it for parsing.
-  if (lastMessage instanceof AssistantMessage) {
-    const customPrompt = new SystemMessage(
-      'You are parsing an assistant message that was generated in response to a user query. ' +
-        "Extract the relevant information from the assistant's response and format it as a JSON object " +
-        'that strictly adheres to the provided schema. ' +
-        'The assistant message contains styling advice, product recommendations, or similar content. ' +
-        "Parse only the assistant's output, NOT the user's input. " +
-        'Do not add any extra commentary or change any of the values.',
-    );
-
-    const textContent = lastMessage.content
-      .filter((p): p is TextPart => p.type === 'text')
-      .map((p) => p.text)
-      .join('');
-
-    // Use AssistantMessage instead of UserMessage to avoid confusion
-    const parsingConversation: BaseMessage[] = [new AssistantMessage(textContent)];
-
-    const structuredRunner = runner.withStructuredOutput(outputSchema);
-    return await structuredRunner.run(customPrompt, parsingConversation, traceBuffer, nodeName);
-  } else {
-    throw new Error('Last message is not an assistant message');
-  }
-}
-
-/**
  * Orchestrates an agentic loop of model calls and tool executions to fulfill a user request.
  * The executor manages the conversation history, calls tools when requested by the model,
  * and feeds the results back to the model until a final answer is generated.
@@ -114,18 +67,10 @@ export async function agentExecutor<T extends ZodType>(
   traceBuffer: TraceBuffer,
   maxLoops: number = MAX_ITERATIONS,
 ): Promise<{ output: T['_output']; toolResults: Array<{ name: string; result: unknown }> }> {
-  // IMPORTANT: Don't use structured output during tool execution phase
-  // Structured output forces tool_choice to only call the output tool, preventing other tools
-  // We'll parse the final output manually after tools are done
   const runnerWithTools = runner.bind(options.tools);
-
-  // Tool information is available in traceBuffer for debugging if needed
-
   const conversation: BaseMessage[] = [...history];
 
   const seenToolCallIds = new Set<string>();
-  let maxLoopStop = false;
-  let toolsWereCalled = false;
   const toolResultsList: Array<{ name: string; result: unknown }> = [];
 
   for (let i = 0; i < maxLoops; i++) {
@@ -148,60 +93,50 @@ export async function agentExecutor<T extends ZodType>(
 
     conversation.push(assistant);
 
-    // Filter out structured output tool calls from the regular tool execution
-    const regularToolCalls = toolCalls.filter((tc) => {
-      // Skip structured output tool calls during the tool execution phase
-      const isStructuredOutput =
-        tc.name === (runner as any).structuredOutputToolName ||
-        tc.name === 'structured_output' ||
-        tc.name === 'json';
-      if (isStructuredOutput) {
-        logger.debug(
-          { nodeName: options.nodeName, toolName: tc.name },
-          'agentExecutor: Skipping structured output tool call during execution phase',
-        );
-        return false;
-      }
-      return true;
-    });
+    if (toolCalls.length === 0) {
+      logger.debug(
+        { nodeName: options.nodeName, iteration: i },
+        'agentExecutor: No tool calls, attempting to parse final output.',
+      );
 
-    if (regularToolCalls.length > 0) {
-      toolsWereCalled = true;
-    }
+      try {
+        const content = assistant.content
+          .filter((p): p is TextPart => p.type === 'text')
+          .map((p) => p.text)
+          .join('');
 
-    if (regularToolCalls.length === 0) {
-      // Check if this is the first iteration and we have tools but none were called
-      // This might indicate the model skipped tools - check if structured output tool was called instead
-      const structuredOutputCalled = toolCalls.some((tc) => {
-        const name = tc.name.toLowerCase();
-        return (
-          name.includes('structured') || name === 'json' || name === options.nodeName.toLowerCase()
-        );
-      });
+        if (!content.trim().startsWith('{')) {
+          throw new Error('Final response is not a JSON object.');
+        }
 
-      if (i === 0 && !toolsWereCalled && structuredOutputCalled && options.tools.length > 0) {
+        const parsedJson = JSON.parse(content);
+        const validatedOutput = options.outputSchema.parse(parsedJson);
+        return { output: validatedOutput, toolResults: toolResultsList };
+      } catch (error) {
         logger.warn(
-          { nodeName: options.nodeName, toolsAvailable: options.tools.map((t) => t.name) },
-          'agentExecutor: Structured output tool called before regular tools - model may have skipped required tools',
+          { nodeName: options.nodeName, error: error instanceof Error ? error.message : String(error) },
+          'agentExecutor: Failed to parse final JSON output. Adding corrective prompt.',
         );
-        // Force at least one more iteration by injecting a message asking to use tools
+
+        if (i === maxLoops - 1) {
+          throw new Error(
+            `Failed to get valid JSON output after ${maxLoops} attempts. Last error: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+
         conversation.push(
           new UserMessage(
-            'Please use the available tools before providing your final response. The tools are required to complete this task.',
+            'That was not valid JSON. Please provide your final answer again, ensuring it is a single, valid JSON object that matches the required schema and nothing else.',
           ),
         );
         continue;
       }
-
-      logger.debug(
-        { nodeName: options.nodeName, iteration: i, toolsWereCalled },
-        'agentExecutor: No regular tool calls, breaking loop',
-      );
-      break;
     }
 
     const toolResults = await Promise.all(
-      regularToolCalls
+      toolCalls
         .filter((toolCall) => !seenToolCallIds.has(toolCall.id))
         .map(async (toolCall) => {
           seenToolCallIds.add(toolCall.id);
@@ -217,7 +152,6 @@ export async function agentExecutor<T extends ZodType>(
           try {
             const parsedArgs = toolDef.schema.parse(toolCall.arguments);
             const result = await Promise.resolve(toolDef.func(parsedArgs));
-            // Track tool results for later extraction
             toolResultsList.push({ name: toolDef.name, result });
             return {
               id: toolCall.id,
@@ -252,36 +186,7 @@ export async function agentExecutor<T extends ZodType>(
         ),
       );
     });
-
-    if (i === maxLoops - 1) {
-      maxLoopStop = true;
-    }
   }
 
-  // If we bailed because of maxLoops and the conversation ends on a ToolMessage,
-  // run one more non-tool LLM call to let the model produce a final assistant message.
-  const lastMessage = conversation[conversation.length - 1];
-  if (maxLoopStop && !(lastMessage instanceof AssistantMessage)) {
-    logger.warn(
-      { nodeName: options.nodeName, maxLoops },
-      'agentExecutor: maxLoops hit with trailing non-assistant message; forcing final assistant run',
-    );
-    const { assistant } = await runner.run(
-      systemPrompt,
-      conversation,
-      traceBuffer,
-      options.nodeName,
-    );
-    conversation.push(assistant);
-  }
-
-  const output = await getFinalStructuredOutput(
-    runner,
-    conversation,
-    options.outputSchema,
-    traceBuffer,
-    options.nodeName,
-  );
-
-  return { output, toolResults: toolResultsList };
+  throw new Error(`Agent failed to return a valid output after ${maxLoops} iterations.`);
 }

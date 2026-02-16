@@ -1,24 +1,23 @@
 import { Conversation, ConversationStatus, Prisma, User } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
 import { queueMemoryExtraction } from '../lib/tasks';
 import { logger } from './logger';
-import { isGuestUser } from './user'; // Import isGuestUser
+import { isGuestUser } from './user';
 
 const CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 30 minutes
 
-/**
- * Handles a stale conversation by closing it and creating a new one.
- *
- * @param user - The user for whom to handle the stale conversation.
- * @param conversation - The stale conversation to close.
- * @returns The new conversation.
- */
 async function handleStaleConversation(
   user: User,
   conversation: Conversation,
 ): Promise<Conversation> {
+  if (isGuestUser(user)) {
+    logger.debug({ userId: user.id }, 'Not closing stale conversation for guest user.');
+    return conversation;
+  }
+
   logger.debug(
     { userId: user.id, conversationId: conversation.id },
     'Stale conversation detected, closing and creating a new one.',
@@ -40,41 +39,25 @@ async function handleStaleConversation(
       { userId: user.id, conversationId: conversation.id },
       'Queued memory extraction for closed conversation.',
     );
-  } else {
-    logger.debug(
-      { userId: user.id, conversationId: conversation.id },
-      'Skipped memory extraction for guest user.',
-    );
   }
 
   return newConversation;
 }
 
-/**
- * Retrieves or creates a user and their active conversation.
- * This function handles user lookup/creation, finds the last open conversation,
- * closes stale conversations, and creates new ones if needed.
- *
- * @param whatsappId - The user's WhatsApp ID.
- * @param profileName - The user's profile name.
- * @returns An object containing the user and their active conversation.
- */
 export async function getOrCreateUserAndConversation(
   whatsappId: string,
   profileName: string,
-  appUserId: string, // Add appUserId parameter
+  appUserId: string,
 ): Promise<{ user: User; conversation: Conversation }> {
-  const updateData: Prisma.UserUpdateInput = {};
   const user = await prisma.user.upsert({
     where: { appUserId },
     update: {
-      ...updateData,
-      whatsappId, // Update whatsappId if appUserId exists
-      profileName, // Update profileName too, in case it changed
+      whatsappId,
+      ...(profileName && { profileName }), // Only update profileName if a non-empty one is provided
     },
     create: {
       whatsappId,
-      profileName,
+      profileName: profileName || 'Guest',
       appUserId,
     },
   });

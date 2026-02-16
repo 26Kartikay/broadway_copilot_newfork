@@ -18,28 +18,29 @@ From a valid image, analyze the user's:
 - **Hair color** (warmth, depth, contrast)
 - **Overall contrast level** (low, medium, high)
 - **Inferred Gender** (MALE, FEMALE, or UNKNOWN if unable to confidently determine)
+- **Inferred Age Group** (Classify into one of: TEEN, ADULT, SENIOR)
 
 Based on these characteristics, determine which of the 12 seasonal palettes best matches the user:
 
 **Spring Palettes:**
 - `LIGHT_SPRING` - Light, warm, clear coloring with golden undertones
-- `WARM_SPRING` - Warm, golden, peachy coloring with medium contrast
-- `CLEAR_SPRING` - Bright, clear, warm coloring with high contrast
+- `TRUE_SPRING` - Warm, golden, peachy coloring with medium contrast
+- `BRIGHT_SPRING` - Bright, clear, warm coloring with high contrast
 
 **Summer Palettes:**
 - `LIGHT_SUMMER` - Light, cool, soft coloring with low contrast
-- `COOL_SUMMER` - Cool, blue/pink undertones with medium contrast
+- `TRUE_SUMMER` - Cool, blue/pink undertones with medium contrast
 - `SOFT_SUMMER` - Soft, muted, cool-to-neutral coloring with low contrast
 
 **Autumn Palettes:**
 - `SOFT_AUTUMN` - Soft, warm, muted coloring with low contrast
-- `WARM_AUTUMN` - Warm, golden, rich coloring with medium contrast
-- `DEEP_AUTUMN` - Deep, warm, rich coloring with high contrast
+- `TRUE_AUTUMN` - Warm, golden, rich coloring with medium contrast
+- `DARK_AUTUMN` - Deep, warm, rich coloring with high contrast
 
 **Winter Palettes:**
-- `COOL_WINTER` - Cool, deep coloring with high contrast
-- `CLEAR_WINTER` - Clear, bright, cool coloring with high contrast
-- `DEEP_WINTER` - Deep, cool coloring with very high contrast
+- `TRUE_WINTER` - Cool, deep coloring with high contrast
+- `BRIGHT_WINTER` - Clear, bright, cool coloring with high contrast
+- `DARK_WINTER` - Deep, cool coloring with very high contrast
 
 ---
 
@@ -49,9 +50,10 @@ Return your result as a **single JSON object** (no text outside JSON):
 ```json
 {
   "quality_ok": true,
-  "palette_name": "WARM_AUTUMN",
+  "palette_name": "TRUE_AUTUMN",
   "error_message": null,
-  "inferred_gender": "FEMALE"
+  "inferred_gender": "FEMALE",
+  "inferred_age_group": "ADULT"
 }
 ```
 
@@ -61,11 +63,12 @@ If the image quality is poor:
   "quality_ok": false,
   "palette_name": null,
   "error_message": "Oops, can you try sending a clearer picture of your face? 💖",
-  "inferred_gender": null
+  "inferred_gender": null,
+  "inferred_age_group": null
 }
 ```
 
 **Important:** 
-- `palette_name` must be EXACTLY one of the 12 palette values listed above (e.g., `WARM_AUTUMN`, `LIGHT_SPRING`, etc.)
+- `palette_name` must be EXACTLY one of the 12 palette values listed above (e.g., `TRUE_AUTUMN`, `LIGHT_SPRING`, etc.)
 - Use uppercase with underscores (e.g., `LIGHT_SPRING`, not `Light Spring`)
-- If quality is not ok, set `palette_name` to `null`, `inferred_gender` to `null`, and provide `error_message`
+- If quality is not ok, set `palette_name` to `null`, `inferred_gender` to `null`, `inferred_age_group` to `null`, and provide `error_message`

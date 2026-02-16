@@ -30,36 +30,7 @@ export async function askUserInfo(state: GraphState): Promise<GraphState> {
 
   let replies: Replies;
 
-  if (missingField === 'gender') {
-    replies = [
-      {
-        reply_type: 'quick_reply',
-        reply_text: 'Which of these best describes you?',
-        buttons: [
-          { text: 'Female', id: 'gender_FEMALE' },
-          { text: 'Male', id: 'gender_MALE' },
-          { text: 'Skip', id: 'gender_skip' },
-        ],
-      },
-    ];
-    logger.debug({ userId, messageId }, 'Asking for gender with buttons.');
-  } else if (missingField === 'age_group') {
-    replies = [
-      {
-        reply_type: 'quick_reply',
-        reply_text: 'What is your age range?',
-        buttons: [
-          { text: '13-17', id: 'age_AGE_13_17' },
-          { text: '18-25', id: 'age_AGE_18_25' },
-          { text: '26-35', id: 'age_AGE_26_35' },
-          { text: '36-45', id: 'age_AGE_36_45' },
-          { text: '46-55', id: 'age_AGE_46_55' },
-          { text: '55+', id: 'age_AGE_55_PLUS' },
-        ],
-      },
-    ];
-    logger.debug({ userId, messageId }, 'Asking for age group with buttons.');
-  } else if (missingField === 'fitPreference') {
+  if (missingField === 'fitPreference') {
     replies = [
       {
         reply_type: 'quick_reply',

@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
-import { Celebrity, celebrityPalettes } from '../../data/celebrityPalettes'; // Import Celebrity data
-import { ColorWithHex, getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
+import {
+  Celebrity,
+  celebrityPalettes
+} from '../../data/celebrityPalettes'
+import {
+  ColorWithHex,
+  SEASONAL_PALETTES,
+} from '../../data/seasonalPalettes';
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
@@ -22,17 +28,17 @@ const LLMOutputSchema = z.object({
   palette_name: z
     .enum([
       'LIGHT_SPRING',
-      'WARM_SPRING',
-      'CLEAR_SPRING',
+      'TRUE_SPRING',
+      'BRIGHT_SPRING',
       'LIGHT_SUMMER',
-      'COOL_SUMMER',
+      'TRUE_SUMMER',
       'SOFT_SUMMER',
       'SOFT_AUTUMN',
-      'WARM_AUTUMN',
-      'DEEP_AUTUMN',
-      'COOL_WINTER',
-      'CLEAR_WINTER',
-      'DEEP_WINTER',
+      'TRUE_AUTUMN',
+      'DARK_AUTUMN',
+      'TRUE_WINTER',
+      'BRIGHT_WINTER',
+      'DARK_WINTER',
     ])
     .nullable()
     .describe('The seasonal color palette identifier (must be one of the 12 allowed values).'),
@@ -44,6 +50,10 @@ const LLMOutputSchema = z.object({
     .enum(['MALE', 'FEMALE'])
     .nullable()
     .describe('The inferred gender of the person in the image. Null if unable to infer.'),
+  inferred_age_group: z
+    .enum(['TEEN', 'ADULT', 'SENIOR'])
+    .nullable()
+    .describe('The inferred age group of the person in the image. Null if unable to infer.'),
 });
 
 const NoImageLLMOutputSchema = z.object({
@@ -152,13 +162,30 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
     // Validate palette name
     const paletteName = output.palette_name;
-    if (!isValidPalette(paletteName)) {
+    if (!paletteName || !(paletteName in SEASONAL_PALETTES)) {
       logger.error({ userId, paletteName }, 'Invalid palette name returned from LLM');
       throw new InternalServerError(`Invalid palette name: ${paletteName}`);
     }
 
+    // Persist inferred gender and age group if they are not already confirmed
+    const dataToUpdate: { inferredGender?: Gender; inferredAgeGroup?: any } = {};
+    if (output.inferred_gender && !state.user.confirmedGender) {
+      dataToUpdate.inferredGender = output.inferred_gender;
+    }
+    if (output.inferred_age_group && !state.user.confirmedAgeGroup) {
+      dataToUpdate.inferredAgeGroup = output.inferred_age_group;
+    }
+
+    if (Object.keys(dataToUpdate).length > 0) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: dataToUpdate,
+      });
+      logger.debug({ userId, ...dataToUpdate }, 'Updated inferred user properties.');
+    }
+
     // Get palette data from mapping
-    const paletteData = getPaletteData(paletteName);
+    const paletteData = SEASONAL_PALETTES[paletteName as keyof typeof SEASONAL_PALETTES];
 
     // Determine color twin celebrities
     let colorTwins: Celebrity[] = [];
