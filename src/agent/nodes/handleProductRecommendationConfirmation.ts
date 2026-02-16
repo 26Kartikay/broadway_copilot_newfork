@@ -48,8 +48,9 @@ export async function handleProductRecommendationConfirmation(
   const tools = [searchProducts()];
   let systemPrompt: SystemMessage;
 
-  const gender = user.confirmedGender;
-  const ageGroup = user.confirmedAgeGroup;
+  // Use confirmedGender first, then fall back to inferredGender
+  const gender = user.confirmedGender || user.inferredGender;
+  const ageGroup = user.confirmedAgeGroup || user.inferredAgeGroup;
   let userContext = 'an adult';
   if (gender && ageGroup) {
     userContext = `a ${ageGroup.toLowerCase()} ${gender.toLowerCase()}`;
@@ -58,6 +59,10 @@ export async function handleProductRecommendationConfirmation(
   } else if (ageGroup) {
     userContext = `a ${ageGroup.toLowerCase()}`;
   }
+
+  // Convert Prisma enum to lowercase string for filter (MALE -> male, FEMALE -> female)
+  const genderFilter = gender ? gender.toLowerCase() : undefined;
+  const ageGroupFilter = ageGroup ? ageGroup.toLowerCase() : undefined;
 
   if (
     productRecommendationContext?.type === 'color_palette' &&
@@ -70,7 +75,7 @@ export async function handleProductRecommendationConfirmation(
     const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
       You are a fashion product recommender. The user is ${userContext} and their color palette is ${productRecommendationContext.paletteName}.
       Your first task is to recommend products that match this palette by calling the 'searchProducts' tool.
-      You **MUST** use the 'filters' argument to search for products. Set the 'color' filter to one of these colors: ${colorList}.
+      You **MUST** use the 'filters' argument to search for products. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}'. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}'. ` : ''}Set the 'color' filter to one of these colors: ${colorList}.
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else if (productRecommendationContext?.type === 'vibe_check') {
@@ -78,7 +83,7 @@ export async function handleProductRecommendationConfirmation(
     const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
       You are a fashion product recommender. The user, who is ${userContext}, received the following style advice: "${query}".
       Your first task is to recommend products based on this advice by calling the 'searchProducts' tool.
-      Use a concise query based on the style advice.
+      Use a concise query based on the style advice. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}' in the filters argument. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}' in the filters argument. ` : ''}
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else {
