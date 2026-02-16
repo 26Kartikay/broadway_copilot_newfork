@@ -112,7 +112,7 @@ export async function agentExecutor<T extends ZodType>(
         // Extract JSON from markdown code blocks if present, otherwise use content as-is
         let jsonString = content.trim();
         const jsonBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (jsonBlockMatch) {
+        if (jsonBlockMatch && jsonBlockMatch[1]) {
           jsonString = jsonBlockMatch[1].trim();
         }
 
