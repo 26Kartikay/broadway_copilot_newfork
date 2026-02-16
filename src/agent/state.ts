@@ -234,4 +234,4 @@ export type Replies = Reply[];
  * Missing profile fields that need to be collected from the user.
  * Used to determine if the user needs to provide more information to fulfill the request.
  */
-export type MissingProfileField = 'gender' | 'age_group' | 'fitPreference';
+export type MissingProfileField = 'gender' | 'fitPreference';

@@ -67,6 +67,10 @@ export async function agentExecutor<T extends ZodType>(
   traceBuffer: TraceBuffer,
   maxLoops: number = MAX_ITERATIONS,
 ): Promise<{ output: T['_output']; toolResults: Array<{ name: string; result: unknown }> }> {
+  // Set structured output schema on the runner so it knows to return JSON
+  // This is critical when tools are involved - the model needs to know to return structured output
+  // We use type assertion to access the protected property
+  (runner as any).structuredOutputSchema = options.outputSchema;
   const runnerWithTools = runner.bind(options.tools);
   const conversation: BaseMessage[] = [...history];
 
@@ -105,11 +109,24 @@ export async function agentExecutor<T extends ZodType>(
           .map((p) => p.text)
           .join('');
 
-        if (!content.trim().startsWith('{')) {
-          throw new Error('Final response is not a JSON object.');
+        // Extract JSON from markdown code blocks if present, otherwise use content as-is
+        let jsonString = content.trim();
+        const jsonBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (jsonBlockMatch) {
+          jsonString = jsonBlockMatch[1].trim();
         }
 
-        const parsedJson = JSON.parse(content);
+        // If still doesn't start with {, try to find JSON object in the content
+        if (!jsonString.startsWith('{')) {
+          const jsonObjectMatch = jsonString.match(/\{[\s\S]*\}/);
+          if (jsonObjectMatch) {
+            jsonString = jsonObjectMatch[0];
+          } else {
+            throw new Error('Final response is not a JSON object.');
+          }
+        }
+
+        const parsedJson = JSON.parse(jsonString);
         const validatedOutput = options.outputSchema.parse(parsedJson);
         return { output: validatedOutput, toolResults: toolResultsList };
       } catch (error) {
