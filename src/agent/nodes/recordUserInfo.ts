@@ -52,16 +52,23 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
       }
     }
 
-    // In production, do NOT update user - database is source of truth
+    // In production, do NOT update database - database is source of truth
+    // However, we MUST update state.user so the current conversation flow works correctly
     const isProduction = process.env.NODE_ENV === 'production';
     
     if (Object.keys(dataToUpdate).length > 0) {
       if (isProduction) {
         logger.debug(
           { userId, updatedFields: Object.keys(dataToUpdate) },
-          'Skipping user update in production - database is source of truth',
+          'Skipping database update in production - database is source of truth. Updating state.user for current conversation.',
         );
-        return { ...state, pending: PendingType.NONE };
+        // Update state.user object so the current conversation flow works
+        // This prevents the loop where missingProfileField keeps being set
+        const updatedUser = {
+          ...state.user,
+          ...dataToUpdate,
+        };
+        return { ...state, user: updatedUser, pending: PendingType.NONE };
       } else {
         // In development, allow updating user for testing
         const user = await prisma.user.update({

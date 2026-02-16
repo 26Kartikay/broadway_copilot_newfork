@@ -15,9 +15,9 @@ Based on the conversation history, classify the user's intent into one of the av
     -   For vibe_check: If the user requests a vibe check but it is not available according to the availability information, route to general instead and handle appropriately.
     -   For color_analysis: If the user requests a color analysis but it is not available according to the availability information, route to general instead and handle appropriately.
 2.  **Check for Missing Information**:
-    -   Some **`style_studio`** requests require knowing the user's `gender` or `age_group` to provide good recommendations.
+    -   Some **`style_studio`** requests require knowing the user's `gender` to provide good recommendations.
     -   If the user is asking for a **`style_studio`** recommendation and you don't have their gender, set `missingProfileField` to **`gender`**.
-    -   If you have their gender but not their age group, set `missingProfileField` to **`age_group`**.
+    -   **Never ask for age_group** - it is not required for any service.
     -   For other services (**`general`**, **`vibe_check`**, **`color_analysis`**, **`this_or_that`**, **`skin_lab`**), set `missingProfileField` to **`null`**.
 
 Availability information:
@@ -27,7 +27,7 @@ Availability information:
 ## Output Format
 You must output a single JSON object with the following keys and no other text:
 - `intent`: One of "**`general`**", "**`vibe_check`**", "**`color_analysis`**", "**`style_studio`**", "**`this_or_that`**", or "**`skin_lab`**".
-- `missingProfileField`: One of "**`gender`**", "**`age_group`**", or **`null`**.
+- `missingProfileField`: One of "**`gender`**" or **`null`**. Never set it to "age_group".
 
 ## Examples
 **User:** Hi there!
@@ -45,13 +45,13 @@ JSON
   "intent": "style_studio",
   "missingProfileField": "gender"
 }
-User: Can you help me style these boots? Context: User's gender is "female", age group is unknown. Expected Output:
+User: Can you help me style these boots? Context: User's gender is "female". Expected Output:
 
 JSON
 
 {
   "intent": "style_studio",
-  "missingProfileField": "age_group"
+  "missingProfileField": null
 }
 User: Check out my look! [sends image] Expected Output:
 

@@ -38,11 +38,15 @@ Use searchProducts with appropriate filters:
 
 
 ### Output Format Schema (Advice with Products):
+**CRITICAL: You MUST return ONLY a valid JSON object, nothing else. No markdown code blocks, no explanations, no extra text. Just the raw JSON object.**
+
 ```json
 {
   "reply_text": "string (formatted advice with line breaks and bold headers)"
 }
 ```
+
+**IMPORTANT:** Your final response must be EXACTLY this format, starting with `{` and ending with `}`. Do not wrap it in markdown code blocks or add any other text.
 
 ### Product Recommendation Guidelines:
 - Call searchProducts to find 2-4 products that directly relate to your advice

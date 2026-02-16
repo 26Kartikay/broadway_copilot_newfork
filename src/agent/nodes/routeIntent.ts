@@ -29,7 +29,7 @@ const LLMOutputSchema = z.object({
     'skin_lab',
     'fashion_quiz',
   ]),
-  missingProfileField: z.enum(['gender', 'age_group', 'fitPreference']).nullable(),
+  missingProfileField: z.enum(['gender', 'fitPreference']).nullable(),
 });
 
 export async function routeIntent(state: GraphState): Promise<GraphState> {

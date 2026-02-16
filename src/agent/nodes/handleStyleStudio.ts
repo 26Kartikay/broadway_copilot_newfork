@@ -2,7 +2,7 @@ import { PendingType } from '@prisma/client';
 import { z } from 'zod';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { BaseMessage, SystemMessage } from '../../lib/ai/core/messages';
-import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
+import { getTextLLM } from '../../lib/ai';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
@@ -75,13 +75,8 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
     // Build tool list and force-include required tools to avoid drops in request.tools.
     const tools = [searchProducts(), fetchColorAnalysis(userId)];
 
-    // Use OpenAI for Style Studio when tools are needed, as it handles tool calling more reliably than Groq
-    // Use gpt-4o for better tool calling reliability and instruction following
-    // Create a text-only OpenAI instance (without vision/reasoning features) for better tool compatibility
-    const textLLMWithTools = new ChatOpenAI({
-      model: 'gpt-4o', // Better tool calling and instruction following than gpt-4o-mini
-      temperature: 0.7, // Slightly creative but still reliable
-    });
+    // Use Groq for Style Studio - it handles structured JSON output better than OpenAI
+    const textLLMWithTools = getTextLLM();
 
     let executorResult;
     try {
