@@ -16,7 +16,7 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 
-import { Gender, PendingType } from '@prisma/client';
+import { AgeGroup, Gender, PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
 
 /**
@@ -168,12 +168,12 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     }
 
     // Persist inferred gender and age group if they are not already confirmed
-    const dataToUpdate: { inferredGender?: Gender; inferredAgeGroup?: any } = {};
+    const dataToUpdate: { inferredGender?: Gender; inferredAgeGroup?: AgeGroup } = {};
     if (output.inferred_gender && !state.user.confirmedGender) {
-      dataToUpdate.inferredGender = output.inferred_gender;
+      dataToUpdate.inferredGender = Gender[output.inferred_gender];
     }
     if (output.inferred_age_group && !state.user.confirmedAgeGroup) {
-      dataToUpdate.inferredAgeGroup = output.inferred_age_group;
+      dataToUpdate.inferredAgeGroup = AgeGroup[output.inferred_age_group];
     }
 
     if (Object.keys(dataToUpdate).length > 0) {
