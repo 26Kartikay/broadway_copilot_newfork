@@ -121,16 +121,36 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
 
     console.log(`\n🔄 Processing product ${productNum}/${totalProducts}: ${raw.name || raw.barcode || 'unknown'}`);
 
-    try {
+    // Ensure barcode is a string (handle scientific notation and leading quotes)
+    let barcodeStr = String(raw.barcode || '').trim();
+    if (barcodeStr.startsWith("'")) {
+      barcodeStr = barcodeStr.substring(1);
+    }
+    if (barcodeStr.includes('E+') || barcodeStr.includes('e+')) {
+      const num = parseFloat(barcodeStr);
+      if (!isNaN(num)) {
+        barcodeStr = num.toFixed(0); // Convert to integer string without scientific notation
+      }
+    }
 
+    try {
+      if (barcodeStr.startsWith("'")) {
+        barcodeStr = barcodeStr.substring(1);
+      }
+      if (barcodeStr.includes('E+') || barcodeStr.includes('e+')) {
+        const num = parseFloat(barcodeStr);
+        if (!isNaN(num)) {
+          barcodeStr = num.toFixed(0);
+        }
+      }
       
       // Check for duplicates (within the entire set, as we're processing one by one)
       const existing = await prisma.product.findFirst({
-        where: { barcode: raw.barcode },
+        where: { barcode: barcodeStr },
       });
 
       if (existing) {
-        console.log(`⏭️ Skipping existing product: ${raw.barcode}`);
+        console.log(`⏭️ Skipping existing product: ${barcodeStr}`);
         skipped++;
         continue;
       }
@@ -148,7 +168,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         } else if (genderLower === 'other' || genderLower === 'unisex' || genderLower === 'both') {
           genderEnum = Gender.OTHER;
         } else if (genderLower !== 'n/a' && genderLower !== 'na' && genderLower !== '') {
-          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${raw.barcode}. Skipping gender.`);
+          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${barcodeStr}. Skipping gender.`);
         }
       }
 
@@ -164,7 +184,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         } else if (ageLower === 'senior' || ageLower === 'seniors' || ageLower === 'elderly') {
           ageGroupEnum = AgeGroup.SENIOR;
         } else if (ageLower !== 'n/a' && ageLower !== 'na' && ageLower !== '') {
-          console.warn(`⚠️ Invalid ageGroup value "${ageValue}" for product ${raw.barcode}. Skipping ageGroup.`);
+          console.warn(`⚠️ Invalid ageGroup value "${ageValue}" for product ${barcodeStr}. Skipping ageGroup.`);
         }
       }
 
@@ -185,7 +205,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
                            '';
       
       const product: ProductData = {
-        barcode: raw.barcode,
+        barcode: barcodeStr, // Already defined above
         name: raw.name,
         brandName: raw.brandName, // Access using string literal
         gender: genderEnum,
@@ -216,7 +236,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       } catch (createError: any) {
         // If enum error, try again with null gender/ageGroup
         if (createError?.message?.includes('enum') || createError?.code === 'P2022') {
-          console.warn(`⚠️ Enum error for product ${product.barcode}. Retrying with null gender/ageGroup...`);
+          console.warn(`⚠️ Enum error for product ${barcodeStr}. Retrying with null gender/ageGroup...`);
           try {
             await prisma.product.create({
               data: {
@@ -244,12 +264,13 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       }
 
     } catch (err: any) {
+      // barcodeStr already defined at the start of the try block
       // Handle unique constraint errors gracefully
       if (err?.code === 'P2002' && err?.meta?.target?.includes('barcode')) {
-        console.log(`⏭️ Skipping duplicate product (race condition): ${raw.barcode}`);
+        console.log(`⏭️ Skipping duplicate product (race condition): ${barcodeStr}`);
         skipped++;
       } else {
-        console.error(`❌ Error inserting product ${raw.barcode}:`, err);
+        console.error(`❌ Error inserting product ${barcodeStr}:`, err);
         errors++;
       }
     }
