@@ -180,17 +180,12 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       }
       
       if (output.inferred_age_group && !state.user.confirmedAgeGroup) {
-        // Map LLM output (TEEN/ADULT/SENIOR) to Prisma enum values
-        const ageGroupMap: Record<string, AgeGroup> = {
-          'TEEN': AgeGroup.AGE_13_17,
-          'ADULT': AgeGroup.AGE_26_35, // Map adult to AGE_26_35
-          'SENIOR': AgeGroup.AGE_55_PLUS,
-        };
-        const mappedAgeGroup = ageGroupMap[output.inferred_age_group];
-        if (mappedAgeGroup) {
-          dataToUpdate.inferredAgeGroup = mappedAgeGroup;
+        // LLM output already matches Prisma enum values (TEEN/ADULT/SENIOR)
+        // Use the enum value directly
+        if (Object.values(AgeGroup).includes(output.inferred_age_group as AgeGroup)) {
+          dataToUpdate.inferredAgeGroup = output.inferred_age_group as AgeGroup;
         } else {
-          logger.warn({ userId, inferred_age_group: output.inferred_age_group }, 'Could not map age group value');
+          logger.warn({ userId, inferred_age_group: output.inferred_age_group }, 'Invalid age group value from LLM');
         }
       }
 
