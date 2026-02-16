@@ -43,7 +43,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  WARM_SPRING: {
+  TRUE_SPRING: {
     male: [
       {
         name: 'Ranveer Singh',
@@ -75,7 +75,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  CLEAR_SPRING: {
+  BRIGHT_SPRING: {
     male: [
       {
         name: 'Shah Rukh Khan',
@@ -139,7 +139,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  COOL_SUMMER: {
+  TRUE_SUMMER: {
     male: [
       {
         name: 'Farhan Akhtar',
@@ -233,7 +233,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  WARM_AUTUMN: {
+  TRUE_AUTUMN: {
     male: [
       {
         name: 'Ajay Devgn',
@@ -264,7 +264,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  DEEP_AUTUMN: {
+  DARK_AUTUMN: {
     male: [
       {
         name: 'Amitabh Bachchan',
@@ -295,7 +295,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  COOL_WINTER: {
+  TRUE_WINTER: {
     male: [
       {
         name: 'R. Madhavan',
@@ -326,7 +326,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  CLEAR_WINTER: {
+  BRIGHT_WINTER: {
     male: [
       {
         name: 'Shah Rukh Khan',
@@ -357,7 +357,7 @@ export const celebrityPalettes: Record<
     ],
   },
 
-  DEEP_WINTER: {
+  DARK_WINTER: {
     male: [
       {
         name: 'Salman Khan',

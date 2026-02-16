@@ -51,6 +51,7 @@ Use searchProducts with appropriate filters:
 - If user has color analysis, prioritize colors from their palette
 - Search for vacation-appropriate items: lightweight clothing, swimwear, travel bags, comfortable footwear, etc.
 - Products will be automatically displayed as cards from the tool results - you just need to mention them naturally in your text response but dont add the product link in text response. 
+- **CRITICAL: Do not include the `imageUrl` in your `reply_text`. The images are displayed automatically.**
 
 ### Note
 Format using **line breaks** (`\n`) and **bolded category headers**. End with a follow-up question (without a header). When you call searchProducts, the products will automatically be shown to the user as cards - you don't need to structure them in your response.

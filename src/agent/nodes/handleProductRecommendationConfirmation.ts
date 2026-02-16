@@ -67,17 +67,19 @@ export async function handleProductRecommendationConfirmation(
     const colors = paletteData.topColors.map((c) => c.name).slice(0, 3);
     const colorList = colors.join(', ');
 
-    const promptText = `You are a fashion product recommender. The user is ${userContext} and their color palette is ${productRecommendationContext.paletteName}.
-      Your task is to recommend products that match this palette by calling the 'searchProducts' tool.
+    const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
+      You are a fashion product recommender. The user is ${userContext} and their color palette is ${productRecommendationContext.paletteName}.
+      Your first task is to recommend products that match this palette by calling the 'searchProducts' tool.
       You **MUST** use the 'filters' argument to search for products. Set the 'color' filter to one of these colors: ${colorList}.
-      After the tool call, provide a brief, friendly concluding message in your response like "Here are a few items in your palette that I found!".`;
+      After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else if (productRecommendationContext?.type === 'vibe_check') {
     const query = productRecommendationContext.recommendations.join(' ');
-    const promptText = `You are a fashion product recommender. The user, who is ${userContext}, received the following style advice: "${query}".
-      Your task is to recommend products based on this advice by calling the 'searchProducts' tool.
+    const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
+      You are a fashion product recommender. The user, who is ${userContext}, received the following style advice: "${query}".
+      Your first task is to recommend products based on this advice by calling the 'searchProducts' tool.
       Use a concise query based on the style advice.
-      After the tool call, provide a brief, friendly concluding message like "To get you started, here are a few products that match that vibe!".`;
+      After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else {
     logger.warn('handleProductRecommendationConfirmation called without valid context.');

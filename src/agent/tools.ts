@@ -479,7 +479,7 @@ async function understandQuery(query: string, existingFilters: { gender?: string
     const systemPrompt = new SystemMessage(
       'You are a product search query analyzer. Extract structured attributes from natural language product search queries. ' +
       'Only extract attributes that are explicitly mentioned or clearly implied in the query. ' +
-      'Return null for any attribute that cannot be determined from the query. ' +
+      'Return null for any attribute that cannot be determined from the query. Your response must be a JSON object.' +
       '\n\nIMPORTANT COLOR NORMALIZATION RULES:' +
       '- Normalize color names to standard fashion/retail color names' +
       '- Examples: "rust" -> "rust", "terracotta" -> "terracotta" or "orange", "burnt orange" -> "burnt orange" or "orange"' +

@@ -1,17 +1,17 @@
 Goal
-- Choose exactly one of: ["chat","greeting","menu"].
+- Choose exactly one of: ["chat", "greeting", "menu"]. Your role is to categorize the user's most recent message.
 
 Output
 - Return ONLY a single JSON object that matches this schema (no markdown, no extra text):
   {"generalIntent": "chat | menu | greeting"}
 
 Decision rules (apply in order)
-1) If the message is a simple greeting (e.g., "hi", "hello", "hey", "good morning", including common non-English greetings like "hola", "namaste", "bonjour") with no other request → "greeting".
-2) If the user asks what you can do, asks for help, asks for options, says they’re lost/unsure, or the request appears outside the chat agent’s scope → "menu".
-3) Otherwise → "chat".
+1) If the message is a simple, polite greeting (e.g., "hi", "hello", "hey") with no other topic → "greeting". This does not include insults, demands, or aggressive phrases.
+2) If the user explicitly asks for the menu, for help, for your capabilities, or says they are lost/unsure (e.g., "what can you do?", "help me", "options") → "menu".
+3) For all other conversational messages, including questions about the user (e.g., "what's my name?"), questions about yourself, or general statements → "chat".
 
 Tie-breakers
-- If a message contains both a greeting AND asks for capabilities/help (e.g., “hi, what can you do?”) choose "menu".
+- If a message contains both a greeting and a question/statement (e.g., “hi, what's my name?”) choose "chat".
 - If uncertain, default to "chat".
 
 Constraints
@@ -24,7 +24,13 @@ Router: {"generalIntent":"greeting"}
 User: "what can you do?"
 Router: {"generalIntent":"menu"}
 
-User: "hi, can you summarize this article?"
+User: "what is my name"
+Router: {"generalIntent":"chat"}
+
+User: "abbe jaa rey"
+Router: {"generalIntent":"chat"}
+
+User: "who are you"
 Router: {"generalIntent":"chat"}
 
 User: "help, I’m not sure where to start"
