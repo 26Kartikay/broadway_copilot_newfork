@@ -166,6 +166,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
           "As a guest user, I can't save your vibe check results. Sign up to save your progress!",
       });
     } else {
+      // Update lastVibeCheckAt timestamp (allowed in production - this is activity tracking, not profile data)
       const [, userTransactionResult] = await prisma.$transaction([
         prisma.vibeCheck.create({ data: vibeCheckData }),
         prisma.user.update({

@@ -50,6 +50,7 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
         },
       });
 
+      // Update lastColorAnalysisAt timestamp (allowed in production - this is activity tracking, not profile data)
       await prisma.user.update({
         where: { id: state.user.id },
         data: { lastColorAnalysisAt: new Date() },

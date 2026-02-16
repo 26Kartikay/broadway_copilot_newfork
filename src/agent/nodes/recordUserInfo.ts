@@ -52,16 +52,28 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
       }
     }
 
+    // In production, do NOT update user - database is source of truth
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     if (Object.keys(dataToUpdate).length > 0) {
-      const user = await prisma.user.update({
-        where: { id: state.user.id },
-        data: dataToUpdate,
-      });
-      logger.debug(
-        { userId, updatedFields: Object.keys(dataToUpdate) },
-        'User info recorded successfully from button payload',
-      );
-      return { ...state, user, pending: PendingType.NONE };
+      if (isProduction) {
+        logger.debug(
+          { userId, updatedFields: Object.keys(dataToUpdate) },
+          'Skipping user update in production - database is source of truth',
+        );
+        return { ...state, pending: PendingType.NONE };
+      } else {
+        // In development, allow updating user for testing
+        const user = await prisma.user.update({
+          where: { id: state.user.id },
+          data: dataToUpdate,
+        });
+        logger.debug(
+          { userId, updatedFields: Object.keys(dataToUpdate) },
+          'User info recorded successfully from button payload',
+        );
+        return { ...state, user, pending: PendingType.NONE };
+      }
     }
 
     logger.debug({ userId, buttonPayload }, 'User may have skipped providing info.');
