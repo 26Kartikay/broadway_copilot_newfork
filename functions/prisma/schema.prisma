@@ -88,6 +88,7 @@ enum Tonality {
 
 model User {
   id          String @id @default(cuid())
+  appUserId   String @unique
   whatsappId  String @unique
   profileName String @default("")
 
@@ -113,6 +114,7 @@ model User {
   graphRuns     GraphRun[]
 
   @@index([createdAt])
+  @@index([appUserId])
 }
 
 model Conversation {

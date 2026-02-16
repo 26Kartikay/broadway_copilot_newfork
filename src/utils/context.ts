@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
 import { queueMemoryExtraction } from '../lib/tasks';
+import { NotFoundError } from './errors';
 import { logger } from './logger';
 import { isGuestUser } from './user';
 
@@ -49,18 +50,48 @@ export async function getOrCreateUserAndConversation(
   profileName: string,
   appUserId: string,
 ): Promise<{ user: User; conversation: Conversation }> {
-  const user = await prisma.user.upsert({
-    where: { appUserId },
-    update: {
-      whatsappId,
-      ...(profileName && { profileName }), // Only update profileName if a non-empty one is provided
-    },
-    create: {
-      whatsappId,
-      profileName: profileName || 'Guest',
-      appUserId,
-    },
-  });
+  // In production, only get existing users - do not create new ones
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  let user: User | null;
+  
+  if (isProduction) {
+    // In production, only fetch existing user - do not create
+    user = await prisma.user.findUnique({
+      where: { appUserId },
+    });
+    
+    if (!user) {
+      throw new NotFoundError(`User with appUserId ${appUserId} not found. User must be created manually in production.`);
+    }
+    
+    // Update existing user's whatsappId and profileName if provided
+    if (whatsappId || profileName) {
+      user = await prisma.user.update({
+        where: { appUserId },
+        data: {
+          ...(whatsappId && { whatsappId }),
+          // Only update profileName if a non-empty one is provided and it's different
+          ...(profileName && profileName.trim() && { profileName: profileName.trim() }),
+        },
+      });
+    }
+  } else {
+    // In development, allow creating users
+    user = await prisma.user.upsert({
+      where: { appUserId },
+      update: {
+        whatsappId,
+        // Only update profileName if a non-empty one is provided
+        ...(profileName && profileName.trim() && { profileName: profileName.trim() }),
+      },
+      create: {
+        whatsappId,
+        profileName: profileName && profileName.trim() ? profileName.trim() : '',
+        appUserId,
+      },
+    });
+  }
 
   const lastOpenConversation = await prisma.conversation.findFirst({
     where: {
