@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 
 import { createErrorResponse, logError } from '../utils/errors';
+import { getGcpTraceFields } from './requestLogger';
 
 /**
  * Express error handling middleware that normalizes, logs, and responds to errors.
@@ -12,11 +13,28 @@ import { createErrorResponse, logError } from '../utils/errors';
  * @param _next - Express next function (unused as this is the final handler)
  */
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
+  const requestId = res.locals.requestId as string | undefined;
+  const inferredStatusCode =
+    typeof (err as { statusCode?: unknown })?.statusCode === 'number'
+      ? (err as { statusCode: number }).statusCode
+      : 500;
+
   const context = {
+    requestId,
     method: req.method,
     url: req.url,
     userAgent: req.get('User-Agent'),
     ip: req.ip,
+    httpRequest: {
+      requestMethod: req.method,
+      requestUrl: req.originalUrl || req.url,
+      status: inferredStatusCode,
+      userAgent: req.get('User-Agent'),
+      referer: req.get('Referer'),
+      remoteIp: req.ip,
+      protocol: req.protocol,
+    },
+    ...getGcpTraceFields(req),
   };
 
   const httpError = logError(err, context);
