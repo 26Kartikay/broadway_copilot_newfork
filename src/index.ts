@@ -10,11 +10,30 @@ import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
 import { connectPrisma } from './lib/prisma';
 import { connectRedis } from './lib/redis';
 import { errorHandler } from './middleware/errors';
+import { requestLogger } from './middleware/requestLogger';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
 
 const app = express();
 app.set('trust proxy', true);
+
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.fatal(
+    {
+      err: reason instanceof Error ? reason : undefined,
+      reason: reason instanceof Error ? reason.message : String(reason),
+    },
+    'Unhandled promise rejection',
+  );
+});
+
+process.on('uncaughtException', (err: unknown) => {
+  logger.fatal({ err }, 'Uncaught exception');
+  // Crash fast so Cloud Run can restart the container in a clean state.
+  process.exit(1);
+});
+
+app.use(requestLogger);
 
 app.use(
   cors({
@@ -138,13 +157,6 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
 
     return res.status(200).json(response);
   } catch (err: unknown) {
-    logger.error(
-      {
-        err: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-      },
-      'Chat endpoint error',
-    );
     return next(err);
   }
 });

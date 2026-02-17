@@ -87,7 +87,10 @@ export class GatewayTimeoutError extends HttpError {
 export function logError(error: unknown, context?: Record<string, unknown>): HttpError {
   const httpError = normalizeError(error);
 
+  const originalError = error instanceof Error ? error : undefined;
+
   const logData = {
+    ...(originalError ? { err: originalError } : null),
     statusCode: httpError.statusCode,
     message: httpError.message,
     stack: httpError.stack,
