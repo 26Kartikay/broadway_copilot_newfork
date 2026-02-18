@@ -40,13 +40,17 @@ const prisma = new PrismaClient();
 
 interface ProductData {
   barcode: string;
-  name: string;
-  brandName: string;
-  gender?: Gender;
+  name?: string;
+  brandName?: string;
+  gender: Gender;
   ageGroup?: AgeGroup;
-  description: string;
+  category?: string;
+  subCategory?: string;
+  productType?: string;
+  colorPalette?: string;
   imageUrl: string;
   colors: string[];
+  allTags?: string;
 }
 
 // Removed buildSearchDoc function as searchDoc is no longer in Product model.
@@ -57,15 +61,19 @@ interface ProductData {
 
 interface RawProduct {
   barcode: string;
-  name: string;
-  brandName: string; // Use camelCase to match CSV header
+  name?: string;
+  brandName?: string; // Use camelCase to match CSV header
   gender?: string;
   age?: string;
   ageGroup?: string; // CSV has ageGroup column
-  description?: string;
+  category?: string;
+  subCategory?: string;
+  productType?: string;
+  colorPalette?: string;
   imageUrl: string;
   color?: string; // This will be a comma-separated string
   colors?: string; // Alternative column name
+  allTags?: string; // Comma-separated tags
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
@@ -109,6 +117,17 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
 
   console.log(`📋 Found ${rawProducts.length} products to import`);
 
+  // Debug: Show column names from first row
+  if (rawProducts.length > 0) {
+    console.log(`\n📊 CSV Columns detected: ${Object.keys(rawProducts[0]).join(', ')}`);
+    console.log(`📊 Sample first product keys: ${Object.keys(rawProducts[0]).join(', ')}`);
+    if (rawProducts[0].barcode !== undefined) {
+      console.log(`✅ 'barcode' column found. Sample value: "${rawProducts[0].barcode}"`);
+    } else {
+      console.log(`⚠️ 'barcode' column NOT found. Available columns: ${Object.keys(rawProducts[0]).join(', ')}`);
+    }
+  }
+
   // Process in batches
   let imported = 0;
   let skipped = 0;
@@ -121,8 +140,18 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
 
     console.log(`\n🔄 Processing product ${productNum}/${totalProducts}: ${raw.name || raw.barcode || 'unknown'}`);
 
+    // Try multiple possible column names for barcode
+    const barcodeValue = raw.barcode || 
+                        (raw as any)['barcode'] || 
+                        (raw as any)['Barcode'] || 
+                        (raw as any)['BARCODE'] ||
+                        (raw as any)['barcode_number'] ||
+                        (raw as any)['sku'] ||
+                        (raw as any)['SKU'] ||
+                        '';
+    
     // Ensure barcode is a string (handle scientific notation and leading quotes)
-    let barcodeStr = String(raw.barcode || '').trim();
+    let barcodeStr = String(barcodeValue || '').trim();
     if (barcodeStr.startsWith("'")) {
       barcodeStr = barcodeStr.substring(1);
     }
@@ -145,19 +174,26 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       }
       
       // Check for duplicates (within the entire set, as we're processing one by one)
+      if (!barcodeStr || barcodeStr.trim() === '') {
+        console.log(`⚠️ Skipping product with empty barcode: ${raw.name || 'unknown'}`);
+        skipped++;
+        continue;
+      }
+
       const existing = await prisma.product.findFirst({
         where: { barcode: barcodeStr },
       });
 
       if (existing) {
-        console.log(`⏭️ Skipping existing product: ${barcodeStr}`);
+        console.log(`⏭️ Skipping existing product (barcode: ${barcodeStr}, name: ${raw.name || 'unknown'})`);
         skipped++;
         continue;
       }
 
       // Map gender and age to enums
       // Handle various input formats: "female", "FEMALE", "women", "male", "MALE", "men", etc.
-      let genderEnum: Gender | undefined;
+      // Gender is now required, so we must have a value
+      let genderEnum: Gender;
       if (raw.gender) {
         const genderLower = raw.gender.toLowerCase().trim();
         // Map common variations to Prisma enum values
@@ -167,9 +203,13 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
           genderEnum = Gender.MALE;
         } else if (genderLower === 'other' || genderLower === 'unisex' || genderLower === 'both') {
           genderEnum = Gender.OTHER;
-        } else if (genderLower !== 'n/a' && genderLower !== 'na' && genderLower !== '') {
-          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${barcodeStr}. Skipping gender.`);
+        } else {
+          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${barcodeStr}. Defaulting to OTHER.`);
+          genderEnum = Gender.OTHER; // Default to OTHER if invalid
         }
+      } else {
+        console.warn(`⚠️ Missing gender for product ${barcodeStr}. Defaulting to OTHER.`);
+        genderEnum = Gender.OTHER; // Default to OTHER if missing
       }
 
       let ageGroupEnum: AgeGroup | undefined;
@@ -206,13 +246,17 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       
       const product: ProductData = {
         barcode: barcodeStr, // Already defined above
-        name: raw.name,
-        brandName: raw.brandName, // Access using string literal
-        gender: genderEnum,
+        name: raw.name || undefined,
+        brandName: raw.brandName || undefined,
+        gender: genderEnum, // Required field
         ageGroup: ageGroupEnum,
-        description: raw.description || '',
-        imageUrl: imageUrlValue,
+        category: raw.category || undefined,
+        subCategory: raw.subCategory || undefined,
+        productType: raw.productType || undefined,
+        colorPalette: raw.colorPalette || undefined,
+        imageUrl: imageUrlValue, // Required field
         colors: (raw.colors || raw.color) ? String(raw.colors || raw.color).split(',').map(c => c.trim()).filter(Boolean) : [],
+        allTags: raw.allTags || undefined,
       };
 
       // Insert into database
@@ -226,10 +270,13 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
             brandName: product.brandName,
             gender: product.gender,
             ageGroup: product.ageGroup,
-            description: product.description,
+            category: product.category,
+            subCategory: product.subCategory,
+            productType: product.productType,
+            colorPalette: product.colorPalette,
             imageUrl: product.imageUrl,
             colors: product.colors,
-            isActive: true,
+            allTags: product.allTags,
           },
         });
         imported++;
@@ -243,12 +290,15 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
                 barcode: product.barcode,
                 name: product.name,
                 brandName: product.brandName,
-                gender: null, // Set to null if enum doesn't match
+                gender: product.gender, // Keep gender as required
                 ageGroup: null, // Set to null if enum doesn't match
-                description: product.description,
+                category: product.category,
+                subCategory: product.subCategory,
+                productType: product.productType,
+                colorPalette: product.colorPalette,
                 imageUrl: product.imageUrl,
                 colors: product.colors,
-                isActive: true,
+                allTags: product.allTags,
               },
             });
             imported++;

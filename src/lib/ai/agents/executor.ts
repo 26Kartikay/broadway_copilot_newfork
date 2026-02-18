@@ -111,29 +111,86 @@ export async function agentExecutor<T extends ZodType>(
 
         // Extract JSON from markdown code blocks if present, otherwise use content as-is
         let jsonString = content.trim();
+        
+        // Strategy 1: Try to extract from markdown code blocks
         const jsonBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (jsonBlockMatch && jsonBlockMatch[1]) {
           jsonString = jsonBlockMatch[1].trim();
         }
 
-        // If still doesn't start with {, try to find JSON object in the content
+        // Strategy 2: If still doesn't start with {, try to find JSON object in the content
         if (!jsonString.startsWith('{')) {
-          const jsonObjectMatch = jsonString.match(/\{[\s\S]*\}/);
-          if (jsonObjectMatch) {
-            jsonString = jsonObjectMatch[0];
+          // Try to find the first complete JSON object (handles nested braces)
+          let braceCount = 0;
+          let startIdx = -1;
+          let endIdx = -1;
+          
+          for (let idx = 0; idx < jsonString.length; idx++) {
+            if (jsonString[idx] === '{') {
+              if (startIdx === -1) startIdx = idx;
+              braceCount++;
+            } else if (jsonString[idx] === '}') {
+              braceCount--;
+              if (braceCount === 0 && startIdx !== -1) {
+                endIdx = idx;
+                break;
+              }
+            }
+          }
+          
+          if (startIdx !== -1 && endIdx !== -1) {
+            jsonString = jsonString.substring(startIdx, endIdx + 1);
           } else {
-            throw new Error('Final response is not a JSON object.');
+            // Fallback: try regex match (less reliable for nested objects)
+            const jsonObjectMatch = jsonString.match(/\{[\s\S]*\}/);
+            if (jsonObjectMatch) {
+              jsonString = jsonObjectMatch[0];
+            } else {
+              throw new Error('Final response is not a JSON object.');
+            }
           }
         }
 
+        // Strategy 3: Clean up common issues
+        // Remove trailing commas before closing braces/brackets
+        jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
+        
+        // Try to parse
         const parsedJson = JSON.parse(jsonString);
         const validatedOutput = options.outputSchema.parse(parsedJson);
         return { output: validatedOutput, toolResults: toolResultsList };
       } catch (error) {
-        logger.warn(
-          { nodeName: options.nodeName, error: error instanceof Error ? error.message : String(error) },
-          'agentExecutor: Failed to parse final JSON output. Adding corrective prompt.',
-        );
+        // Only warn if this is not the last attempt (if it's the last, we'll throw anyway)
+        // This reduces noise from warnings that recover on the next iteration
+        if (i < maxLoops - 1) {
+          logger.debug(
+            { 
+              nodeName: options.nodeName, 
+              iteration: i,
+              error: error instanceof Error ? error.message : String(error),
+              contentPreview: assistant.content
+                .filter((p): p is TextPart => p.type === 'text')
+                .map((p) => p.text)
+                .join('')
+                .substring(0, 200)
+            },
+            'agentExecutor: Failed to parse JSON output, will retry with corrective prompt.',
+          );
+        } else {
+          // Last attempt - log as warning since we're about to throw
+          logger.warn(
+            { 
+              nodeName: options.nodeName, 
+              error: error instanceof Error ? error.message : String(error),
+              contentPreview: assistant.content
+                .filter((p): p is TextPart => p.type === 'text')
+                .map((p) => p.text)
+                .join('')
+                .substring(0, 200)
+            },
+            'agentExecutor: Failed to parse final JSON output after all attempts.',
+          );
+        }
 
         if (i === maxLoops - 1) {
           throw new Error(
@@ -145,7 +202,7 @@ export async function agentExecutor<T extends ZodType>(
 
         conversation.push(
           new UserMessage(
-            'That was not valid JSON. Please provide your final answer again, ensuring it is a single, valid JSON object that matches the required schema and nothing else.',
+            'That was not valid JSON. Please provide your final answer again, ensuring it is a single, valid JSON object that matches the required schema and nothing else. Do not include any explanatory text outside the JSON object.',
           ),
         );
         continue;
