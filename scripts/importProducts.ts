@@ -312,35 +312,124 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         console.error(`      gender: ${product.gender} (${typeof product.gender})`);
         console.error(`      ageGroup: ${product.ageGroup} (${typeof product.ageGroup})`);
         
-        // If enum error, try again with null gender/ageGroup
-        if (createError?.message?.includes('enum') || createError?.code === 'P2022' || createError?.code === 'P2011') {
-          console.warn(`⚠️ Enum/constraint error detected. Retrying with null ageGroup...`);
+        // If enum error, use raw SQL with explicit enum casting
+        if (createError?.message?.includes('enum') || createError?.message?.includes('invalid input value') || createError?.code === 'P2022' || createError?.code === 'P2011') {
+          console.warn(`⚠️ Enum/constraint error detected. Using raw SQL with explicit enum casting...`);
           try {
-            await prisma.product.create({
-              data: {
-                barcode: product.barcode,
-                name: product.name as any,
-                brandName: product.brandName as any,
-                gender: product.gender, // Keep gender as required
-                ageGroup: null, // Set to null if enum doesn't match
-                ...(product.category && { category: product.category }),
-                ...(product.subCategory && { subCategory: product.subCategory }),
-                ...(product.productType && { productType: product.productType }),
-                ...(product.colorPalette && { colorPalette: product.colorPalette }),
-                imageUrl: product.imageUrl,
-                colors: product.colors,
-                ...(product.allTags && { allTags: product.allTags }),
-              } as any,
-            });
+            // Convert enum to database string value (try both uppercase and lowercase)
+            const genderDbValue = product.gender === Gender.MALE ? 'MALE' : 
+                                 product.gender === Gender.FEMALE ? 'FEMALE' : 'OTHER';
+            
+            // Try uppercase first (most likely what DB expects)
+            let ageGroupDbValue = 'ADULT'; // Default
+            if (product.ageGroup === AgeGroup.TEEN) {
+              ageGroupDbValue = 'TEEN';
+            } else if (product.ageGroup === AgeGroup.ADULT) {
+              ageGroupDbValue = 'ADULT';
+            } else if (product.ageGroup === AgeGroup.SENIOR) {
+              ageGroupDbValue = 'SENIOR';
+            }
+            
+            console.log(`   🔧 Using raw SQL with values: gender="${genderDbValue}", ageGroup="${ageGroupDbValue}"`);
+            
+            // Use raw SQL to bypass Prisma enum validation
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO "Product" (
+                "barcode", "name", "brandName", "gender", "ageGroup",
+                "category", "subCategory", "productType", "colorPalette",
+                "imageUrl", "colors", "allTags", "createdAt", "updatedAt"
+              ) VALUES (
+                $1::text,
+                $2::text,
+                $3::text,
+                $4::"Gender",
+                $5::"AgeGroup",
+                $6::text,
+                $7::text,
+                $8::text,
+                $9::text,
+                $10::text,
+                $11::text[],
+                $12::text,
+                NOW(),
+                NOW()
+              )
+            `, 
+              product.barcode,
+              product.name || null,
+              product.brandName || null,
+              genderDbValue,  // Explicit enum value
+              ageGroupDbValue, // Explicit enum value
+              product.category || null,
+              product.subCategory || null,
+              product.productType || null,
+              product.colorPalette || null,
+              product.imageUrl,
+              product.colors,
+              product.allTags || null
+            );
             imported++;
-            console.log(`✅ Imported with null ageGroup: ${product.barcode}`);
+            console.log(`✅ Imported using raw SQL: ${product.barcode}`);
           } catch (retryError: any) {
-            console.error(`❌ Retry also failed for ${barcodeStr}:`);
+            console.error(`❌ Raw SQL also failed for ${barcodeStr}:`);
             console.error(`   Retry Error Code: ${retryError?.code}`);
             console.error(`   Retry Error Message: ${retryError?.message}`);
             console.error(`   Retry Error Meta:`, JSON.stringify(retryError?.meta, null, 2));
-            // If still fails, it's a different error
-            throw retryError;
+            
+            // If uppercase fails, try lowercase
+            if (retryError?.message?.includes('invalid input value')) {
+              console.warn(`   🔄 Trying lowercase enum values...`);
+              try {
+                const genderDbValueLower = product.gender === Gender.MALE ? 'male' : 
+                                          product.gender === Gender.FEMALE ? 'female' : 'other';
+                const ageGroupDbValueLower = product.ageGroup === AgeGroup.TEEN ? 'teen' :
+                                            product.ageGroup === AgeGroup.ADULT ? 'adult' :
+                                            product.ageGroup === AgeGroup.SENIOR ? 'senior' : 'adult';
+                
+                await prisma.$executeRawUnsafe(`
+                  INSERT INTO "Product" (
+                    "barcode", "name", "brandName", "gender", "ageGroup",
+                    "category", "subCategory", "productType", "colorPalette",
+                    "imageUrl", "colors", "allTags", "createdAt", "updatedAt"
+                  ) VALUES (
+                    $1::text,
+                    $2::text,
+                    $3::text,
+                    $4::"Gender",
+                    $5::"AgeGroup",
+                    $6::text,
+                    $7::text,
+                    $8::text,
+                    $9::text,
+                    $10::text,
+                    $11::text[],
+                    $12::text,
+                    NOW(),
+                    NOW()
+                  )
+                `, 
+                  product.barcode,
+                  product.name || null,
+                  product.brandName || null,
+                  genderDbValueLower,
+                  ageGroupDbValueLower,
+                  product.category || null,
+                  product.subCategory || null,
+                  product.productType || null,
+                  product.colorPalette || null,
+                  product.imageUrl,
+                  product.colors,
+                  product.allTags || null
+                );
+                imported++;
+                console.log(`✅ Imported using raw SQL (lowercase): ${product.barcode}`);
+              } catch (finalError: any) {
+                console.error(`❌ All attempts failed for ${barcodeStr}`);
+                throw finalError;
+              }
+            } else {
+              throw retryError;
+            }
           }
         } else {
           // Re-throw if it's not an enum error

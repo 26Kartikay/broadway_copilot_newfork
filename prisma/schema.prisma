@@ -16,14 +16,14 @@ enum MessageRole {
   TOOL
 }
 enum Gender {
-  MALE @map("male")
-  FEMALE @map("female")
-  OTHER @map("other")
+  MALE @map("MALE")
+  FEMALE @map("FEMALE")
+  OTHER @map("OTHER")
 }
 enum AgeGroup {
-  TEEN @map("teen")
-  ADULT @map("adult")
-  SENIOR @map("senior")
+  TEEN @map("TEEN")
+  ADULT @map("ADULT")
+  SENIOR @map("SENIOR")
 }
 enum PendingType {
   NONE
