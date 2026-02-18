@@ -26,12 +26,11 @@ const EMBEDDING_DIM = 1536;
 
 interface ProductData {
   id: string;
-  name: string;
-  brandName: string;
-  gender?: Gender | null;
+  name: string | null;
+  brandName: string | null;
+  gender: Gender;
   ageGroup?: AgeGroup | null;
-  description?: string | null;
-  imageUrl?: string | null;
+  imageUrl: string;
   colors: string[];
   category?: string | null;
   subCategory?: string | null;
@@ -81,12 +80,14 @@ function buildSearchDoc(product: ProductData): string {
     parts.push(`Colors: ${product.colors.join(', ')}`);
   }
   
-  // Description (rich text) - Cleaned of HTML tags for embedding
-  if (product.description) {
-    const cleanedDescription = product.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    if (cleanedDescription) {
-      parts.push(`Description: ${cleanedDescription}`);
-    }
+  // All tags
+  if (product.allTags) {
+    parts.push(`Tags: ${product.allTags}`);
+  }
+  
+  // Ensure we always return something (at minimum, use gender or a placeholder)
+  if (parts.length === 0) {
+    parts.push(`Product (Gender: ${product.gender || 'unknown'})`);
   }
   
   return parts.join('. ');
@@ -117,8 +118,7 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
     // Use raw SQL to count products without embeddings or with wrong model
     const result = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
       `SELECT COUNT(*) as count FROM "Product" 
-       WHERE "isActive" = true 
-       AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)`,
+       WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)`,
       EMBEDDING_MODEL
     );
     totalProducts = Number(result[0].count);
@@ -146,8 +146,9 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
   let errors = 0;
   let batchNumber = 0;
 
-  // Process in batches
-  for (let offset = 0; offset < totalProducts; offset += BATCH_SIZE) {
+  // Process in batches - continue until no more products are found
+  while (true) {
+    batchNumber++;
       // Use raw SQL to query products (embedding field is Unsupported type, can't filter with Prisma)
       let products: Array<{
         id: string;
@@ -165,43 +166,30 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
       }>;
 
       if (forceRegenerate) {
-        // Get all active products using Prisma
-        products = await prisma.product.findMany({
-          where: { isActive: true },
-          take: BATCH_SIZE,
-          skip: offset,
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            name: true,
-            brandName: true,
-            gender: true,
-            ageGroup: true,
-            description: true,
-            imageUrl: true,
-            colors: true,
-            category: true,
-            subCategory: true,
-            productType: true,
-            style: true,
-            occasion: true,
-            fit: true,
-            season: true,
-          },
-        });
-      } else {
-        // Use raw SQL to get products without embeddings or with wrong model
+        // Get all products using Prisma - get next batch without embeddings
+        // Query for products that either don't have embeddings or have wrong model
         products = await prisma.$queryRawUnsafe<typeof products>(
                 `SELECT id, name, "brandName", gender, "ageGroup", "imageUrl", colors,
                         category, "subCategory", "productType", "colorPalette", "allTags"
                  FROM "Product"
-                 WHERE "isActive" = true 
-                 AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+                 WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
                  ORDER BY "createdAt" DESC
-                 LIMIT $2 OFFSET $3`,
+                 LIMIT $2`,
           EMBEDDING_MODEL,
-          BATCH_SIZE,
-          offset
+          BATCH_SIZE
+        );
+      } else {
+        // Use raw SQL to get products without embeddings or with wrong model
+        // Don't use OFFSET - just get the next batch of products that need embeddings
+        products = await prisma.$queryRawUnsafe<typeof products>(
+                `SELECT id, name, "brandName", gender, "ageGroup", "imageUrl", colors,
+                        category, "subCategory", "productType", "colorPalette", "allTags"
+                 FROM "Product"
+                 WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+                 ORDER BY "createdAt" DESC
+                 LIMIT $2`,
+          EMBEDDING_MODEL,
+          BATCH_SIZE
         );
       }
 
@@ -210,7 +198,7 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
       break;
     }
 
-    console.log(`\n🔄 Processing batch ${Math.floor(offset / BATCH_SIZE) + 1}/${Math.ceil(totalProducts / BATCH_SIZE)} (${products.length} products)`);
+    console.log(`\n🔄 Processing batch ${batchNumber} (${products.length} products)`);
 
       // Build search documents - ensure all products have valid search docs
       const searchDocs: string[] = [];
@@ -270,10 +258,10 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 
           // Update embedding using raw SQL (Prisma doesn't support vector type directly)
           const vectorString = `[${embedding.join(',')}]`;
-          // Escape single quotes in product.id for SQL safety
-          const escapedId = product.id.replace(/'/g, "''");
           await prisma.$executeRawUnsafe(
-            `UPDATE "Product" SET embedding = '${vectorString}'::vector WHERE id = '${escapedId}'`
+            `UPDATE "Product" SET embedding = $1::vector WHERE id = $2`,
+            vectorString,
+            product.id
           );
 
           updated++;
@@ -287,10 +275,9 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
       console.log(`✅ Batch complete: ${updated} updated, ${errors} errors`);
 
       // Rate limiting: wait 1 second between batches to avoid API rate limits
-      if (offset + BATCH_SIZE < totalProducts) {
-        console.log('⏳ Waiting 1 second for rate limiting...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+      // Always wait (except after the last batch which breaks the loop)
+      console.log('⏳ Waiting 1 second for rate limiting...');
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (err: any) {
       console.error(`❌ Error processing batch: ${err.message}`);
       errors += products.length;
@@ -323,7 +310,7 @@ async function main() {
   const forceRegenerate = process.argv.includes('--force');
   
   if (forceRegenerate) {
-    console.log('⚠️  Force mode enabled: Will regenerate embeddings for ALL products\n');
+    console.log('⚠️  Force mode enabled: Will regenerate embeddings for ALL active products\n');
   }
 
   console.log(`🌍 Environment: ${isProduction ? 'PRODUCTION' : 'LOCAL (test mode)'}\n`);
