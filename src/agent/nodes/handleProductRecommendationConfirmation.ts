@@ -24,6 +24,7 @@ interface ProductSearchResult {
   imageUrl: string;
   description?: string;
   colors?: string[];
+  barcode?: string;
 }
 
 export async function handleProductRecommendationConfirmation(
@@ -75,7 +76,9 @@ export async function handleProductRecommendationConfirmation(
     const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
       You are a fashion product recommender. The user is ${userContext} and their color palette is ${productRecommendationContext.paletteName}.
       Your first task is to recommend products that match this palette by calling the 'searchProducts' tool.
-      You **MUST** use the 'filters' argument to search for products. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}'. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}'. ` : ''}Set the 'color' filter to one of these colors: ${colorList}.
+      You **MUST** use the 'filters' argument to search for products. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}'. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}'. ` : ''}
+      You **MUST** include the specific colors ${colorList} in your search query to find products in these exact colors that match the ${productRecommendationContext.paletteName} palette. For example, your query should mention these colors explicitly like: "clothing in ${colorList} colors for ${productRecommendationContext.paletteName} palette".
+      You **MUST** set the 'limit' parameter to at least 8 (to ensure we get enough product recommendations). The maximum limit is 12.
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else if (productRecommendationContext?.type === 'vibe_check') {
@@ -84,6 +87,7 @@ export async function handleProductRecommendationConfirmation(
       You are a fashion product recommender. The user, who is ${userContext}, received the following style advice: "${query}".
       Your first task is to recommend products based on this advice by calling the 'searchProducts' tool.
       Use a concise query based on the style advice. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}' in the filters argument. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}' in the filters argument. ` : ''}
+      You **MUST** set the 'limit' parameter to at least 8 (to ensure we get enough product recommendations). The maximum limit is 12.
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else {
@@ -120,18 +124,21 @@ export async function handleProductRecommendationConfirmation(
 
     for (const toolResult of productResults) {
       if (Array.isArray(toolResult.result)) {
-        // Filter products: must have name, brand, and valid imageUrl
+        // Filter products: must have name and valid imageUrl (brand is optional)
         const products = toolResult.result.filter((p: ProductSearchResult) => {
-          return p && p.name && p.brand && isValidImageUrl(p.imageUrl);
+          // Allow products with name (even if "N/A") and valid imageUrl
+          // Brand can be null/undefined/"N/A" - we'll handle it
+          return p && p.name && p.name.trim() !== '' && isValidImageUrl(p.imageUrl);
         });
 
         allProducts.push(
           ...products.map((p: ProductSearchResult) => ({
             name: p.name,
-            brand: p.brand,
+            brand: p.brand || 'N/A', // Default to 'N/A' if brand is missing
             imageUrl: p.imageUrl, // Only include if valid (already filtered)
             description: p.description,
             colors: p.colors,
+            barcode: (p as any).barcode || '', // Include barcode if available
           })),
         );
       }
@@ -139,14 +146,46 @@ export async function handleProductRecommendationConfirmation(
 
     // Add product card if we have products with valid imageUrls
     if (allProducts.length > 0) {
-      // Use name+brand as unique identifier for deduplication
+      // Use barcode as primary unique identifier for deduplication (most reliable)
+      // Fall back to name+brand+imageUrl if barcode is not available
       const uniqueProducts = Array.from(
-        new Map(allProducts.map((p) => [`${p.name}|${p.brand}`, p])).values(),
-      ).slice(0, 5);
+        new Map(
+          allProducts.map((p) => {
+            // Use barcode if available, otherwise use name+brand+imageUrl
+            const key = (p as any).barcode && (p as any).barcode.trim() !== ''
+              ? (p as any).barcode
+              : `${p.name}|${p.brand}|${p.imageUrl}`;
+            return [key, p];
+          })
+        ).values(),
+      );
+      
+      // Enforce minimum of 8 and maximum of 12 products
+      const MIN_PRODUCTS = 8;
+      const MAX_PRODUCTS = 12;
+      
+      let finalProducts = uniqueProducts;
+      
+      // If we have fewer than minimum, show what we have (but log a warning)
+      if (uniqueProducts.length < MIN_PRODUCTS) {
+        logger.debug(
+          { 
+            userId: user.id, 
+            found: uniqueProducts.length, 
+            minimum: MIN_PRODUCTS 
+          },
+          'Fewer products than minimum threshold found'
+        );
+        // Still show available products even if less than minimum
+        finalProducts = uniqueProducts;
+      } else {
+        // Cap at maximum
+        finalProducts = uniqueProducts.slice(0, MAX_PRODUCTS);
+      }
       
       replies.push({
         reply_type: 'product_card',
-        products: uniqueProducts,
+        products: finalProducts,
       });
     } else {
       // Only show this message if the text conclusion wasn't already generated

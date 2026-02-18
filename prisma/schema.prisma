@@ -302,48 +302,43 @@ model WardrobeItem {
 
 model Product {
   id          String   @id @default(cuid())
-  barcode     String?
+  barcode     String
   
-  name        String
-  brandName   String
+  name        String?
+  brandName   String?
   
-  gender      Gender?
+  gender      Gender
   ageGroup    AgeGroup?
-  description String?
-  imageUrl    String?
-  colors      String[]
+  category    String?
+  subCategory String?
+  productType String?
   
-  // Structured attributes for hybrid retrieval
-  category        String?
-  subCategory     String?
-  productType     String?
-  style           String?
-  occasion        String?
-  fit             String?
-  season          String?
-  popularityScore Float?  @default(0.0)
+  colorPalette String?
+  imageUrl     String
+  colors       String[] @default([])
+  allTags      String?
   
   embedding      Unsupported("vector")?
   embeddingModel String?
   embeddingDim   Int?
   embeddingAt    DateTime?
   
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
   @@index([name])
   @@index([brandName])
   @@index([gender])
   @@index([ageGroup])
   @@index([colors])
-  @@index([isActive])
   @@index([createdAt])
   @@index([category])
   @@index([subCategory])
   @@index([productType])
   @@index([brandName, category])
-  @@index([isActive, gender, ageGroup])
+  @@index([gender, ageGroup])
+  @@index([colorPalette])
+  @@index([allTags])
 }
 
 // --- AGENT & LOGGING ---
