@@ -259,6 +259,26 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         allTags: raw.allTags || undefined,
       };
 
+      // DEBUG: Log all values before insert
+      console.log(`\n🔍 DEBUG Product ${barcodeStr}:`);
+      console.log(`   📥 CSV Input:`);
+      console.log(`      raw.gender: "${raw.gender}" (type: ${typeof raw.gender})`);
+      console.log(`      raw.ageGroup: "${raw.ageGroup}" (type: ${typeof raw.ageGroup})`);
+      console.log(`      raw.age: "${raw.age}" (type: ${typeof raw.age})`);
+      console.log(`   🔄 Mapped Values:`);
+      console.log(`      genderEnum: ${genderEnum} (${typeof genderEnum})`);
+      console.log(`      ageGroupEnum: ${ageGroupEnum} (${typeof ageGroupEnum})`);
+      console.log(`   📤 Product Object:`);
+      console.log(`      product.gender: ${product.gender} (${typeof product.gender})`);
+      console.log(`      product.ageGroup: ${product.ageGroup} (${typeof product.ageGroup})`);
+      console.log(`   🗄️  Prisma Enum Values:`);
+      console.log(`      Gender.MALE: ${Gender.MALE}`);
+      console.log(`      Gender.FEMALE: ${Gender.FEMALE}`);
+      console.log(`      Gender.OTHER: ${Gender.OTHER}`);
+      console.log(`      AgeGroup.TEEN: ${AgeGroup.TEEN}`);
+      console.log(`      AgeGroup.ADULT: ${AgeGroup.ADULT}`);
+      console.log(`      AgeGroup.SENIOR: ${AgeGroup.SENIOR}`);
+
       // Insert into database
       console.log(`💾 Inserting product ${product.barcode} into database...`);
       
@@ -266,44 +286,59 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         const created = await prisma.product.create({
           data: {
             barcode: product.barcode,
-            name: product.name,
-            brandName: product.brandName,
+            name: product.name as any,
+            brandName: product.brandName as any,
             gender: product.gender,
             ageGroup: product.ageGroup,
-            category: product.category,
-            subCategory: product.subCategory,
-            productType: product.productType,
-            colorPalette: product.colorPalette,
+            ...(product.category && { category: product.category }),
+            ...(product.subCategory && { subCategory: product.subCategory }),
+            ...(product.productType && { productType: product.productType }),
+            ...(product.colorPalette && { colorPalette: product.colorPalette }),
             imageUrl: product.imageUrl,
             colors: product.colors,
-            allTags: product.allTags,
-          },
+            ...(product.allTags && { allTags: product.allTags }),
+          } as any,
         });
         imported++;
+        console.log(`✅ Successfully imported: ${product.barcode}`);
       } catch (createError: any) {
+        // DEBUG: Log full error details
+        console.error(`\n❌ ERROR Details for ${barcodeStr}:`);
+        console.error(`   Error Code: ${createError?.code}`);
+        console.error(`   Error Message: ${createError?.message}`);
+        console.error(`   Error Meta:`, JSON.stringify(createError?.meta, null, 2));
+        console.error(`   Stack Trace:`, createError?.stack?.split('\n').slice(0, 5).join('\n'));
+        console.error(`   Values Being Inserted:`);
+        console.error(`      gender: ${product.gender} (${typeof product.gender})`);
+        console.error(`      ageGroup: ${product.ageGroup} (${typeof product.ageGroup})`);
+        
         // If enum error, try again with null gender/ageGroup
-        if (createError?.message?.includes('enum') || createError?.code === 'P2022') {
-          console.warn(`⚠️ Enum error for product ${barcodeStr}. Retrying with null gender/ageGroup...`);
+        if (createError?.message?.includes('enum') || createError?.code === 'P2022' || createError?.code === 'P2011') {
+          console.warn(`⚠️ Enum/constraint error detected. Retrying with null ageGroup...`);
           try {
             await prisma.product.create({
               data: {
                 barcode: product.barcode,
-                name: product.name,
-                brandName: product.brandName,
+                name: product.name as any,
+                brandName: product.brandName as any,
                 gender: product.gender, // Keep gender as required
                 ageGroup: null, // Set to null if enum doesn't match
-                category: product.category,
-                subCategory: product.subCategory,
-                productType: product.productType,
-                colorPalette: product.colorPalette,
+                ...(product.category && { category: product.category }),
+                ...(product.subCategory && { subCategory: product.subCategory }),
+                ...(product.productType && { productType: product.productType }),
+                ...(product.colorPalette && { colorPalette: product.colorPalette }),
                 imageUrl: product.imageUrl,
                 colors: product.colors,
-                allTags: product.allTags,
-              },
+                ...(product.allTags && { allTags: product.allTags }),
+              } as any,
             });
             imported++;
-            console.log(`✅ Imported with null gender/ageGroup: ${product.barcode}`);
+            console.log(`✅ Imported with null ageGroup: ${product.barcode}`);
           } catch (retryError: any) {
+            console.error(`❌ Retry also failed for ${barcodeStr}:`);
+            console.error(`   Retry Error Code: ${retryError?.code}`);
+            console.error(`   Retry Error Message: ${retryError?.message}`);
+            console.error(`   Retry Error Meta:`, JSON.stringify(retryError?.meta, null, 2));
             // If still fails, it's a different error
             throw retryError;
           }
