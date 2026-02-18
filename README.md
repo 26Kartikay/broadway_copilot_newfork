@@ -270,30 +270,50 @@ Import products from a CSV or JSON file. The script automatically:
 - Creates vector embeddings using OpenAI
 - Stores products in the database with embeddings
 
-**Basic import (skips existing products):**
+**Running inside Docker:**
+
 ```bash
-npx ts-node scripts/importProducts.ts --file=data/products.csv
+# Import products (use existing CSV file in functions/src/data/)
+docker compose exec app npx ts-node scripts/importProducts.ts --file=functions/src/data/products3.csv
+
+# Import with clearing existing products
+docker compose exec app npx ts-node scripts/importProducts.ts --file=functions/src/data/products3.csv --clear
+
+# Generate embeddings for existing products
+docker compose exec app npx ts-node scripts/generateEmbeddings.ts
+
+# Force regenerate all embeddings
+docker compose exec app npx ts-node scripts/generateEmbeddings.ts --force
 ```
 
-**Import with clearing existing products:**
+**Running locally (without Docker):**
+
 ```bash
-npx ts-node scripts/importProducts.ts --file=data/products.csv --clear
+# Basic import (skips existing products)
+npx ts-node scripts/importProducts.ts --file=functions/src/data/products3.csv
+
+# Import with clearing existing products
+npx ts-node scripts/importProducts.ts --file=functions/src/data/products3.csv --clear
+
+# Generate embeddings
+npx ts-node scripts/generateEmbeddings.ts
 ```
 
 **Required CSV columns:**
-- `handle_id` – Unique product identifier
-- `article_name` – Product name
-- `brand` – Brand name
-- `general_tags` – Product type tags
-- `category` – Main category
-- `component_tags` – Tags string (e.g., "STYLE: Athleisure, COLOR: Black")
-- `images` – Product image URL
-- `product_url` – Link to product page
+- `barcode` – Product barcode/SKU (required)
+- `gender` – Gender: `male`, `female`, `other` (required)
+- `imageUrl` – Product image URL (required)
 
-**Optional columns:**
-- `barcode` – Product barcode/SKU
-- `id` – Auto-generated ID (ignored)
-- `tagged_at` – Timestamp (ignored)
+**Optional CSV columns:**
+- `name` – Product name
+- `brandName` – Brand name
+- `ageGroup` – Age group: `teen`, `adult`, `senior`
+- `category` – Product category
+- `subCategory` – Product subcategory
+- `productType` – Product type
+- `colorPalette` – Color palette name
+- `color` or `colors` – Comma-separated colors (e.g., `"Red,Blue,Green"`)
+- `allTags` – Comma-separated tags (e.g., `"casual,summer,cotton"`)
 
 #### Deleting Products
 

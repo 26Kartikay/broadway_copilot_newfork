@@ -144,6 +144,7 @@ export function searchWardrobe(userId: string): Tool {
         );
         const embeddingStats = embeddingCount[0];
         if (embeddingStats && Number(embeddingStats.count) > 0) {
+          logger.debug({ query }, 'Embedding search query for wardrobe search');
           const embedded = await model.embedQuery(query);
           const vector = JSON.stringify(embedded);
 
@@ -356,7 +357,7 @@ export function fetchRelevantMemories(userId: string): Tool {
       .describe(
         'A natural language query describing what you want to know about the user. Examples: "user size preferences", "favorite colors", "style preferences", "budget constraints", "fabric dislikes", "occasion needs", or "fit preferences".',
       ),
-    limit: z.number().default(5).describe('Maximum number of relevant memories to return'),
+    limit: z.number().default(10).describe('Maximum number of relevant memories to return'),
   });
 
   return new Tool({
@@ -380,6 +381,7 @@ export function fetchRelevantMemories(userId: string): Tool {
         }
 
         const model = new OpenAIEmbeddings({ model: 'text-embedding-3-small' });
+        logger.debug({ query }, 'Embedding memory search query');
         const embeddedQuery = await model.embedQuery(query);
         const vector = JSON.stringify(embeddedQuery);
 
@@ -558,8 +560,7 @@ export function searchProducts(): Tool {
           ageGroup: z.enum(['teen', 'adult', 'senior']).optional(),
         })
         .strict(),
-      // Always return 12 recommendations for now (requested)
-      limit: z.number().int().positive().min(12).max(12).default(12),
+      limit: z.number().int().positive().min(8).max(12).default(12),
     })
     .strict();
 
@@ -693,9 +694,7 @@ export function searchProducts(): Tool {
         };
         const normalizedPalette = normalizePaletteName(intent.palette);
 
-        // Phase 1: Broad Vector Recall (no hard filters; rerank later)
-
-
+        // Phase 1: Vector Search with Gender Filter - Gender filter applied as hard constraint
 
 
 
@@ -704,12 +703,21 @@ export function searchProducts(): Tool {
 
         const baseConditions: string[] = [
           '"embedding" IS NOT NULL',
-          // Note: Don't filter imageUrl at SQL level - filter in JavaScript to see what's actually in DB
         ];
         const baseParams: (string | number)[] = [];
         let paramIndex = 1;
 
-        // NOTE: Do NOT hard-filter by gender/ageGroup; we only soft-rerank later.
+        // Apply gender filter as hard constraint to ensure gender-appropriate recommendations
+        if (genderDbValue) {
+          if (genderDbValue === 'male') {
+            // For male users: include only male or null (exclude female and other)
+            baseConditions.push(`(gender = 'male' OR gender IS NULL)`);
+          } else if (genderDbValue === 'female') {
+            // For female users: include female, unisex, other, or null (exclude male)
+            baseConditions.push(`(gender = 'female' OR gender IS NULL OR gender = 'other')`);
+          }
+          // Note: 'other' gender from filters will allow all products (no filter applied)
+        }
         
         const whereClause = baseConditions.join(' AND ');
         const vectorParamIndex = paramIndex;
@@ -773,9 +781,11 @@ export function searchProducts(): Tool {
 
         // Log removed for verbosity reduction
 
-        // normalizedColor already defined above
-
-        // Note: no early-return on 0 candidates; we use fallback recall above.
+        // If vector search returns 0, return empty array (no text fallback)
+        if (vectorCandidates.length === 0) {
+          logger.debug({ query }, 'Vector search returned 0 results');
+          return [];
+        }
 
         // Phase 2: Intent-Based Soft Reranking
         // Boost products matching gender/ageGroup/color, but don't exclude others
@@ -928,36 +938,50 @@ export function searchProducts(): Tool {
           };
         });
 
-        // Sort by rerank score and return top N products.
-        // Do NOT filter out products here; if an image URL isn't usable, use a tiny placeholder.
-        const PLACEHOLDER_IMAGE_URL =
-          'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
-
-        const results = rerankedCandidates
+        // Sort by rerank score and filter valid products
+        // Simple approach: return top N products by rerank score
+        // The enhanced embedding query with context handles all requirements
+        const validCandidates = rerankedCandidates
+          .filter((result) => {
+            // Filter out products with empty or invalid imageUrls
+            const imageUrl = result.imageUrl;
+            return imageUrl && 
+                   typeof imageUrl === 'string' && 
+                   imageUrl.trim().length > 0 &&
+                   (imageUrl.startsWith('http://') || 
+                    imageUrl.startsWith('https://') || 
+                    imageUrl.startsWith('data:'));
+          })
           .sort((a, b) => b.rerankScore - a.rerankScore)
-          .slice(0, limit)
-          .map((result) => {
-            const rawUrl = typeof result.imageUrl === 'string' ? result.imageUrl.trim() : '';
-            const looksUsable =
-              rawUrl.length > 0 &&
-              (rawUrl.startsWith('http://') ||
-                rawUrl.startsWith('https://') ||
-                rawUrl.startsWith('data:') ||
-                rawUrl.startsWith('/')); // allow relative paths too
+          .slice(0, limit); // Take top N products by rerank score
 
-            return {
-              name: result.name,
-              brand: result.brandName,
-              gender: result.gender,
-              ageGroup: result.ageGroup,
-              colors: result.colors,
-              imageUrl: looksUsable ? rawUrl : PLACEHOLDER_IMAGE_URL,
-            };
-          });
+        // Map to final result format with barcode
+        const mappedResults = validCandidates.map((result: any) => {
+          // Handle PostgreSQL column name case sensitivity
+          const imageUrl = result.imageUrl || result.imageurl || result['imageUrl'] || '';
+          const barcode = result.barcode || '';
+          
+          // Log barcode of product being returned
+          logger.debug({ barcode, productName: result.name }, 'Returning product');
+          
+          return {
+            name: result.name,
+            brand: result.brandName || result.brandname,
+            gender: result.gender,
+            ageGroup: result.ageGroup || result.agegroup,
+            colors: result.colors,
+            imageUrl: imageUrl,
+            barcode: barcode,
+          };
+        });
 
-        // Log removed for verbosity reduction
+        // Minimal log - only essential info
+        logger.debug(
+          { query, resultCount: mappedResults.length },
+          'Product search completed',
+        );
 
-        return results;
+        return mappedResults;
       } catch (err: unknown) {
         logger.error({ query, filters, err: (err as Error)?.message }, 'Failed to search products');
         throw new InternalServerError('Failed to search products', {

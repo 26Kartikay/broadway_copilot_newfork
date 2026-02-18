@@ -19,8 +19,8 @@ const LLMOutputSchema = z.object({
 });
 
 interface ProductSearchResult {
-  name: string | null;
-  brand: string | null;
+  name: string;
+  brand: string;
   imageUrl: string;
   description?: string;
   colors?: string[];
@@ -120,17 +120,16 @@ export async function handleProductRecommendationConfirmation(
 
     for (const toolResult of productResults) {
       if (Array.isArray(toolResult.result)) {
-        // Do not filter out products based on missing name/brand.
-        // Only keep those with a valid imageUrl (required to render product cards).
+        // Filter products: must have name, brand, and valid imageUrl
         const products = toolResult.result.filter((p: ProductSearchResult) => {
-          return p && isValidImageUrl(p.imageUrl);
+          return p && p.name && p.brand && isValidImageUrl(p.imageUrl);
         });
 
         allProducts.push(
           ...products.map((p: ProductSearchResult) => ({
-            name: p.name || 'Product',
-            brand: p.brand || 'Broadway',
-            imageUrl: p.imageUrl,
+            name: p.name,
+            brand: p.brand,
+            imageUrl: p.imageUrl, // Only include if valid (already filtered)
             description: p.description,
             colors: p.colors,
           })),
@@ -140,10 +139,10 @@ export async function handleProductRecommendationConfirmation(
 
     // Add product card if we have products with valid imageUrls
     if (allProducts.length > 0) {
-      // Dedupe by imageUrl first (name/brand can be missing or defaulted)
+      // Use name+brand as unique identifier for deduplication
       const uniqueProducts = Array.from(
-        new Map(allProducts.map((p) => [`${p.imageUrl}`, p])).values(),
-      ).slice(0, 12);
+        new Map(allProducts.map((p) => [`${p.name}|${p.brand}`, p])).values(),
+      ).slice(0, 5);
       
       replies.push({
         reply_type: 'product_card',

@@ -49,7 +49,7 @@ interface ProductData {
   name?: string;
   brandName?: string;
   gender: Gender;
-  ageGroup: AgeGroup;
+  ageGroup?: AgeGroup;
   category?: string;
   subCategory?: string;
   productType?: string;
@@ -79,7 +79,7 @@ interface RawProduct {
   imageUrl: string;
   color?: string; // This will be a comma-separated string
   colors?: string; // Alternative column name
-  allTags?: string;
+  allTags?: string; // Comma-separated tags
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
@@ -123,6 +123,17 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
 
   console.log(`📋 Found ${rawProducts.length} products to import`);
 
+  // Debug: Show column names from first row
+  if (rawProducts.length > 0) {
+    console.log(`\n📊 CSV Columns detected: ${Object.keys(rawProducts[0]).join(', ')}`);
+    console.log(`📊 Sample first product keys: ${Object.keys(rawProducts[0]).join(', ')}`);
+    if (rawProducts[0].barcode !== undefined) {
+      console.log(`✅ 'barcode' column found. Sample value: "${rawProducts[0].barcode}"`);
+    } else {
+      console.log(`⚠️ 'barcode' column NOT found. Available columns: ${Object.keys(rawProducts[0]).join(', ')}`);
+    }
+  }
+
   // Process in batches
   let imported = 0;
   let skipped = 0;
@@ -135,8 +146,18 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
 
     console.log(`\n🔄 Processing product ${productNum}/${totalProducts}: ${raw.name || raw.barcode || 'unknown'}`);
 
+    // Try multiple possible column names for barcode
+    const barcodeValue = raw.barcode || 
+                        (raw as any)['barcode'] || 
+                        (raw as any)['Barcode'] || 
+                        (raw as any)['BARCODE'] ||
+                        (raw as any)['barcode_number'] ||
+                        (raw as any)['sku'] ||
+                        (raw as any)['SKU'] ||
+                        '';
+    
     // Ensure barcode is a string (handle scientific notation and leading quotes)
-    let barcodeStr = String(raw.barcode || '').trim();
+    let barcodeStr = String(barcodeValue || '').trim();
     if (barcodeStr.startsWith("'")) {
       barcodeStr = barcodeStr.substring(1);
     }
@@ -159,32 +180,43 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       }
       
       // Check for duplicates (within the entire set, as we're processing one by one)
+      if (!barcodeStr || barcodeStr.trim() === '') {
+        console.log(`⚠️ Skipping product with empty barcode: ${raw.name || 'unknown'}`);
+        skipped++;
+        continue;
+      }
+
       const existing = await prisma.product.findFirst({
         where: { barcode: barcodeStr },
       });
 
       if (existing) {
-        console.log(`⏭️ Skipping existing product: ${barcodeStr}`);
+        console.log(`⏭️ Skipping existing product (barcode: ${barcodeStr}, name: ${raw.name || 'unknown'})`);
         skipped++;
         continue;
       }
 
       // Map gender and age to enums
       // Handle various input formats: "female", "FEMALE", "women", "male", "MALE", "men", etc.
-      // Gender is required in the new schema
-      let genderEnum: Gender | undefined;
-      if (raw.gender) {
-        const genderLower = raw.gender.toLowerCase().trim();
+      // Gender is now required, so we must have a value
+      let genderEnum: Gender;
+      const genderValue = raw.gender || (raw as any)['gender'] || '';
+      if (genderValue) {
+        const genderLower = String(genderValue).toLowerCase().trim();
         // Map common variations to Prisma enum values
-        if (genderLower === 'female' || genderLower === 'women' || genderLower === 'woman' || genderLower === 'f') {
+        if (genderLower === 'female' || genderLower === 'women' || genderLower === 'woman' || genderLower === 'f' || genderLower === 'fem') {
           genderEnum = Gender.FEMALE;
         } else if (genderLower === 'male' || genderLower === 'men' || genderLower === 'man' || genderLower === 'm') {
           genderEnum = Gender.MALE;
-        } else if (genderLower === 'other' || genderLower === 'unisex' || genderLower === 'both') {
+        } else if (genderLower === 'other' || genderLower === 'unisex' || genderLower === 'both' || genderLower === 'all' || genderLower === 'any') {
           genderEnum = Gender.OTHER;
-        } else if (genderLower !== 'n/a' && genderLower !== 'na' && genderLower !== '') {
-          console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${barcodeStr}. Skipping gender.`);
+        } else {
+          console.warn(`⚠️ Invalid gender value "${genderValue}" for product ${barcodeStr}. Defaulting to OTHER.`);
+          genderEnum = Gender.OTHER; // Default to OTHER if invalid
         }
+      } else {
+        console.warn(`⚠️ Missing gender for product ${barcodeStr}. Defaulting to OTHER.`);
+        genderEnum = Gender.OTHER; // Default to OTHER if missing
       }
       
       // Gender is required - skip product if missing
@@ -195,18 +227,22 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       }
 
       let ageGroupEnum: AgeGroup | undefined;
-      const ageValue = raw.ageGroup || raw.age; // Support both column names
+      const ageValue = raw.ageGroup || raw.age || (raw as any)['ageGroup'] || (raw as any)['age']; // Support both column names and case variations
       if (ageValue) {
-        const ageLower = ageValue.toLowerCase().trim();
-        // Map common variations to Prisma enum values
-        if (ageLower === 'teen' || ageLower === 'teens' || ageLower === 'teenager') {
+        const ageStr = String(ageValue).toLowerCase().trim();
+        // Skip empty values and common "not applicable" indicators
+        if (ageStr === '' || ageStr === 'n/a' || ageStr === 'na' || ageStr === 'null' || ageStr === 'none' || ageStr === 'undefined') {
+          ageGroupEnum = undefined;
+        } else if (ageStr === 'teen' || ageStr === 'teens' || ageStr === 'teenager' || ageStr === 't') {
           ageGroupEnum = AgeGroup.TEEN;
-        } else if (ageLower === 'adult' || ageLower === 'adults') {
+        } else if (ageStr === 'adult' || ageStr === 'adults' || ageStr === 'a') {
           ageGroupEnum = AgeGroup.ADULT;
-        } else if (ageLower === 'senior' || ageLower === 'seniors' || ageLower === 'elderly') {
+        } else if (ageStr === 'senior' || ageStr === 'seniors' || ageStr === 'elderly' || ageStr === 's') {
           ageGroupEnum = AgeGroup.SENIOR;
-        } else if (ageLower !== 'n/a' && ageLower !== 'na' && ageLower !== '') {
+        } else {
+          // If it's not a recognized value, log a warning and skip it
           console.warn(`⚠️ Invalid ageGroup value "${ageValue}" for product ${barcodeStr}. Skipping ageGroup.`);
+          ageGroupEnum = undefined;
         }
       }
       
@@ -218,12 +254,14 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       }
 
       // Debug: Check what imageUrl value we're getting from CSV
-      if (imported < 3) {
-        console.log(`\n🔍 Debug product ${imported + 1}:`);
+      if (imported < 3 || (i < 20 && imported < 20)) {
+        console.log(`\n🔍 Debug product ${i + 1}:`);
         console.log(`   Raw keys: ${Object.keys(raw).join(', ')}`);
-        console.log(`   raw.imageUrl: ${raw.imageUrl}`);
-        console.log(`   raw['imageUrl']: ${(raw as any)['imageUrl']}`);
-        console.log(`   raw.image: ${(raw as any).image}`);
+        console.log(`   raw.gender: "${raw.gender}" (type: ${typeof raw.gender})`);
+        console.log(`   Mapped to: ${genderEnum}`);
+        console.log(`   raw.ageGroup: "${raw.ageGroup}" (type: ${typeof raw.ageGroup})`);
+        console.log(`   raw.age: "${raw.age}" (type: ${typeof raw.age})`);
+        console.log(`   Mapped ageGroup to: ${ageGroupEnum || 'null'}`);
       }
       
       // Access imageUrl - try multiple ways in case of column name issues
@@ -240,17 +278,29 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         continue;
       }
 
+      // Validate enum values before creating product object
+      if (!Object.values(Gender).includes(genderEnum)) {
+        console.error(`❌ Invalid gender enum value: ${genderEnum} for product ${barcodeStr}`);
+        errors++;
+        continue;
+      }
+      
+      if (ageGroupEnum && !Object.values(AgeGroup).includes(ageGroupEnum)) {
+        console.warn(`⚠️ Invalid ageGroup enum value: ${ageGroupEnum} for product ${barcodeStr}. Setting to null.`);
+        ageGroupEnum = undefined;
+      }
+
       const product: ProductData = {
         barcode: barcodeStr, // Already defined above
         name: raw.name || undefined,
         brandName: raw.brandName || undefined,
-        gender: genderEnum, // Required
+        gender: genderEnum, // Required field
         ageGroup: ageGroupEnum,
         category: raw.category || undefined,
         subCategory: raw.subCategory || undefined,
         productType: raw.productType || undefined,
         colorPalette: raw.colorPalette || undefined,
-        imageUrl: imageUrlValue, // Required
+        imageUrl: imageUrlValue, // Required field
         colors: (raw.colors || raw.color) ? String(raw.colors || raw.color).split(',').map(c => c.trim()).filter(Boolean) : [],
         allTags: raw.allTags || undefined,
       };
@@ -258,55 +308,63 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       // Insert into database
       console.log(`💾 Inserting product ${product.barcode} into database...`);
       
+      // Convert Prisma enum to database value (lowercase due to @map directive)
+      // Gender.MALE -> "male", Gender.FEMALE -> "female", Gender.OTHER -> "other"
+      const genderDbValue = product.gender === Gender.MALE ? 'male' : 
+                           product.gender === Gender.FEMALE ? 'female' : 'other';
+      
+      // AgeGroup enum values: TEEN -> "teen", ADULT -> "adult", SENIOR -> "senior"
+      const ageGroupDbValue = product.ageGroup === AgeGroup.TEEN ? 'teen' :
+                             product.ageGroup === AgeGroup.ADULT ? 'adult' :
+                             product.ageGroup === AgeGroup.SENIOR ? 'senior' : null;
+      
       try {
-        const created = await prisma.product.create({
-          data: {
-            barcode: product.barcode,
-            name: product.name,
-            brandName: product.brandName,
-            gender: product.gender,
-            ageGroup: product.ageGroup,
-            category: product.category,
-            subCategory: product.subCategory,
-            productType: product.productType,
-            colorPalette: product.colorPalette,
-            imageUrl: product.imageUrl,
-            colors: product.colors,
-            allTags: product.allTags,
-          },
-        });
+        // Use raw SQL to bypass Prisma enum validation issues with duplicate enum values
+        // This ensures we insert the correct lowercase values directly, working in both local and production
+        await prisma.$executeRawUnsafe(`
+          INSERT INTO "Product" (
+            "barcode", "name", "brandName", "gender", "ageGroup",
+            "category", "subCategory", "productType", "colorPalette",
+            "imageUrl", "colors", "allTags", "createdAt", "updatedAt"
+          ) VALUES (
+            $1::text,
+            $2::text,
+            $3::text,
+            $4::"Gender",
+            $5::"AgeGroup",
+            $6::text,
+            $7::text,
+            $8::text,
+            $9::text,
+            $10::text,
+            $11::text[],
+            $12::text,
+            NOW(),
+            NOW()
+          )
+        `, 
+          product.barcode,
+          product.name || null,
+          product.brandName || null,
+          genderDbValue,  // Always lowercase: 'male', 'female', or 'other'
+          ageGroupDbValue, // Always lowercase: 'teen', 'adult', 'senior', or null
+          product.category || null,
+          product.subCategory || null,
+          product.productType || null,
+          product.colorPalette || null,
+          product.imageUrl,
+          product.colors,
+          product.allTags || null
+        );
         imported++;
       } catch (createError: any) {
-        // If enum error, try again with null gender/ageGroup
-        if (createError?.message?.includes('enum') || createError?.code === 'P2022') {
-          console.warn(`⚠️ Enum error for product ${barcodeStr}. Retrying with null gender/ageGroup...`);
-          try {
-            await prisma.product.create({
-              data: {
-                barcode: product.barcode,
-                name: product.name,
-                brandName: product.brandName,
-                gender: product.gender, // Required, can't be null
-                ageGroup: product.ageGroup, // Required, can't be null
-                category: product.category,
-                subCategory: product.subCategory,
-                productType: product.productType,
-                colorPalette: product.colorPalette,
-                imageUrl: product.imageUrl,
-                colors: product.colors,
-                allTags: product.allTags,
-              },
-            });
-            imported++;
-            console.log(`✅ Imported with null gender/ageGroup: ${product.barcode}`);
-          } catch (retryError: any) {
-            // If still fails, it's a different error
-            throw retryError;
-          }
-        } else {
-          // Re-throw if it's not an enum error
-          throw createError;
-        }
+        // If error occurs, log details and re-throw (raw SQL should work, so this is unexpected)
+        console.error(`❌ Error inserting product ${barcodeStr}:`, createError?.message);
+        console.error(`   Error code: ${createError?.code}`);
+        console.error(`   Gender DB value: "${genderDbValue}"`);
+        console.error(`   AgeGroup DB value: "${ageGroupDbValue || 'null'}"`);
+        console.error(`   ImageUrl: "${product.imageUrl}"`);
+        throw createError;
       }
 
     } catch (err: any) {
