@@ -8,14 +8,20 @@
  *   npx ts-node scripts/importProducts.ts --file=products.json
  * 
  * Required CSV columns:
- *   - barcode: Product barcode/SKU
+ *   - barcode: Product barcode/SKU (required)
+ *   - gender: Gender (MALE, FEMALE, OTHER) - required
+ *   - ageGroup: Age group (TEEN, ADULT, SENIOR) - required
+ *   - imageUrl: Product image URL (required)
+ * 
+ * Optional CSV columns:
  *   - name: Product name
- *   - brand name: Brand name
- *   - gender: Gender (MALE, FEMALE, OTHER) - optional
- *   - age: Age group (TEEN, ADULT, SENIOR) - optional
- *   - description: Product description - optional
- *   - image: Product image URL
- *   - color: Comma-separated list of colors - optional
+ *   - brandName: Brand name
+ *   - category: Product category
+ *   - subCategory: Product subcategory
+ *   - productType: Product type
+ *   - colorPalette: Color palette
+ *   - color/colors: Comma-separated list of colors
+ *   - allTags: All tags as comma-separated string
  */
 
 import 'dotenv/config';
@@ -40,13 +46,17 @@ const prisma = new PrismaClient();
 
 interface ProductData {
   barcode: string;
-  name: string;
-  brandName: string;
-  gender?: Gender;
-  ageGroup?: AgeGroup;
-  description: string;
+  name?: string;
+  brandName?: string;
+  gender: Gender;
+  ageGroup: AgeGroup;
+  category?: string;
+  subCategory?: string;
+  productType?: string;
+  colorPalette?: string;
   imageUrl: string;
   colors: string[];
+  allTags?: string;
 }
 
 // Removed buildSearchDoc function as searchDoc is no longer in Product model.
@@ -57,15 +67,19 @@ interface ProductData {
 
 interface RawProduct {
   barcode: string;
-  name: string;
-  brandName: string; // Use camelCase to match CSV header
+  name?: string;
+  brandName?: string; // Use camelCase to match CSV header
   gender?: string;
   age?: string;
   ageGroup?: string; // CSV has ageGroup column
-  description?: string;
+  category?: string;
+  subCategory?: string;
+  productType?: string;
+  colorPalette?: string;
   imageUrl: string;
   color?: string; // This will be a comma-separated string
   colors?: string; // Alternative column name
+  allTags?: string;
 }
 
 async function importProducts(filePath: string, clearExisting: boolean = false) {
@@ -157,6 +171,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
 
       // Map gender and age to enums
       // Handle various input formats: "female", "FEMALE", "women", "male", "MALE", "men", etc.
+      // Gender is required in the new schema
       let genderEnum: Gender | undefined;
       if (raw.gender) {
         const genderLower = raw.gender.toLowerCase().trim();
@@ -170,6 +185,13 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         } else if (genderLower !== 'n/a' && genderLower !== 'na' && genderLower !== '') {
           console.warn(`⚠️ Invalid gender value "${raw.gender}" for product ${barcodeStr}. Skipping gender.`);
         }
+      }
+      
+      // Gender is required - skip product if missing
+      if (!genderEnum) {
+        console.warn(`⚠️ Missing required gender for product ${barcodeStr}. Skipping product.`);
+        skipped++;
+        continue;
       }
 
       let ageGroupEnum: AgeGroup | undefined;
@@ -186,6 +208,13 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         } else if (ageLower !== 'n/a' && ageLower !== 'na' && ageLower !== '') {
           console.warn(`⚠️ Invalid ageGroup value "${ageValue}" for product ${barcodeStr}. Skipping ageGroup.`);
         }
+      }
+      
+      // AgeGroup is required - skip product if missing
+      if (!ageGroupEnum) {
+        console.warn(`⚠️ Missing required ageGroup for product ${barcodeStr}. Skipping product.`);
+        skipped++;
+        continue;
       }
 
       // Debug: Check what imageUrl value we're getting from CSV
@@ -204,15 +233,26 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
                            (raw as any)['image'] ||
                            '';
       
+      // Validate required fields
+      if (!imageUrlValue || imageUrlValue.trim() === '') {
+        console.warn(`⚠️ Missing required imageUrl for product ${barcodeStr}. Skipping product.`);
+        skipped++;
+        continue;
+      }
+
       const product: ProductData = {
         barcode: barcodeStr, // Already defined above
-        name: raw.name,
-        brandName: raw.brandName, // Access using string literal
-        gender: genderEnum,
+        name: raw.name || undefined,
+        brandName: raw.brandName || undefined,
+        gender: genderEnum, // Required
         ageGroup: ageGroupEnum,
-        description: raw.description || '',
-        imageUrl: imageUrlValue,
+        category: raw.category || undefined,
+        subCategory: raw.subCategory || undefined,
+        productType: raw.productType || undefined,
+        colorPalette: raw.colorPalette || undefined,
+        imageUrl: imageUrlValue, // Required
         colors: (raw.colors || raw.color) ? String(raw.colors || raw.color).split(',').map(c => c.trim()).filter(Boolean) : [],
+        allTags: raw.allTags || undefined,
       };
 
       // Insert into database
@@ -226,10 +266,13 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
             brandName: product.brandName,
             gender: product.gender,
             ageGroup: product.ageGroup,
-            description: product.description,
+            category: product.category,
+            subCategory: product.subCategory,
+            productType: product.productType,
+            colorPalette: product.colorPalette,
             imageUrl: product.imageUrl,
             colors: product.colors,
-            isActive: true,
+            allTags: product.allTags,
           },
         });
         imported++;
@@ -243,12 +286,15 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
                 barcode: product.barcode,
                 name: product.name,
                 brandName: product.brandName,
-                gender: null, // Set to null if enum doesn't match
-                ageGroup: null, // Set to null if enum doesn't match
-                description: product.description,
+                gender: product.gender, // Required, can't be null
+                ageGroup: product.ageGroup, // Required, can't be null
+                category: product.category,
+                subCategory: product.subCategory,
+                productType: product.productType,
+                colorPalette: product.colorPalette,
                 imageUrl: product.imageUrl,
                 colors: product.colors,
-                isActive: true,
+                allTags: product.allTags,
               },
             });
             imported++;

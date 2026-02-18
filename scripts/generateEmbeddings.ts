@@ -26,20 +26,17 @@ const EMBEDDING_DIM = 1536;
 
 interface ProductData {
   id: string;
-  name: string;
-  brandName: string;
-  gender?: Gender | null;
-  ageGroup?: AgeGroup | null;
-  description?: string | null;
-  imageUrl?: string | null;
+  name: string | null;
+  brandName: string | null;
+  gender: Gender;
+  ageGroup: AgeGroup | null;
+  imageUrl: string;
   colors: string[];
   category?: string | null;
   subCategory?: string | null;
   productType?: string | null;
-  style?: string | null;
-  occasion?: string | null;
-  fit?: string | null;
-  season?: string | null;
+  colorPalette?: string | null;
+  allTags?: string | null;
 }
 
 /**
@@ -47,10 +44,14 @@ interface ProductData {
  * Includes all structured attributes to improve semantic search quality.
  */
 function buildSearchDoc(product: ProductData): string {
-  const parts: string[] = [
-    product.name,
-    `Brand: ${product.brandName}`,
-  ];
+  const parts: string[] = [];
+  
+  if (product.name) {
+    parts.push(product.name);
+  }
+  if (product.brandName) {
+    parts.push(`Brand: ${product.brandName}`);
+  }
 
   // Core structured attributes
   if (product.category) {
@@ -69,18 +70,9 @@ function buildSearchDoc(product: ProductData): string {
     parts.push(`Age Group: ${product.ageGroup}`);
   }
   
-  // Style and occasion attributes
-  if (product.style) {
-    parts.push(`Style: ${product.style}`);
-  }
-  if (product.occasion) {
-    parts.push(`Occasion: ${product.occasion}`);
-  }
-  if (product.fit) {
-    parts.push(`Fit: ${product.fit}`);
-  }
-  if (product.season) {
-    parts.push(`Season: ${product.season}`);
+  // Color palette
+  if (product.colorPalette) {
+    parts.push(`Color Palette: ${product.colorPalette}`);
   }
   
   // Colors
@@ -88,12 +80,9 @@ function buildSearchDoc(product: ProductData): string {
     parts.push(`Colors: ${product.colors.join(', ')}`);
   }
   
-  // Description (rich text) - Cleaned of HTML tags for embedding
-  if (product.description) {
-    const cleanedDescription = product.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-    if (cleanedDescription) {
-      parts.push(`Description: ${cleanedDescription}`);
-    }
+  // All tags
+  if (product.allTags) {
+    parts.push(`Tags: ${product.allTags}`);
   }
   
   return parts.join('. ');
@@ -119,20 +108,18 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
   let totalProducts: number;
   
   if (forceRegenerate) {
-    totalProducts = await prisma.product.count({ where: { isActive: true } });
+    totalProducts = await prisma.product.count();
   } else {
     // Use raw SQL to count products without embeddings or with wrong model
     const result = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
       `SELECT COUNT(*) as count FROM "Product" 
-       WHERE "isActive" = true 
-       AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)`,
-      EMBEDDING_MODEL
+       WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != '${EMBEDDING_MODEL}')`
     );
     totalProducts = Number(result[0].count);
   }
   
   // Check if there are any products at all
-  const totalProductsInDb = await prisma.product.count({ where: { isActive: true } });
+  const totalProductsInDb = await prisma.product.count();
   
   if (totalProductsInDb === 0) {
     console.log('⚠️  No products found in database!');
@@ -151,34 +138,32 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
   let processed = 0;
   let updated = 0;
   let errors = 0;
+  let batchNumber = 0;
 
-  // Process in batches
-  for (let offset = 0; offset < totalProducts; offset += BATCH_SIZE) {
+  // Process in batches - query for products without embeddings each time (not using OFFSET)
+  // This ensures we always get products that need embeddings, even as we update them
+  while (true) {
       // Use raw SQL to query products (embedding field is Unsupported type, can't filter with Prisma)
       let products: Array<{
         id: string;
-        name: string;
-        brandName: string;
-        gender: Gender | null;
+        name: string | null;
+        brandName: string | null;
+        gender: Gender;
         ageGroup: AgeGroup | null;
-        description: string | null;
-        imageUrl: string | null;
+        imageUrl: string;
         colors: string[];
         category: string | null;
         subCategory: string | null;
         productType: string | null;
-        style: string | null;
-        occasion: string | null;
-        fit: string | null;
-        season: string | null;
+        colorPalette: string | null;
+        allTags: string | null;
       }>;
 
       if (forceRegenerate) {
-        // Get all active products using Prisma
+        // Get all products using Prisma
         products = await prisma.product.findMany({
-          where: { isActive: true },
           take: BATCH_SIZE,
-          skip: offset,
+          skip: processed,
           orderBy: { createdAt: 'desc' },
           select: {
             id: true,
@@ -186,39 +171,35 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
             brandName: true,
             gender: true,
             ageGroup: true,
-            description: true,
             imageUrl: true,
             colors: true,
             category: true,
             subCategory: true,
             productType: true,
-            style: true,
-            occasion: true,
-            fit: true,
-            season: true,
+            colorPalette: true,
+            allTags: true,
           },
         });
       } else {
         // Use raw SQL to get products without embeddings or with wrong model
+        // Query fresh each time (not using OFFSET) so we always get products that need embeddings
         products = await prisma.$queryRawUnsafe<typeof products>(
-                `SELECT id, name, "brandName", gender, "ageGroup", description, "imageUrl", colors,
-                        category, "subCategory", "productType", style, occasion, fit, season
+                `SELECT id, name, "brandName", gender, "ageGroup", "imageUrl", colors,
+                        category, "subCategory", "productType", "colorPalette", "allTags"
                  FROM "Product"
-                 WHERE "isActive" = true 
-                 AND ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+                 WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != '${EMBEDDING_MODEL}')
                  ORDER BY "createdAt" DESC
-                 LIMIT $2 OFFSET $3`,
-          EMBEDDING_MODEL,
-          BATCH_SIZE,
-          offset
+                 LIMIT ${BATCH_SIZE}`
         );
       }
 
     if (products.length === 0) {
       break;
     }
+    
+    batchNumber++;
 
-    console.log(`\n🔄 Processing batch ${Math.floor(offset / BATCH_SIZE) + 1}/${Math.ceil(totalProducts / BATCH_SIZE)} (${products.length} products)`);
+    console.log(`\n🔄 Processing batch ${batchNumber} (${products.length} products)`);
 
       // Build search documents - ensure all products have valid search docs
       const searchDocs: string[] = [];
@@ -274,10 +255,10 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 
           // Update embedding using raw SQL (Prisma doesn't support vector type directly)
           const vectorString = `[${embedding.join(',')}]`;
+          // Escape single quotes in product.id for SQL safety
+          const escapedId = product.id.replace(/'/g, "''");
           await prisma.$executeRawUnsafe(
-            `UPDATE "Product" SET embedding = $1::vector WHERE id = $2`,
-            vectorString,
-            product.id
+            `UPDATE "Product" SET embedding = '${vectorString}'::vector WHERE id = '${escapedId}'`
           );
 
           updated++;
@@ -291,8 +272,15 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
       console.log(`✅ Batch complete: ${updated} updated, ${errors} errors`);
 
       // Rate limiting: wait 1 second between batches to avoid API rate limits
-      if (offset + BATCH_SIZE < totalProducts) {
-        console.log('⏳ Waiting 1 second for rate limiting...');
+      // Check if there are more products to process
+      const remainingCount = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*) as count FROM "Product" 
+         WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != '${EMBEDDING_MODEL}')`
+      );
+      const remaining = Number(remainingCount[0]?.count || 0);
+      
+      if (remaining > 0) {
+        console.log(`⏳ Waiting 1 second for rate limiting... (${remaining} products remaining)`);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } catch (err: any) {
@@ -326,7 +314,7 @@ async function main() {
   const forceRegenerate = process.argv.includes('--force');
   
   if (forceRegenerate) {
-    console.log('⚠️  Force mode enabled: Will regenerate embeddings for ALL active products\n');
+    console.log('⚠️  Force mode enabled: Will regenerate embeddings for ALL products\n');
   }
 
   console.log(`🌍 Environment: ${isProduction ? 'PRODUCTION' : 'LOCAL (test mode)'}\n`);

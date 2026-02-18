@@ -1,7 +1,6 @@
 import { PendingType } from '@prisma/client';
 import { END, START, StateGraph } from '../lib/graph';
 import {
-  askUserInfo,
   colorAnalysis,
   dailyFact,
   handleFashionCharades,
@@ -14,7 +13,6 @@ import {
   handleStyling,
   handleThisOrThat,
   ingestMessage,
-  recordUserInfo,
   routeGeneral,
   routeIntent,
   routeStyleStudio,
@@ -26,10 +24,8 @@ import { GraphState } from './state';
 export function buildAgentGraph() {
   const graph = new StateGraph<GraphState>()
     .addNode('ingestMessage', ingestMessage)
-    .addNode('recordUserInfo', recordUserInfo)
     .addNode('routeIntent', routeIntent)
     .addNode('routeGeneral', routeGeneral)
-    .addNode('askUserInfo', askUserInfo)
     .addNode('handleStyling', handleStyling)
     .addNode('handleFeedback', handleFeedback)
     .addNode('vibeCheck', vibeCheck)
@@ -49,8 +45,6 @@ export function buildAgentGraph() {
       'ingestMessage',
       (s: GraphState) => {
         switch (s.pending) {
-          case PendingType.ASK_USER_INFO:
-            return 'recordUserInfo';
           case PendingType.FEEDBACK:
             return 'handleFeedback';
           case PendingType.SAVE_COLOR_ANALYSIS:
@@ -62,18 +56,15 @@ export function buildAgentGraph() {
         }
       },
       {
-        recordUserInfo: 'recordUserInfo',
         handleFeedback: 'handleFeedback',
         handleSaveColorAnalysis: 'handleSaveColorAnalysis',
         handleProductRecommendationConfirmation: 'handleProductRecommendationConfirmation',
         routeIntent: 'routeIntent',
       },
     )
-    .addEdge('recordUserInfo', 'routeIntent')
     .addConditionalEdges(
       'routeIntent',
       (s: GraphState) => {
-        if (s.missingProfileField && s.intent !== 'styling' && s.intent !== 'style_studio') return 'askUserInfo';
         switch (s.intent) {
           case 'skin_lab':
             return 'handleSkinLab';
@@ -86,7 +77,6 @@ export function buildAgentGraph() {
         }
       },
       {
-        askUserInfo: 'askUserInfo',
         general: 'routeGeneral',
         vibe_check: 'vibeCheck',
         color_analysis: 'colorAnalysis',
@@ -120,7 +110,6 @@ export function buildAgentGraph() {
       },
     )
     .addEdge('vibeCheck', 'sendReply')
-    .addEdge('askUserInfo', 'sendReply')
     .addEdge('handleStyleStudio', 'sendReply')
     .addEdge('handleStyling', 'sendReply')
     .addEdge('colorAnalysis', 'sendReply')
