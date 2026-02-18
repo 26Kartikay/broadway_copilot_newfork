@@ -228,15 +228,6 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         }
       }
 
-      // Debug: Check what imageUrl value we're getting from CSV
-      if (imported < 3) {
-        console.log(`\n🔍 Debug product ${imported + 1}:`);
-        console.log(`   Raw keys: ${Object.keys(raw).join(', ')}`);
-        console.log(`   raw.imageUrl: ${raw.imageUrl}`);
-        console.log(`   raw['imageUrl']: ${(raw as any)['imageUrl']}`);
-        console.log(`   raw.image: ${(raw as any).image}`);
-      }
-      
       // Access imageUrl - try multiple ways in case of column name issues
       const imageUrlValue = raw.imageUrl || 
                            (raw as any)['imageUrl'] || 
@@ -259,26 +250,6 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         allTags: raw.allTags || undefined,
       };
 
-      // DEBUG: Log all values before insert
-      console.log(`\n🔍 DEBUG Product ${barcodeStr}:`);
-      console.log(`   📥 CSV Input:`);
-      console.log(`      raw.gender: "${raw.gender}" (type: ${typeof raw.gender})`);
-      console.log(`      raw.ageGroup: "${raw.ageGroup}" (type: ${typeof raw.ageGroup})`);
-      console.log(`      raw.age: "${raw.age}" (type: ${typeof raw.age})`);
-      console.log(`   🔄 Mapped Values:`);
-      console.log(`      genderEnum: ${genderEnum} (${typeof genderEnum})`);
-      console.log(`      ageGroupEnum: ${ageGroupEnum} (${typeof ageGroupEnum})`);
-      console.log(`   📤 Product Object:`);
-      console.log(`      product.gender: ${product.gender} (${typeof product.gender})`);
-      console.log(`      product.ageGroup: ${product.ageGroup} (${typeof product.ageGroup})`);
-      console.log(`   🗄️  Prisma Enum Values:`);
-      console.log(`      Gender.MALE: ${Gender.MALE}`);
-      console.log(`      Gender.FEMALE: ${Gender.FEMALE}`);
-      console.log(`      Gender.OTHER: ${Gender.OTHER}`);
-      console.log(`      AgeGroup.TEEN: ${AgeGroup.TEEN}`);
-      console.log(`      AgeGroup.ADULT: ${AgeGroup.ADULT}`);
-      console.log(`      AgeGroup.SENIOR: ${AgeGroup.SENIOR}`);
-
       // Insert into database
       console.log(`💾 Inserting product ${product.barcode} into database...`);
       
@@ -300,18 +271,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
           } as any,
         });
         imported++;
-        console.log(`✅ Successfully imported: ${product.barcode}`);
       } catch (createError: any) {
-        // DEBUG: Log full error details
-        console.error(`\n❌ ERROR Details for ${barcodeStr}:`);
-        console.error(`   Error Code: ${createError?.code}`);
-        console.error(`   Error Message: ${createError?.message}`);
-        console.error(`   Error Meta:`, JSON.stringify(createError?.meta, null, 2));
-        console.error(`   Stack Trace:`, createError?.stack?.split('\n').slice(0, 5).join('\n'));
-        console.error(`   Values Being Inserted:`);
-        console.error(`      gender: ${product.gender} (${typeof product.gender})`);
-        console.error(`      ageGroup: ${product.ageGroup} (${typeof product.ageGroup})`);
-        
         // If enum error, use raw SQL with explicit enum casting
         if (createError?.message?.includes('enum') || createError?.message?.includes('invalid input value') || createError?.code === 'P2022' || createError?.code === 'P2011') {
           console.warn(`⚠️ Enum/constraint error detected. Using raw SQL with explicit enum casting...`);
@@ -329,8 +289,6 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
             } else if (product.ageGroup === AgeGroup.SENIOR) {
               ageGroupDbValue = 'SENIOR';
             }
-            
-            console.log(`   🔧 Using raw SQL with values: gender="${genderDbValue}", ageGroup="${ageGroupDbValue}"`);
             
             // Use raw SQL to bypass Prisma enum validation
             await prisma.$executeRawUnsafe(`
@@ -369,13 +327,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
               product.allTags || null
             );
             imported++;
-            console.log(`✅ Imported using raw SQL: ${product.barcode}`);
           } catch (retryError: any) {
-            console.error(`❌ Raw SQL also failed for ${barcodeStr}:`);
-            console.error(`   Retry Error Code: ${retryError?.code}`);
-            console.error(`   Retry Error Message: ${retryError?.message}`);
-            console.error(`   Retry Error Meta:`, JSON.stringify(retryError?.meta, null, 2));
-            
             // If uppercase fails, try lowercase
             if (retryError?.message?.includes('invalid input value')) {
               console.warn(`   🔄 Trying lowercase enum values...`);
@@ -422,9 +374,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
                   product.allTags || null
                 );
                 imported++;
-                console.log(`✅ Imported using raw SQL (lowercase): ${product.barcode}`);
               } catch (finalError: any) {
-                console.error(`❌ All attempts failed for ${barcodeStr}`);
                 throw finalError;
               }
             } else {
