@@ -575,6 +575,24 @@ export function searchProducts(): Tool {
       }
 
       try {
+        // Diagnostic: Check database state
+        const [totalProducts, productsWithEmbeddingsResult] = await Promise.all([
+          prisma.product.count(),
+          prisma.$queryRawUnsafe<[{ count: bigint }]>(
+            'SELECT COUNT(*) as count FROM "Product" WHERE "embedding" IS NOT NULL'
+          )
+        ]);
+        const productsWithEmbeddings = Number(productsWithEmbeddingsResult[0].count);
+        
+        logger.info({ 
+          query, 
+          filters,
+          limit,
+          totalProducts, 
+          productsWithEmbeddings,
+          embeddingsPercentage: totalProducts > 0 ? ((productsWithEmbeddings / totalProducts) * 100).toFixed(2) : '0'
+        }, 'Starting product search - database state check');
+
         // Step 1: Query Understanding - Extract structured attributes from natural language
         const queryAttrs = await understandQuery(query, {
           gender: filters.gender,
@@ -594,6 +612,12 @@ export function searchProducts(): Tool {
           category: queryAttrs.category || null,
           subCategory: queryAttrs.subCategory || null,
         };
+        
+        logger.debug({ 
+          query, 
+          intent,
+          queryAttrs 
+        }, 'Query understanding completed');
 
         // Step 2: Generate enhanced query embedding with context
         // Include occasion, color palette, category, subCategory, gender, colors, and features context
@@ -663,9 +687,27 @@ export function searchProducts(): Tool {
         enhancedQueryParts.push('include variety of clothing and footwear products');
         
         const enhancedQuery = enhancedQueryParts.join(' ');
-        logger.info({ enhancedQuery }, 'Embedding enhanced product search query');
+        logger.info({ 
+          query, 
+          enhancedQuery, 
+          intent: {
+            gender: intent.gender,
+            ageGroup: intent.ageGroup,
+            color: intent.color,
+            palette: intent.palette,
+            category: intent.category,
+            subCategory: intent.subCategory,
+            occasion: intent.occasion,
+          }
+        }, 'Generated enhanced query for embedding');
+        
         const embeddedQuery = await embeddingModel.embedQuery(enhancedQuery);
         const vector = JSON.stringify(embeddedQuery);
+        logger.debug({ 
+          query, 
+          vectorLength: embeddedQuery.length,
+          vectorPreview: embeddedQuery.slice(0, 5) 
+        }, 'Generated query embedding');
 
         // Helper function to convert enum name to database value
         // Prisma maps: MALE -> "male", FEMALE -> "female", OTHER -> "other"
@@ -736,13 +778,34 @@ export function searchProducts(): Tool {
           LIMIT 1000
         `;
 
-        // Log removed for verbosity reduction
+        logger.info({ 
+          query, 
+          whereClause, 
+          genderDbValue, 
+          ageGroupDbValue,
+          normalizedColor,
+          normalizedPalette,
+          queryPreview: vectorRecallQuery.substring(0, 200) 
+        }, 'Executing vector search query');
 
         const vectorCandidates = await prisma.$queryRawUnsafe<any[]>(
           vectorRecallQuery,
           ...baseParams,
           vector,
         );
+        
+        logger.info({ 
+          query, 
+          vectorCandidatesCount: vectorCandidates.length,
+          topCandidates: vectorCandidates.slice(0, 3).map(c => ({
+            barcode: c.barcode,
+            name: c.name,
+            similarity: c.similarity,
+            distance: c.distance,
+            gender: c.gender,
+            ageGroup: c.ageGroup
+          }))
+        }, 'Vector search results');
         
         // Fallback: if we have no vector candidates (e.g. embeddings not generated yet),
         // recall recent products so we can still recommend items (soft reranking will still apply).
@@ -759,6 +822,14 @@ export function searchProducts(): Tool {
                 ORDER BY "createdAt" DESC
                 LIMIT 1000
               `);
+
+        if (vectorCandidates.length === 0) {
+          logger.warn({ 
+            query, 
+            recallCandidatesCount: recallCandidates.length,
+            fallbackUsed: true 
+          }, 'Vector search returned 0 results, using fallback');
+        }
 
         // Map to ProductSemanticRow - handle both camelCase and lowercase column names
         // PostgreSQL with $queryRawUnsafe returns column names as-is (case-sensitive when quoted)
@@ -779,11 +850,21 @@ export function searchProducts(): Tool {
           };
         });
 
-        // Log removed for verbosity reduction
+        logger.debug({ 
+          query, 
+          mappedCandidatesCount: mappedCandidates.length 
+        }, 'Mapped vector candidates');
 
         // If vector search returns 0, return empty array (no text fallback)
         if (vectorCandidates.length === 0) {
-          logger.debug({ query }, 'Vector search returned 0 results');
+          logger.warn({ 
+            query, 
+            filters, 
+            intent,
+            whereClause,
+            totalProducts,
+            productsWithEmbeddings
+          }, 'Vector search returned 0 results - returning empty array');
           return [];
         }
 
@@ -939,9 +1020,22 @@ export function searchProducts(): Tool {
         });
 
         // Sort by rerank score and filter valid products
+        const sortedCandidates = rerankedCandidates.sort((a, b) => b.rerankScore - a.rerankScore);
+        
+        logger.debug({ 
+          query, 
+          rerankedCount: sortedCandidates.length,
+          topScores: sortedCandidates.slice(0, 5).map(c => ({
+            barcode: c.barcode,
+            name: c.name,
+            score: c.rerankScore,
+            similarity: c.similarity
+          }))
+        }, 'Reranked candidates');
+        
         // Simple approach: return top N products by rerank score
         // The enhanced embedding query with context handles all requirements
-        const validCandidates = rerankedCandidates
+        const validCandidates = sortedCandidates
           .filter((result) => {
             // Filter out products with empty or invalid imageUrls
             const imageUrl = result.imageUrl;
@@ -952,7 +1046,6 @@ export function searchProducts(): Tool {
                     imageUrl.startsWith('https://') || 
                     imageUrl.startsWith('data:'));
           })
-          .sort((a, b) => b.rerankScore - a.rerankScore)
           .slice(0, limit); // Take top N products by rerank score
 
         // Map to final result format with barcode
@@ -975,15 +1068,26 @@ export function searchProducts(): Tool {
           };
         });
 
-        // Minimal log - only essential info
-        logger.debug(
-          { query, resultCount: mappedResults.length },
-          'Product search completed',
-        );
+        logger.info({ 
+          query, 
+          filters,
+          intent,
+          vectorCandidatesCount: vectorCandidates.length,
+          finalResultCount: mappedResults.length,
+          results: mappedResults.map(r => ({ barcode: r.barcode, name: r.name }))
+        }, 'Product search completed successfully');
 
         return mappedResults;
       } catch (err: unknown) {
-        logger.error({ query, filters, err: (err as Error)?.message }, 'Failed to search products');
+        logger.error({ 
+          query, 
+          filters, 
+          err: err instanceof Error ? {
+            message: err.message,
+            stack: err.stack,
+            name: err.name
+          } : String(err)
+        }, 'Failed to search products');
         throw new InternalServerError('Failed to search products', {
           cause: err,
         });
