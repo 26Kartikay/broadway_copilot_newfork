@@ -668,10 +668,10 @@ export function searchProducts(): Tool {
         const vector = JSON.stringify(embeddedQuery);
 
         // Helper function to convert enum name to database value
-        // Prisma maps: MALE -> "male", FEMALE -> "female", OTHER -> "other"
+        // Database stores: MALE, FEMALE, OTHER (uppercase)
         const enumToDbValue = (enumValue: string | null): string | null => {
           if (!enumValue) return null;
-          return enumValue.toLowerCase();
+          return enumValue.toUpperCase();
         };
 
         // Convert gender enum to database value for querying
@@ -710,14 +710,14 @@ export function searchProducts(): Tool {
 
         // Apply gender filter as hard constraint to ensure gender-appropriate recommendations
         if (genderDbValue) {
-          if (genderDbValue === 'male') {
+          if (genderDbValue === 'MALE') {
             // For male users: include only male or null (exclude female and other)
-            baseConditions.push(`(gender = 'male' OR gender IS NULL)`);
-          } else if (genderDbValue === 'female') {
+            baseConditions.push(`(gender = 'MALE' OR gender IS NULL)`);
+          } else if (genderDbValue === 'FEMALE') {
             // For female users: include female, unisex, other, or null (exclude male)
-            baseConditions.push(`(gender = 'female' OR gender IS NULL OR gender = 'other')`);
+            baseConditions.push(`(gender = 'FEMALE' OR gender IS NULL OR gender = 'OTHER')`);
           }
-          // Note: 'other' gender from filters will allow all products (no filter applied)
+          // Note: 'OTHER' gender from filters will allow all products (no filter applied)
         }
         
         const whereClause = baseConditions.join(' AND ');
@@ -782,7 +782,7 @@ export function searchProducts(): Tool {
             const candidateGenderDb = enumToDbValue(candidate.gender);
             if (candidateGenderDb === genderDbValue) {
               score += 0.3; // Strong boost for gender match
-            } else if (candidateGenderDb === null || candidateGenderDb === 'other' || candidateGenderDb === 'unisex') {
+            } else if (candidateGenderDb === null || candidateGenderDb === 'OTHER' || candidateGenderDb === 'UNISEX') {
               score += 0.1; // Small boost for unisex/other products
             }
             // No penalty for mismatch - we want to show results even if not perfect match
