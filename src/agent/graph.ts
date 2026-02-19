@@ -4,6 +4,7 @@ import {
   colorAnalysis,
   dailyFact,
   fetchColorAnalysisOnIntent,
+  generateFollowUp,
   handleFashionCharades,
   handleFeedback,
   handleGeneral,
@@ -35,6 +36,7 @@ export function buildAgentGraph() {
     .addNode('fetchColorAnalysisOnIntent', fetchColorAnalysisOnIntent)
     .addNode('handleProductRecommendationConfirmation', handleProductRecommendationConfirmation)
     .addNode('handleGeneral', handleGeneral)
+    .addNode('generateFollowUp', generateFollowUp)
     .addNode('sendReply', sendReply)
     .addNode('routeStyleStudio', routeStyleStudio)
     .addNode('handleStyleStudio', handleStyleStudio)
@@ -112,17 +114,20 @@ export function buildAgentGraph() {
         routeGeneral: 'routeGeneral',
       },
     )
-    .addEdge('vibeCheck', 'sendReply')
-    .addEdge('handleStyleStudio', 'sendReply')
-    .addEdge('handleStyling', 'sendReply')
-    .addEdge('colorAnalysis', 'sendReply')
-    .addEdge('handleGeneral', 'sendReply')
-    .addEdge('handleFeedback', 'sendReply')
-    .addEdge('handleFashionCharades', 'sendReply')
-    .addEdge('handleSkinLab', 'sendReply')
-    .addEdge('handleThisOrThat', 'sendReply')
-    .addEdge('handleSaveColorAnalysis', 'sendReply')
-    .addEdge('handleProductRecommendationConfirmation', 'sendReply')
+    // Route all handler nodes through generateFollowUp before sendReply
+    .addEdge('vibeCheck', 'generateFollowUp')
+    .addEdge('handleStyleStudio', 'generateFollowUp')
+    .addEdge('handleStyling', 'generateFollowUp')
+    .addEdge('colorAnalysis', 'generateFollowUp')
+    .addEdge('handleGeneral', 'generateFollowUp')
+    .addEdge('handleFeedback', 'generateFollowUp')
+    .addEdge('handleFashionCharades', 'generateFollowUp')
+    .addEdge('handleSkinLab', 'generateFollowUp')
+    .addEdge('handleThisOrThat', 'generateFollowUp')
+    .addEdge('handleSaveColorAnalysis', 'generateFollowUp')
+    .addEdge('handleProductRecommendationConfirmation', 'generateFollowUp')
+    // Then route from generateFollowUp to sendReply
+    .addEdge('generateFollowUp', 'sendReply')
     .addEdge('sendReply', END);
 
   return graph.compile();
