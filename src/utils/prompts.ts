@@ -4,6 +4,7 @@ import path from 'path';
 import { User } from '@prisma/client'; // Import User type
 
 import { InternalServerError } from './errors';
+import { logger } from './logger';
 
 let personaContent: string | null = null; // Cache for persona.txt content
 
@@ -38,9 +39,25 @@ export async function loadPrompt(
     // Replace placeholders with user data
     let personalizedPersona = personaContent;
     if (user) {
+      // Use confirmed gender first, then fall back to inferred gender
+      const userGender = user.confirmedGender || user.inferredGender;
+      const genderSource = user.confirmedGender ? 'confirmed' : user.inferredGender ? 'inferred' : 'none';
+      
+      // Log gender information
+      logger.debug(
+        {
+          userId: user.id,
+          confirmedGender: user.confirmedGender,
+          inferredGender: user.inferredGender,
+          genderUsed: userGender,
+          genderSource,
+        },
+        'User gender for prompt',
+      );
+
       personalizedPersona = personalizedPersona
         .replace('{USER_NAME}', user.profileName || 'there')
-        .replace('{USER_GENDER}', user.confirmedGender || 'not specified')
+        .replace('{USER_GENDER}', userGender || 'not specified')
         .replace('{USER_AGE_GROUP}', user.confirmedAgeGroup || 'not specified')
         .replace('{USER_FIT_PREFERENCE}', user.fitPreference || 'not specified');
     } else {

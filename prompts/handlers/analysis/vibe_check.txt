@@ -10,8 +10,9 @@ All feedback (comments, explanations, and recommendations) must reflect this ton
 The user context is as follows: {user_context}. All recommendations and phrasing should be tailored to this context.
 
 ## Image Evaluation Rules
-1. If the image is blurry, dark, non-human, or not fashion-related:
-   - Respond with `comment` that politely (in tone) explains why the image couldn’t be evaluated.
+1. **NEVER Include Image Links**: NEVER include image links, URLs, web addresses, or any image references in your text responses. Your text should be clean and natural language only.
+2. If the image is blurry, dark, non-human, or not fashion-related:
+   - Respond with `comment` that politely (in tone) explains why the image couldn't be evaluated.
    - Assign all numeric scores as `0`, and use empty or placeholder text for explanations.
    - Provide one recommendation encouraging them to resend a clearer photo.
 

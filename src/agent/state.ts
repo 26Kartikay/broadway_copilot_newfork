@@ -90,6 +90,9 @@ export interface GraphState {
       }
     | undefined;
 
+  /** Fetched color analysis data for use in product recommendations. */
+  fetchedColorAnalysis?: any | undefined;
+
   /** Replies returned in the HTTP response */
   httpResponse?: Replies | undefined;
 

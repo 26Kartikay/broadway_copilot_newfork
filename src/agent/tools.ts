@@ -1,7 +1,7 @@
 import { WardrobeItem, WardrobeItemCategory } from '@prisma/client';
 import { z } from 'zod';
 
-import { ChatOpenAI, OpenAIEmbeddings, SystemMessage, Tool, UserMessage } from '../lib/ai';
+import { ChatGroq, ChatOpenAI, OpenAIEmbeddings, SystemMessage, Tool, UserMessage } from '../lib/ai';
 import type { TraceBuffer } from '../agent/tracing';
 import { createId } from '@paralleldrive/cuid2';
 
@@ -321,7 +321,6 @@ export function fetchColorAnalysis(userId: string): Tool {
           where: { userId },
           orderBy: { createdAt: 'desc' },
         });
-        logger.debug({ userId, result }, 'Raw fetchColorAnalysis result');
         if (!result) {
           return 'No color analysis found for the user.';
         }
@@ -436,7 +435,7 @@ async function understandQuery(query: string, existingFilters: { gender?: string
       subCategory: z.string().nullable().optional().describe('Sub category mentioned (e.g., "Tops", "Bottoms", "Footwear", "Sneakers", "Hoodies", "Shirts")'),
     });
 
-    const model = new ChatOpenAI({ model: 'gpt-4o-mini' });
+    const model = new ChatGroq({ model: 'llama-3.3-70b-versatile' });
     const structuredModel = model.withStructuredOutput(querySchema);
 
     // Create minimal trace buffer for LLM call
@@ -671,7 +670,7 @@ export function searchProducts(): Tool {
         // Database stores: MALE, FEMALE, OTHER (uppercase)
         const enumToDbValue = (enumValue: string | null): string | null => {
           if (!enumValue) return null;
-          return enumValue.toUpperCase();
+          return enumValue.toLowerCase();
         };
 
         // Convert gender enum to database value for querying
@@ -943,9 +942,6 @@ export function searchProducts(): Tool {
           // Handle PostgreSQL column name case sensitivity
           const imageUrl = result.imageUrl || result.imageurl || result['imageUrl'] || '';
           const barcode = result.barcode || '';
-          
-          // Log barcode of product being returned
-          logger.debug({ barcode, productName: result.name }, 'Returning product');
           
           return {
             name: result.name,

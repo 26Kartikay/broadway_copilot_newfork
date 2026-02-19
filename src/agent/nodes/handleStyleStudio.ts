@@ -128,40 +128,20 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
     // Extract products directly from searchProducts tool results
     const productResults = toolResults.filter((tr) => tr.name === 'searchProducts');
 
-    logger.debug(
-      { userId, subIntent, productResultsCount: productResults.length, productResults },
-      'Extracting products from tool results',
-    );
-
     const allProducts: Array<{
       name: string;
       brand: string;
       imageUrl: string;
       description?: string;
       colors?: string[];
+      barcode?: string;
     }> = [];
 
     for (const toolResult of productResults) {
-      logger.debug(
-        {
-          userId,
-          toolName: toolResult.name,
-          resultType: typeof toolResult.result,
-          isArray: Array.isArray(toolResult.result),
-          resultLength: Array.isArray(toolResult.result) ? toolResult.result.length : 'N/A',
-          resultPreview:
-            Array.isArray(toolResult.result) && toolResult.result.length > 0
-              ? toolResult.result[0]
-              : toolResult.result,
-        },
-        'Processing tool result',
-      );
-
       // Tool results are returned as arrays of product objects
       if (Array.isArray(toolResult.result)) {
         // Skip empty arrays
         if (toolResult.result.length === 0) {
-          logger.debug({ userId }, 'Tool returned empty array, skipping');
           continue;
         }
 
@@ -200,19 +180,26 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
             imageUrl: p.imageUrl,
             description: p.description,
             colors: p.colors,
+            barcode: p.barcode,
           })),
-        );
-
-        logger.debug(
-          { userId, productsFound: products.length, totalProducts: allProducts.length },
-          'Products extracted from array result',
         );
       } else if (typeof toolResult.result === 'string') {
         // If tool returned error message string, skip it
         try {
           const parsed = JSON.parse(toolResult.result);
           if (Array.isArray(parsed)) {
-            allProducts.push(...parsed.filter((p: any) => p.name && p.brand && p.imageUrl));
+            allProducts.push(
+              ...parsed
+                .filter((p: any) => p.name && p.brand && p.imageUrl)
+                .map((p: any) => ({
+                  name: p.name,
+                  brand: p.brand,
+                  imageUrl: p.imageUrl,
+                  description: p.description,
+                  colors: p.colors,
+                  barcode: p.barcode,
+                })),
+            );
           }
         } catch {
           // Not JSON, skip
@@ -227,9 +214,18 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
 
     // Add product card if we have valid products (limit to 10)
     if (allProducts.length > 0) {
-      // Use name+brand as unique identifier for deduplication
+      // Use barcode as primary unique identifier for deduplication (most reliable)
+      // Fall back to name+brand+imageUrl if barcode is not available
       const uniqueProducts = Array.from(
-        new Map(allProducts.map((p) => [`${p.name}|${p.brand}`, p])).values(),
+        new Map(
+          allProducts.map((p) => {
+            // Use barcode if available, otherwise use name+brand+imageUrl
+            const key = p.barcode && p.barcode.trim() !== ''
+              ? p.barcode
+              : `${p.name}|${p.brand}|${p.imageUrl}`;
+            return [key, p];
+          }),
+        ).values(),
       ).slice(0, 10);
 
       // Filter out any products with invalid imageUrls one more time (safety check)

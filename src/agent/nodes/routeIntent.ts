@@ -274,6 +274,19 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   }
 
   // ------------------------------
+  // 4.5️⃣ Handle text messages when waiting for image (allow cancellation/other intents)
+  // ------------------------------
+  // If user is in COLOR_ANALYSIS_IMAGE pending but sends text (no image),
+  // route to general to handle the message and allow cancellation/other actions
+  // This prevents infinite loops of asking for images
+  if (pending === PendingType.COLOR_ANALYSIS_IMAGE && imageCount === 0) {
+    logger.debug({ userId, userMessage }, 'User in COLOR_ANALYSIS_IMAGE pending but sent text, routing to general to allow cancellation');
+    // Route to general so the user can cancel or do something else
+    // The general handler can check if they want to cancel color analysis
+    return { ...state, intent: 'general', missingProfileField: null };
+  }
+
+  // ------------------------------
   // 5️⃣ Fallback to LLM routing
   // ------------------------------
   const now = Date.now();
@@ -299,6 +312,13 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeIntent');
 
     let { intent, missingProfileField } = response;
+    
+    // Prevent routing back to color_analysis if user is in COLOR_ANALYSIS_IMAGE pending and sent text
+    // This prevents the infinite loop
+    if (pending === PendingType.COLOR_ANALYSIS_IMAGE && intent === 'color_analysis' && imageCount === 0) {
+      logger.debug({ userId }, 'Preventing color_analysis routing loop, routing to general instead');
+      intent = 'general';
+    }
 
 
 

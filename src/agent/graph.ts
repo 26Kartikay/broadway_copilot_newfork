@@ -3,6 +3,7 @@ import { END, START, StateGraph } from '../lib/graph';
 import {
   colorAnalysis,
   dailyFact,
+  fetchColorAnalysisOnIntent,
   handleFashionCharades,
   handleFeedback,
   handleGeneral,
@@ -31,6 +32,7 @@ export function buildAgentGraph() {
     .addNode('vibeCheck', vibeCheck)
     .addNode('colorAnalysis', colorAnalysis)
     .addNode('handleSaveColorAnalysis', handleSaveColorAnalysis)
+    .addNode('fetchColorAnalysisOnIntent', fetchColorAnalysisOnIntent)
     .addNode('handleProductRecommendationConfirmation', handleProductRecommendationConfirmation)
     .addNode('handleGeneral', handleGeneral)
     .addNode('sendReply', sendReply)
@@ -50,7 +52,7 @@ export function buildAgentGraph() {
           case PendingType.SAVE_COLOR_ANALYSIS:
             return 'handleSaveColorAnalysis';
           case PendingType.CONFIRM_PRODUCT_RECOMMENDATION:
-            return 'handleProductRecommendationConfirmation';
+            return 'fetchColorAnalysisOnIntent';
           default:
             return 'routeIntent';
         }
@@ -58,10 +60,11 @@ export function buildAgentGraph() {
       {
         handleFeedback: 'handleFeedback',
         handleSaveColorAnalysis: 'handleSaveColorAnalysis',
-        handleProductRecommendationConfirmation: 'handleProductRecommendationConfirmation',
+        fetchColorAnalysisOnIntent: 'fetchColorAnalysisOnIntent',
         routeIntent: 'routeIntent',
       },
     )
+    .addEdge('fetchColorAnalysisOnIntent', 'handleProductRecommendationConfirmation')
     .addConditionalEdges(
       'routeIntent',
       (s: GraphState) => {

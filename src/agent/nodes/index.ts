@@ -1,6 +1,7 @@
 export * from './askUserInfo';
 export * from './colorAnalysis';
 export * from './dailyFact';
+export * from './fetchColorAnalysisOnIntent';
 export * from './handleFashionCharades';
 export * from './handleFeedback';
 export * from './handleGeneral';

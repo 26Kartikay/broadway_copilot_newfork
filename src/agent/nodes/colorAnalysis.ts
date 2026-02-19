@@ -6,6 +6,7 @@ import {
 } from '../../data/celebrityPalettes'
 import {
   ColorWithHex,
+  isValidPalette,
   SEASONAL_PALETTES,
 } from '../../data/seasonalPalettes';
 import { getTextLLM, getVisionLLM } from '../../lib/ai';
@@ -18,6 +19,7 @@ import { loadPrompt } from '../../utils/prompts';
 
 import { AgeGroup, Gender, PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
+import { fetchColorAnalysis } from '../tools';
 
 /**
  * Schema for the LLM output in color analysis.
@@ -103,8 +105,130 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
 
   const imageCount = numImagesInMessage(state.conversationHistoryWithImages);
 
-  // No image case
+  // No image case - check if user is asking to fetch existing color analysis
   if (imageCount === 0) {
+    // If this came from a button click (color_analysis button), always start a new analysis
+    // Don't fetch old results when user explicitly clicks the button to do a new analysis
+    const isButtonClick = state.input.ButtonPayload === 'color_analysis';
+    
+    if (isButtonClick) {
+      logger.debug({ userId }, 'Color analysis button clicked - starting new analysis');
+      // Skip fetch logic and go straight to asking for image
+    } else {
+      // Check if user typed a message asking to fetch existing color analysis
+      const userMessage = state.input.Body?.toLowerCase().trim() || '';
+      
+      // Regex patterns to detect requests to fetch existing color analysis
+      const fetchColorAnalysisPatterns = [
+        /\b(fetch|get|show|tell|what|see|view|display|retrieve)\s+(me\s+)?(my\s+)?(last\s+|latest\s+)?color\s+analysis/i,
+        /\bcolor\s+analysis\s+(result|info|data|details)?/i,
+        /\b(my\s+)?(last\s+|latest\s+)?color\s+analysis/i,
+        /\bwhat\s+(is|are)\s+my\s+colors?/i,
+        /\b(my\s+)?color\s+palette/i,
+        /\b(my\s+)?(seasonal\s+)?palette/i,
+        /\bshow\s+(me\s+)?(my\s+)?colors?/i,
+        /\bfetch\s+(my\s+)?color/i,
+        /\bget\s+(my\s+)?color/i,
+      ];
+      
+      const isFetchRequest = fetchColorAnalysisPatterns.some(pattern => pattern.test(userMessage));
+      
+      // If user is asking to fetch existing color analysis, try to fetch and show it
+      if (isFetchRequest) {
+        try {
+          logger.debug({ userId }, 'User requested to fetch existing color analysis');
+          const colorAnalysisTool = fetchColorAnalysis(userId);
+          const colorAnalysisResult = await colorAnalysisTool.func({});
+          
+          // Check if we got a valid result (object with palette_name)
+          if (colorAnalysisResult && typeof colorAnalysisResult === 'object' && 'palette_name' in colorAnalysisResult) {
+            const colorAnalysisData = colorAnalysisResult as any;
+            const paletteName = colorAnalysisData.palette_name;
+            
+            if (paletteName && isValidPalette(paletteName)) {
+              logger.debug({ userId, paletteName }, 'Found existing color analysis, displaying card');
+              
+              // Get palette data from mapping
+              const paletteData = SEASONAL_PALETTES[paletteName as keyof typeof SEASONAL_PALETTES];
+              if (paletteData) {
+                // Determine color twin celebrities
+                let colorTwins: Celebrity[] = [];
+                const userProfileGender = state.user.confirmedGender || state.user.inferredGender;
+
+                if (userProfileGender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
+                  colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
+                } else if (userProfileGender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
+                  colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
+                } else {
+                  // Fallback: If gender is still unknown, provide a mix
+                  const maleCelebs = celebrityPalettes[paletteName]?.male || [];
+                  const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
+                  colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4);
+                }
+
+                // Try to get user image URL from the most recent color analysis
+                let userImageUrl: string | null = null;
+                try {
+                  const colorAnalysisRecord = await prisma.colorAnalysis.findFirst({
+                    where: { userId },
+                    orderBy: { createdAt: 'desc' },
+                  });
+
+                  if (colorAnalysisRecord) {
+                    const mediaItem = await prisma.media.findFirst({
+                      where: {
+                        message: {
+                          conversation: {
+                            userId,
+                          },
+                        },
+                        createdAt: {
+                          gte: new Date(colorAnalysisRecord.createdAt.getTime() - 5 * 60 * 1000),
+                          lte: new Date(colorAnalysisRecord.createdAt.getTime() + 5 * 60 * 1000),
+                        },
+                      },
+                      orderBy: { createdAt: 'desc' },
+                    });
+                    if (mediaItem?.serverUrl) {
+                      userImageUrl = mediaItem.serverUrl;
+                    }
+                  }
+                } catch (err) {
+                  logger.debug({ userId, err }, 'Could not fetch user image for color analysis card');
+                }
+
+                // Create color analysis card
+                const replies: Replies = [{
+                  reply_type: 'color_analysis_card',
+                  palette_name: paletteName,
+                  description: paletteData.description,
+                  top_colors: shuffleArray(paletteData.topColors),
+                  two_color_combos: shuffleArray(
+                    formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
+                  ),
+                  user_image_url: userImageUrl,
+                  color_twin: colorTwins,
+                }];
+
+                return {
+                  ...state,
+                  assistantReply: replies,
+                  pending: PendingType.NONE,
+                };
+              }
+            }
+          }
+          
+          // If no valid color analysis found, fall through to ask for new image
+          logger.debug({ userId }, 'No existing color analysis found, asking for new image');
+        } catch (err) {
+          logger.warn({ userId, err: (err as Error)?.message }, 'Failed to fetch existing color analysis, asking for new image');
+          // Fall through to ask for new image
+        }
+      }
+    }
+    
+    // Ask for new image (either user wants new analysis or no existing analysis found)
     const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', state.user);
     const systemPrompt = new SystemMessage(
       systemPromptText.replace('{analysis_type}', 'color analysis'),

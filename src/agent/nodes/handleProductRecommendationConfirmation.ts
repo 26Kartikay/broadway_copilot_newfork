@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage } from '../../lib/ai/core/messages';
-import { ChatOpenAI } from '../../lib/ai/openai/chat_models';
+import { ChatGroq } from '../../lib/ai/groq/chat_models';
 import { logger } from '../../utils/logger';
 import { isValidImageUrl } from '../../utils/urlValidation';
 import { GraphState, ProductRecommendation, Replies } from '../state';
@@ -96,7 +96,7 @@ export async function handleProductRecommendationConfirmation(
   }
 
   try {
-    const llm = new ChatOpenAI({ model: 'gpt-4o' });
+    const llm = new ChatGroq({ model: 'llama-3.3-70b-versatile' });
     const executorResult = await agentExecutor(
       llm,
       systemPrompt,
@@ -111,7 +111,9 @@ export async function handleProductRecommendationConfirmation(
 
     const finalResponse = executorResult.output;
     const toolResults = executorResult.toolResults;
-    const replies: Replies = [];
+    
+    // Preserve any existing replies (e.g., color analysis card from fetchColorAnalysisOnIntent)
+    const replies: Replies = state.assistantReply ? [...state.assistantReply] : [];
 
     // Add the text conclusion from the LLM
     if (finalResponse.conclusion_text) {
