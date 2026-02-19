@@ -87,6 +87,7 @@ export interface GraphState {
     | {
         type: 'vibe_check';
         recommendations: string[];
+        identifiedOutfit?: string;
       }
     | undefined;
 

@@ -549,10 +549,26 @@ async function understandQuery(query: string, existingFilters: { gender?: string
  * This approach ensures high recall and prevents zero-result scenarios while maintaining precision
  * through semantic similarity and soft intent matching.
  */
+/**
+ * Node-specific search suffixes to be appended to the user query for better results.
+ * Scalable approach to handle different contexts (vibe check, color analysis, etc.)
+ */
+const NODE_SEARCH_SUFFIXES: Record<string, string> = {
+  vibe_check: "products to enhance and improve the look, complement the current outfit, and elevate the overall style",
+  color_analysis:
+    'suggest me some outfits that is a mix of shoes clothes accessories to make the users look better',
+};
+
 export function searchProducts(): Tool {
   const searchProductsSchema = z
     .object({
       query: z.string().describe('Natural language product search query'),
+      contextNode: z
+        .string()
+        .optional()
+        .describe(
+          "The current agent node (e.g., 'vibe_check', 'color_analysis') for contextual query enhancement",
+        ),
       filters: z
         .object({
           gender: z.enum(['male', 'female', 'other']).optional(),
@@ -568,7 +584,12 @@ export function searchProducts(): Tool {
     description:
       'Searches the Broadway product catalog to find products matching the query. Uses hybrid retrieval with broad vector recall and intent-based reranking. Returns product recommendations with name, brand, image, and description. Use this to recommend specific products from our catalog during styling advice.',
     schema: searchProductsSchema,
-    func: async ({ query, filters = {}, limit = 5 }: z.infer<typeof searchProductsSchema>) => {
+    func: async ({
+      query,
+      contextNode,
+      filters = {},
+      limit = 5,
+    }: z.infer<typeof searchProductsSchema>) => {
       if (query.trim() === '') {
         throw new BadRequestError('Search query is required');
       }
@@ -579,7 +600,7 @@ export function searchProducts(): Tool {
           gender: filters.gender,
           ageGroup: filters.ageGroup,
         });
-        
+
         // Build intent object for soft reranking
         // Note: gender and ageGroup come from filters (tool schema), not from query understanding
         const intent = {
@@ -599,11 +620,23 @@ export function searchProducts(): Tool {
         const embeddingModel = new OpenAIEmbeddings({
           model: 'text-embedding-3-small',
         });
-        
+
         // Build enhanced query with all context for better semantic matching
         // Include requirements: mix of clothing and footwear for complete outfit recommendations
-        const enhancedQueryParts: string[] = [query];
-        
+        let baseQuery = query;
+
+        // Append node-specific suffix if contextNode is provided
+        if (contextNode && NODE_SEARCH_SUFFIXES[contextNode]) {
+          const suffix = NODE_SEARCH_SUFFIXES[contextNode];
+          logger.info(
+            { contextNode, suffix, originalQuery: baseQuery },
+            'Appending node-specific suffix to product search query',
+          );
+          baseQuery += ` ${suffix}`;
+        }
+
+        const enhancedQueryParts: string[] = [baseQuery];
+
         if (intent.occasion) {
           enhancedQueryParts.push(`for ${intent.occasion} occasion`);
         }

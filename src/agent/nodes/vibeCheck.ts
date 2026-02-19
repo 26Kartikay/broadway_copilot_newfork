@@ -29,6 +29,11 @@ const LLMOutputSchema = z.object({
   context_confidence: ScoringCategorySchema.describe('How confident the outfit fits the occasion.'),
   overall_score: z.number().min(0).max(10).describe('Overall fractional score for the outfit.'),
   recommendations: z.array(z.string()).describe('Actionable style suggestions.'),
+  identified_outfit: z
+    .string()
+    .describe(
+      'A concise description of the main clothing items the user is currently wearing (e.g., "blue denim jacket and white chinos").',
+    ),
   prompt: z.string().describe('The original input prompt or context.'),
   follow_up: z
     .string()
@@ -131,6 +136,11 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       .withStructuredOutput(LLMOutputSchema)
       .run(systemPrompt, state.conversationHistoryWithImages, state.traceBuffer, 'vibeCheck');
 
+    logger.info(
+      { userId, identifiedOutfit: result.identified_outfit },
+      'Vibe check: identified user outfit',
+    );
+
     const latestMessage = state.conversationHistoryWithImages.at(-1);
     if (!latestMessage || !latestMessage.meta?.messageId) {
       throw new InternalServerError('Could not find latest message ID for vibe check');
@@ -229,6 +239,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       productRecommendationContext: {
         type: 'vibe_check',
         recommendations: result.recommendations,
+        identifiedOutfit: result.identified_outfit,
       },
     };
   } catch (err: unknown) {

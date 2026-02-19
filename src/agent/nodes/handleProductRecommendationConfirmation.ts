@@ -73,22 +73,55 @@ export async function handleProductRecommendationConfirmation(
     const colors = paletteData.topColors.map((c) => c.name).slice(0, 3);
     const colorList = colors.join(', ');
 
+    logger.info(
+      { userId: user.id, palette: productRecommendationContext.paletteName, colorList },
+      'Color analysis product recommendation: building search query',
+    );
+
     const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
       You are a fashion product recommender. The user is ${userContext} and their color palette is ${productRecommendationContext.paletteName}.
       Your first task is to recommend products that match this palette by calling the 'searchProducts' tool.
       You **MUST** use the 'filters' argument to search for products. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}'. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}'. ` : ''}
+      You **MUST** set 'contextNode' to 'color_analysis' to include outfits with a mix of shoes, clothes and accessories.
       You **MUST** include the specific colors ${colorList} in your search query to find products in these exact colors that match the ${productRecommendationContext.paletteName} palette. For example, your query should mention these colors explicitly like: "clothing in ${colorList} colors for ${productRecommendationContext.paletteName} palette".
       You **MUST** set the 'limit' parameter to at least 8 (to ensure we get enough product recommendations). The maximum limit is 12.
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
     systemPrompt = new SystemMessage(promptText);
   } else if (productRecommendationContext?.type === 'vibe_check') {
-    const query = productRecommendationContext.recommendations.join(' ');
+    const identifiedOutfit = productRecommendationContext.identifiedOutfit;
+    const recommendations = productRecommendationContext.recommendations || [];
+    
+    // Build the base query from identified outfit or recommendations
+    const baseQuery = identifiedOutfit || recommendations.join(' ');
+    
+    // Build recommendations context for the prompt
+    const recommendationsText = recommendations.length > 0 
+      ? `\n\nTo enhance their look, consider these specific improvements: ${recommendations.map((rec, idx) => `${idx + 1}. ${rec}`).join(' ')}`
+      : '';
+    
+    logger.info(
+      { 
+        userId: user.id, 
+        baseQuery, 
+        hasIdentifiedOutfit: !!identifiedOutfit,
+        recommendationsCount: recommendations.length 
+      },
+      'Vibe check product recommendation: building search query',
+    );
+
     const promptText = `Your final response MUST be a JSON object with a 'conclusion_text' field.
-      You are a fashion product recommender. The user, who is ${userContext}, received the following style advice: "${query}".
-      Your first task is to recommend products based on this advice by calling the 'searchProducts' tool.
-      Use a concise query based on the style advice. ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}' in the filters argument. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}' in the filters argument. ` : ''}
+      You are a fashion product recommender. The user, who is ${userContext}, is wearing: "${baseQuery}".${recommendationsText}
+      
+      Your first task is to recommend products that will enhance and improve their current look by calling the 'searchProducts' tool.
+      Your search query should:
+      1. Include the clothing items they are currently wearing: "${baseQuery}"
+      2. Incorporate the improvement suggestions mentioned above to find products that address those specific enhancement needs
+      3. Focus on products that will complement and elevate their current outfit
+      
+      ${genderFilter ? `You **MUST** set the 'gender' filter to '${genderFilter}' in the filters argument. ` : ''}${ageGroupFilter ? `You **MUST** set the 'ageGroup' filter to '${ageGroupFilter}' in the filters argument. ` : ''}
+      You **MUST** set 'contextNode' to 'vibe_check' to ensure the search focuses on products that enhance the look.
       You **MUST** set the 'limit' parameter to at least 8 (to ensure we get enough product recommendations). The maximum limit is 12.
-      After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
+      After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response that emphasizes how these products will enhance their look.`;
     systemPrompt = new SystemMessage(promptText);
   } else {
     logger.warn('handleProductRecommendationConfirmation called without valid context.');
