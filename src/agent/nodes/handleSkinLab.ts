@@ -140,7 +140,7 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
       imageUrl: string;
       description?: string | undefined;
       colors?: string[] | undefined;
-      barcode?: string;
+      barcode?: string | undefined;
     }
     const allProducts: ProductSearchResult[] = [];
 

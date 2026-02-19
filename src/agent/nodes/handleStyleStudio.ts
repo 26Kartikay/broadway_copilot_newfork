@@ -134,7 +134,7 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
       imageUrl: string;
       description?: string;
       colors?: string[];
-      barcode?: string;
+      barcode?: string | undefined;
     }> = [];
 
     for (const toolResult of productResults) {
