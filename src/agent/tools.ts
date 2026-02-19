@@ -958,7 +958,6 @@ export function searchProducts(): Tool {
           };
         });
 
-        // Minimal log - only essential info
         logger.debug(
           { query, resultCount: mappedResults.length },
           'Product search completed',
