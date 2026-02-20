@@ -1299,54 +1299,45 @@
           <div class="vibe-check-header">
             <div class="vibe-check-title">Vibe Check Results</div>
             <div class="vibe-check-overall-score">
-              <div class="vibe-check-score-circle" style="background: ${getScoreColor(vibeCheckCard.overall_score)}">
-                ${formatScore(vibeCheckCard.overall_score)}
+              <div class="vibe-check-score-circle" style="background: ${getScoreColor(vibeCheckCard.vibe_check_result || 0)}">
+                ${formatScore(vibeCheckCard.vibe_check_result || 0)}
               </div>
-              <div class="vibe-check-score-label">Overall Score</div>
+              <div class="vibe-check-score-label">Vibe Check Result</div>
             </div>
             ${vibeCheckCard.comment ? `<div class="vibe-check-comment">"${vibeCheckCard.comment}"</div>` : ''}
           </div>
           
           <div class="vibe-check-section">
             <div class="vibe-check-category">
-              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.fit_silhouette.score)}">
-                ${formatScore(vibeCheckCard.fit_silhouette.score)}
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.fit?.score || 0)}">
+                ${formatScore(vibeCheckCard.fit?.score || 0)}
               </div>
               <div class="vibe-check-category-content">
-                <div class="vibe-check-category-name">Fit & Silhouette</div>
-                <div class="vibe-check-category-explanation">${vibeCheckCard.fit_silhouette.explanation || ''}</div>
+                <div class="vibe-check-category-name">Fit</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.fit?.explanation || ''}</div>
               </div>
             </div>
             
             <div class="vibe-check-category">
-              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.color_harmony.score)}">
-                ${formatScore(vibeCheckCard.color_harmony.score)}
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.hair_and_skin?.score || 0)}">
+                ${formatScore(vibeCheckCard.hair_and_skin?.score || 0)}
               </div>
               <div class="vibe-check-category-content">
-                <div class="vibe-check-category-name">Color Harmony</div>
-                <div class="vibe-check-category-explanation">${vibeCheckCard.color_harmony.explanation || ''}</div>
+                <div class="vibe-check-category-name">Hair and Skin</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.hair_and_skin?.explanation || ''}</div>
               </div>
             </div>
             
             <div class="vibe-check-category">
-              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.styling_details.score)}">
-                ${formatScore(vibeCheckCard.styling_details.score)}
+              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.accessories?.score || 0)}">
+                ${formatScore(vibeCheckCard.accessories?.score || 0)}
               </div>
               <div class="vibe-check-category-content">
-                <div class="vibe-check-category-name">Styling Details</div>
-                <div class="vibe-check-category-explanation">${vibeCheckCard.styling_details.explanation || ''}</div>
+                <div class="vibe-check-category-name">Accessories</div>
+                <div class="vibe-check-category-explanation">${vibeCheckCard.accessories?.explanation || ''}</div>
               </div>
             </div>
             
-            <div class="vibe-check-category">
-              <div class="vibe-check-category-score" style="background: ${getScoreColor(vibeCheckCard.context_confidence.score)}">
-                ${formatScore(vibeCheckCard.context_confidence.score)}
-              </div>
-              <div class="vibe-check-category-content">
-                <div class="vibe-check-category-name">Context Confidence</div>
-                <div class="vibe-check-category-explanation">${vibeCheckCard.context_confidence.explanation || ''}</div>
-              </div>
-            </div>
           </div>
           
           ${vibeCheckCard.recommendations && vibeCheckCard.recommendations.length > 0 ? `
@@ -1455,11 +1446,10 @@
             } : null;
             const vibeCheckCard = reply.reply_type === 'vibe_check_card' ? {
               comment: reply.comment || '',
-              fit_silhouette: reply.fit_silhouette || { score: 0, explanation: '' },
-              color_harmony: reply.color_harmony || { score: 0, explanation: '' },
-              styling_details: reply.styling_details || { score: 0, explanation: '' },
-              context_confidence: reply.context_confidence || { score: 0, explanation: '' },
-              overall_score: reply.overall_score || 0,
+              fit: reply.fit || { score: 0, explanation: '' },
+              hair_and_skin: reply.hair_and_skin || { score: 0, explanation: '' },
+              accessories: reply.accessories || { score: 0, explanation: '' },
+              vibe_check_result: reply.vibe_check_result || 0,
               recommendations: reply.recommendations || [],
               user_image_url: reply.user_image_url || null
             } : null;
@@ -1549,11 +1539,10 @@
             } : null;
             const vibeCheckCard = reply.reply_type === 'vibe_check_card' ? {
               comment: reply.comment || '',
-              fit_silhouette: reply.fit_silhouette || { score: 0, explanation: '' },
-              color_harmony: reply.color_harmony || { score: 0, explanation: '' },
-              styling_details: reply.styling_details || { score: 0, explanation: '' },
-              context_confidence: reply.context_confidence || { score: 0, explanation: '' },
-              overall_score: reply.overall_score || 0,
+              fit: reply.fit || { score: 0, explanation: '' },
+              hair_and_skin: reply.hair_and_skin || { score: 0, explanation: '' },
+              accessories: reply.accessories || { score: 0, explanation: '' },
+              vibe_check_result: reply.vibe_check_result || 0,
               recommendations: reply.recommendations || [],
               user_image_url: reply.user_image_url || null
             } : null;

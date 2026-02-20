@@ -66,7 +66,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     selectedTonality: dbSelectedTonality,
     thisOrThatFirstImageId: dbThisOrThatFirstImageId,
   } = await prisma.$transaction(async (tx) => {
-    const [lastMessage, latestAssistantMessage] = await Promise.all([
+    const [lastMessage, latestAssistantMessage, latestAssistantMessageWithTonality] = await Promise.all([
       tx.message.findFirst({
         where: { conversationId },
         orderBy: { createdAt: 'desc' },
@@ -85,11 +85,24 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           additionalKwargs: true,
         },
       }),
+      // Find the most recent assistant message that has a selectedTonality
+      tx.message.findFirst({
+        where: {
+          conversation: { id: conversationId, userId: user.id },
+          role: MessageRole.AI,
+          selectedTonality: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          selectedTonality: true,
+        },
+      }),
     ]);
 
     // Pull state from DB
+    // Use tonality from the message that has it, otherwise from latest message
     const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
-    const selectedTonalityDB = latestAssistantMessage?.selectedTonality ?? null;
+    const selectedTonalityDB = latestAssistantMessageWithTonality?.selectedTonality ?? latestAssistantMessage?.selectedTonality ?? null;
     const thisOrThatFirstImageIdDB = latestAssistantMessage?.thisOrThatFirstImageId ?? undefined;
     const additionalKwargs = latestAssistantMessage?.additionalKwargs as any;
     productRecommendationContextFromDB = additionalKwargs?.productRecommendationContext;
@@ -221,13 +234,14 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   /**
    * The key: PREFER the latest computed state (from routing/handler) if set,
    * otherwise, use the value loaded from the DB.
+   * Convert enum to string for state compatibility.
    */
   return {
     ...state,
     conversationHistoryWithImages,
     conversationHistoryTextOnly,
     pending: state.pending ?? dbPending,
-    selectedTonality: state.selectedTonality ?? dbSelectedTonality,
+    selectedTonality: state.selectedTonality ?? (dbSelectedTonality ? String(dbSelectedTonality) : null),
     thisOrThatFirstImageId: state.thisOrThatFirstImageId ?? dbThisOrThatFirstImageId,
     productRecommendationContext:
       state.productRecommendationContext ?? productRecommendationContextFromDB,

@@ -219,11 +219,10 @@ type Reply =
   | {
       reply_type: 'vibe_check_card';
       comment: string;
-      fit_silhouette: ScoringCategory;
-      color_harmony: ScoringCategory;
-      styling_details: ScoringCategory;
-      context_confidence: ScoringCategory;
-      overall_score: number;
+      fit: ScoringCategory;
+      hair_and_skin: ScoringCategory;
+      accessories: ScoringCategory;
+      vibe_check_result: number;
       recommendations: string[];
       user_image_url: string | null;
     };

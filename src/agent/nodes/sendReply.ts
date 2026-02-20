@@ -67,11 +67,17 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
   });
 
   const pendingToPersist = (state.pending as PendingType | undefined) ?? PendingType.NONE;
-  const validTonalities: Tonality[] = ['savage', 'friendly', 'hype_bff'];
-  const selectedTonalityToPersality: Tonality | null =
-    state.selectedTonality && validTonalities.includes(state.selectedTonality as Tonality)
-      ? (state.selectedTonality as Tonality)
-      : null;
+  // Validate and convert selectedTonality string to Tonality enum
+  let selectedTonalityToPersality: Tonality | null = null;
+  if (state.selectedTonality) {
+    if (state.selectedTonality === Tonality.savage) {
+      selectedTonalityToPersality = Tonality.savage;
+    } else if (state.selectedTonality === Tonality.friendly) {
+      selectedTonalityToPersality = Tonality.friendly;
+    } else if (state.selectedTonality === Tonality.hype_bff) {
+      selectedTonalityToPersality = Tonality.hype_bff;
+    }
+  }
 
   const additionalKwargs = {
     ...(state.productRecommendationContext && {

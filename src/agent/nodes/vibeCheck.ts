@@ -21,13 +21,9 @@ const ScoringCategorySchema = z.object({
 
 const LLMOutputSchema = z.object({
   comment: z.string().describe("Overall comment or reason summarizing the outfit's vibe."),
-  fit_silhouette: ScoringCategorySchema.describe('Assessment of fit & silhouette.'),
-  color_harmony: ScoringCategorySchema.describe('Assessment of color coordination.'),
-  styling_details: ScoringCategorySchema.describe(
-    'Assessment of accessories, layers, and details.',
-  ),
-  context_confidence: ScoringCategorySchema.describe('How confident the outfit fits the occasion.'),
-  overall_score: z.number().min(0).max(10).describe('Overall fractional score for the outfit.'),
+  fit: ScoringCategorySchema.describe('Assessment of fit - how well the clothing fits the body.'),
+  hair_and_skin: ScoringCategorySchema.describe('Assessment of hair styling and skin appearance.'),
+  accessories: ScoringCategorySchema.describe('Assessment of accessories and styling details.'),
   recommendations: z.array(z.string()).describe('Actionable style suggestions.'),
   identified_outfit: z
     .string()
@@ -147,17 +143,28 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     }
     const latestMessageId = latestMessage.meta.messageId as string;
 
+    // Apply guardrail: ensure all scores are at least 6.0
+    const MIN_SCORE = 6.0;
+    const clampedFitScore = Math.max(MIN_SCORE, result.fit.score);
+    const clampedHairAndSkinScore = Math.max(MIN_SCORE, result.hair_and_skin.score);
+    const clampedAccessoriesScore = Math.max(MIN_SCORE, result.accessories.score);
+
+    // Calculate Vibe Check Result as average of clamped scores
+    const vibeCheckResult = (
+      (clampedFitScore + clampedHairAndSkinScore + clampedAccessoriesScore) / 3
+    );
+
     const vibeCheckData: Prisma.VibeCheckUncheckedCreateInput = {
       comment: result.comment,
-      fit_silhouette_score: result.fit_silhouette.score,
-      fit_silhouette_explanation: result.fit_silhouette.explanation,
-      color_harmony_score: result.color_harmony.score,
-      color_harmony_explanation: result.color_harmony.explanation,
-      styling_details_score: result.styling_details.score,
-      styling_details_explanation: result.styling_details.explanation,
-      context_confidence_score: result.context_confidence.score,
-      context_confidence_explanation: result.context_confidence.explanation,
-      overall_score: result.overall_score,
+      fit_silhouette_score: clampedFitScore,
+      fit_silhouette_explanation: result.fit.explanation,
+      color_harmony_score: clampedHairAndSkinScore,
+      color_harmony_explanation: result.hair_and_skin.explanation,
+      styling_details_score: clampedAccessoriesScore,
+      styling_details_explanation: result.accessories.explanation,
+      context_confidence_score: 0, // Legacy field, keeping for backward compatibility
+      context_confidence_explanation: '',
+      overall_score: vibeCheckResult, // Store vibe check result in overall_score field for backward compatibility
       recommendations: result.recommendations,
       prompt: result.prompt,
       tonality: state.selectedTonality,
@@ -205,15 +212,28 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       }
     }
 
+    // Apply guardrail: ensure all scores are at least 6.0 (using already clamped scores)
+    const clampedFit = {
+      score: clampedFitScore,
+      explanation: result.fit.explanation,
+    };
+    const clampedHairAndSkin = {
+      score: clampedHairAndSkinScore,
+      explanation: result.hair_and_skin.explanation,
+    };
+    const clampedAccessories = {
+      score: clampedAccessoriesScore,
+      explanation: result.accessories.explanation,
+    };
+
     mainReplies.push({
       // Always push the vibe check card regardless of guest status
       reply_type: 'vibe_check_card',
       comment: result.comment,
-      fit_silhouette: result.fit_silhouette,
-      color_harmony: result.color_harmony,
-      styling_details: result.styling_details,
-      context_confidence: result.context_confidence,
-      overall_score: result.overall_score,
+      fit: clampedFit,
+      hair_and_skin: clampedHairAndSkin,
+      accessories: clampedAccessories,
+      vibe_check_result: vibeCheckResult,
       recommendations: result.recommendations,
       user_image_url: userImageUrl,
     });

@@ -90,7 +90,7 @@
               addBubble('assistant', `${userImg}Color Analysis: ${r.palette_name}${r.description ? '<br/>' + r.description : ''}${colorTwins}`);
             } else if (r.reply_type === 'vibe_check_card') {
               const userImg = r.user_image_url ? `<img class="img" src="${r.user_image_url}" alt="Outfit"/><br/>` : '';
-              addBubble('assistant', `${userImg}Vibe Check: ${r.overall_score}/10<br/>${r.comment || ''}`);
+              addBubble('assistant', `${userImg}Vibe Check: ${r.vibe_check_result || 0}/10<br/>${r.comment || ''}`);
             } else if (r.reply_type === 'pdf') {
               addBubble('assistant', (r.reply_text ? r.reply_text + '<br/>' : '') + `<iframe src="${r.media_url}" width="100%" height="500px"></iframe>`);
             } else if (r.reply_type === 'color_analysis_image_upload_request' || 
