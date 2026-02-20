@@ -4,7 +4,6 @@ import { getTextLLM } from '../../lib/ai';
 import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { prisma } from '../../lib/prisma';
-import { celebrityPalettes, type Celebrity } from '../../data/celebrityPalettes';
 import { getPaletteData, isValidPalette, type ColorWithHex, SEASONAL_PALETTES } from '../../data/seasonalPalettes';
 import { WELCOME_IMAGE_URL } from '../../utils/constants';
 import { InternalServerError } from '../../utils/errors';
@@ -171,21 +170,6 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
               // Get palette data from mapping
               const paletteData = SEASONAL_PALETTES[paletteName as keyof typeof SEASONAL_PALETTES];
               if (paletteData) {
-                // Determine color twin celebrities
-                let colorTwins: Celebrity[] = [];
-                const userProfileGender = user.confirmedGender || user.inferredGender;
-
-                if (userProfileGender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
-                  colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
-                } else if (userProfileGender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
-                  colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
-                } else {
-                  // Fallback: If gender is still unknown, provide a mix
-                  const maleCelebs = celebrityPalettes[paletteName]?.male || [];
-                  const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
-                  colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4);
-                }
-
                 // Try to get user image URL from the most recent color analysis
                 let userImageUrl: string | null = null;
                 try {
@@ -227,7 +211,6 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
                     formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
                   ),
                   user_image_url: userImageUrl,
-                  color_twin: colorTwins,
                 });
                 
                 // Return early with just the card - no need to call LLM

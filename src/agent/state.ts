@@ -1,5 +1,4 @@
 import { PendingType, User } from '@prisma/client';
-import { Celebrity } from '../data/celebrityPalettes'; // Import Celebrity interface
 import { ColorWithHex, SeasonalPalette } from '../data/seasonalPalettes';
 import { BaseMessage } from '../lib/ai';
 import { MessageInput, QuickReplyButton } from '../lib/chat/types';
@@ -214,7 +213,6 @@ type Reply =
       top_colors: ColorWithHex[];
       two_color_combos: ColorWithHex[][];
       user_image_url: string | null;
-      color_twin: Celebrity[];
     }
   | {
       reply_type: 'vibe_check_card';

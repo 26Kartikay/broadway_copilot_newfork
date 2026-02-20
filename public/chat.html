@@ -1248,21 +1248,6 @@
             </div>
           </div>
           
-          ${colorAnalysisCard.color_twin && colorAnalysisCard.color_twin.length > 0 ? `
-            <div class="color-analysis-section">
-              <div class="color-analysis-section-title">Your Color Twins</div>
-              <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;">
-                ${colorAnalysisCard.color_twin.map(celebrity => `
-                  <div style="text-align: center;">
-                    ${celebrity.imageUrl && isValidUrl(celebrity.imageUrl) ? `
-                      <img src="${celebrity.imageUrl}" alt="${celebrity.name}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid var(--broadway-gold); margin-bottom: 4px;">
-                    ` : ''}
-                    <div style="font-size: 11px; color: var(--broadway-text); font-weight: 500;">${celebrity.name}</div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          ` : ''}
         `;
         
         messageDiv.querySelector('.message-bubble').appendChild(cardDiv);
@@ -1442,7 +1427,6 @@
               top_colors: reply.top_colors || [],
               two_color_combos: reply.two_color_combos || [],
               user_image_url: reply.user_image_url || null,
-              color_twin: reply.color_twin || []
             } : null;
             const vibeCheckCard = reply.reply_type === 'vibe_check_card' ? {
               comment: reply.comment || '',
@@ -1535,7 +1519,6 @@
               top_colors: reply.top_colors || [],
               two_color_combos: reply.two_color_combos || [],
               user_image_url: reply.user_image_url || null,
-              color_twin: reply.color_twin || []
             } : null;
             const vibeCheckCard = reply.reply_type === 'vibe_check_card' ? {
               comment: reply.comment || '',

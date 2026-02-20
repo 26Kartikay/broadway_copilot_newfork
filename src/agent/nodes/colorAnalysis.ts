@@ -1,10 +1,6 @@
 import { z } from 'zod';
 
 import {
-  Celebrity,
-  celebrityPalettes
-} from '../../data/celebrityPalettes'
-import {
   ColorWithHex,
   isValidPalette,
   SEASONAL_PALETTES,
@@ -151,21 +147,6 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
               // Get palette data from mapping
               const paletteData = SEASONAL_PALETTES[paletteName as keyof typeof SEASONAL_PALETTES];
               if (paletteData) {
-                // Determine color twin celebrities
-                let colorTwins: Celebrity[] = [];
-                const userProfileGender = state.user.confirmedGender || state.user.inferredGender;
-
-                if (userProfileGender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
-                  colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
-                } else if (userProfileGender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
-                  colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
-                } else {
-                  // Fallback: If gender is still unknown, provide a mix
-                  const maleCelebs = celebrityPalettes[paletteName]?.male || [];
-                  const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
-                  colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4);
-                }
-
                 // Try to get user image URL from the most recent color analysis
                 let userImageUrl: string | null = null;
                 try {
@@ -207,7 +188,6 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
                     formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
                   ),
                   user_image_url: userImageUrl,
-                  color_twin: colorTwins,
                 }];
 
                 return {
@@ -327,29 +307,6 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     // Get palette data from mapping
     const paletteData = SEASONAL_PALETTES[paletteName as keyof typeof SEASONAL_PALETTES];
 
-    // Determine color twin celebrities
-    let colorTwins: Celebrity[] = [];
-    const inferredGender = output.inferred_gender;
-    const userProfileGender = state.user.confirmedGender || state.user.inferredGender;
-
-    let determinedGender: Gender | null = null;
-    if (inferredGender === 'MALE' || inferredGender === 'FEMALE') {
-      determinedGender = Gender[inferredGender]; // Convert string 'MALE'/'FEMALE' to Gender.MALE/Gender.FEMALE
-    } else if (userProfileGender) {
-      determinedGender = userProfileGender;
-    }
-
-    if (determinedGender === Gender.MALE && celebrityPalettes[paletteName]?.male) {
-      colorTwins = shuffleArray(celebrityPalettes[paletteName].male);
-    } else if (determinedGender === Gender.FEMALE && celebrityPalettes[paletteName]?.female) {
-      colorTwins = shuffleArray(celebrityPalettes[paletteName].female);
-    } else {
-      // Fallback: If gender is still unknown, provide a mix
-      const maleCelebs = celebrityPalettes[paletteName]?.male || [];
-      const femaleCelebs = celebrityPalettes[paletteName]?.female || [];
-      colorTwins = shuffleArray([...maleCelebs, ...femaleCelebs]).slice(0, 4); // Limit to 4 mixed examples
-    }
-
     // Find the latest message with an image in the conversation history
     const imageMessage = [...state.conversationHistoryWithImages]
       .reverse()
@@ -377,7 +334,6 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
           formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
         ),
         user_image_url: userImageUrl,
-        color_twin: colorTwins, // Add the color twin celebrities
       },
       {
         reply_type: 'quick_reply',

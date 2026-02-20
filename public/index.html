@@ -84,10 +84,7 @@
               addBubble('assistant', `${r.reply_text || ''}<br/>Products: ${productList}`);
             } else if (r.reply_type === 'color_analysis_card') {
               const userImg = r.user_image_url ? `<img class="img" src="${r.user_image_url}" alt="User photo"/><br/>` : '';
-              const colorTwins = r.color_twin && r.color_twin.length > 0 
-                ? `<br/>Color Twins: ${r.color_twin.map(c => c.name).join(', ')}` 
-                : '';
-              addBubble('assistant', `${userImg}Color Analysis: ${r.palette_name}${r.description ? '<br/>' + r.description : ''}${colorTwins}`);
+              addBubble('assistant', `${userImg}Color Analysis: ${r.palette_name}${r.description ? '<br/>' + r.description : ''}`);
             } else if (r.reply_type === 'vibe_check_card') {
               const userImg = r.user_image_url ? `<img class="img" src="${r.user_image_url}" alt="Outfit"/><br/>` : '';
               addBubble('assistant', `${userImg}Vibe Check: ${r.vibe_check_result || 0}/10<br/>${r.comment || ''}`);
