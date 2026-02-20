@@ -81,7 +81,7 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
         }
         // Extract meaningful info from cards
         if (r.reply_type === 'vibe_check_card') {
-          return `Vibe check completed with score ${r.overall_score}. Recommendations: ${r.recommendations.join(', ')}`;
+          return `Vibe check completed with score ${r.vibe_check_result}. Recommendations: ${r.recommendations.join(', ')}`;
         }
         if (r.reply_type === 'color_analysis_card') {
           return `Color analysis: ${r.palette_name} palette`;
