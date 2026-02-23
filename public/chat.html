@@ -848,6 +848,32 @@
       line-height: 1.7;
     }
 
+    /* Login prompt card (guest tried vibe check / color analysis) */
+    .login-prompt-card {
+      margin-top: 12px;
+      padding: 16px;
+      background: linear-gradient(135deg, #f8f4ee 0%, #efe8dc 100%);
+      border: 1px solid var(--broadway-gray-medium);
+      border-radius: 12px;
+    }
+    .login-prompt-message {
+      font-size: 14px;
+      color: var(--broadway-text);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .login-prompt-cta {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--broadway-black);
+      padding: 10px 16px;
+      background: var(--broadway-black);
+      color: var(--broadway-white);
+      border-radius: 8px;
+      text-align: center;
+      display: inline-block;
+    }
+
     /* Responsive */
     @media (max-width: 520px) {
       .chat-container {
@@ -867,13 +893,17 @@
   <div class="chat-container">
     <div class="chat-header">
       <img src="https://shop.broadwaylive.in/cdn/shop/files/Screen_Recording_2026-01-05_122811.gif?v=1767866062&width=180" alt="Broadway Live" class="header-logo">
-      <div style="margin-top: 10px; display: flex; justify-content: center; gap: 10px; align-items: center;">
+      <div style="margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-items: center;">
         <label for="userIdSelect" style="color: white; font-size: 12px;">User ID:</label>
         <select id="userIdSelect" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555;">
           <option value="guest_TEMP">Guest User</option>
           <option value="kartikay1234">Kartikay (App User)</option>
           <option value="shambhavi5678">Shambhavi (App User)</option>
         </select>
+        <div id="guestIdInboxWrap" style="display: none; align-items: center; gap: 6px;">
+          <label for="guestIdInput" style="color: #b8b8b8; font-size: 11px;">Guest ID (test):</label>
+          <input type="text" id="guestIdInput" placeholder="e.g. guest_myTest" style="padding: 5px 8px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: 140px;" title="Enter a guest ID to test the guest flow. Add guest_ prefix or leave empty for auto ID.">
+        </div>
         <label for="profileNameInput" style="color: white; font-size: 12px;">Name:</label>
         <input type="text" id="profileNameInput" value="Guest" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: 100px;">
       </div>
@@ -946,7 +976,16 @@
     // Get current user ID and profile name from UI
     function getCurrentUserId() {
       const select = document.getElementById('userIdSelect');
-      return select ? select.value : randomGuestId;
+      const value = select ? select.value : randomGuestId;
+      if (value === 'guest_TEMP') {
+        const guestInput = document.getElementById('guestIdInput');
+        const custom = guestInput && guestInput.value.trim();
+        if (custom) {
+          return custom.startsWith('guest_') ? custom : 'guest_' + custom;
+        }
+        return randomGuestId;
+      }
+      return value;
     }
     
     function getCurrentProfileName() {
@@ -1096,7 +1135,7 @@
       }
     }
 
-    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null, colorAnalysisCard = null, pdfUrl = null, vibeCheckCard = null) {
+    function addMessage(content, isUser, buttons = null, imageUrl = null, products = null, colorAnalysisCard = null, pdfUrl = null, vibeCheckCard = null, loginPromptCard = null) {
       const container = document.getElementById('messagesContainer');
       
       // Remove welcome message if present
@@ -1342,6 +1381,17 @@
         }
       }
 
+      // Login prompt card (guest tried vibe check or color analysis — show sign-in CTA)
+      if (loginPromptCard && loginPromptCard.reply_text) {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'login-prompt-card';
+        cardDiv.innerHTML = `
+          <div class="login-prompt-message">${formatText(loginPromptCard.reply_text)}</div>
+          <div class="login-prompt-cta">Sign in to unlock this feature</div>
+        `;
+        messageDiv.querySelector('.message-bubble').appendChild(cardDiv);
+      }
+
       container.appendChild(messageDiv);
       container.scrollTop = container.scrollHeight;
     }
@@ -1446,6 +1496,8 @@
               addMessage('', false, null, null, null, colorAnalysisCard);
             } else if (reply.reply_type === 'vibe_check_card') {
               addMessage('', false, null, null, null, null, null, vibeCheckCard);
+            } else if (reply.reply_type === 'login_prompt') {
+              addMessage('', false, null, null, null, null, null, null, { reply_text: reply.reply_text || '' });
             } else if (reply.reply_type === 'pdf') {
               const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
               addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
@@ -1538,6 +1590,8 @@
               addMessage('', false, null, null, null, colorAnalysisCard);
             } else if (reply.reply_type === 'vibe_check_card') {
               addMessage('', false, null, null, null, null, null, vibeCheckCard);
+            } else if (reply.reply_type === 'login_prompt') {
+              addMessage('', false, null, null, null, null, null, null, { reply_text: reply.reply_text || '' });
             } else if (reply.reply_type === 'pdf') {
               const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
               addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
@@ -1570,21 +1624,29 @@
       isLoading = false;
     }
 
-    // Event listener for userIdSelect to update profileNameInput
+    // Event listener for userIdSelect: show guest ID inbox for Guest, update profile name
     document.addEventListener('DOMContentLoaded', () => {
       const userIdSelect = document.getElementById('userIdSelect');
       const profileNameInput = document.getElementById('profileNameInput');
+      const guestIdInboxWrap = document.getElementById('guestIdInboxWrap');
 
-      if (userIdSelect && profileNameInput) {
-        userIdSelect.addEventListener('change', () => {
-          if (userIdSelect.value === 'guest_TEMP') {
-            profileNameInput.value = 'Guest';
-          } else if (userIdSelect.value === 'kartikay1234') {
-            profileNameInput.value = 'Kartikay';
-          } else if (userIdSelect.value === 'shambhavi5678') {
-            profileNameInput.value = 'Shambhavi';
+      function updateForSelection() {
+        const isGuest = userIdSelect && userIdSelect.value === 'guest_TEMP';
+        if (guestIdInboxWrap) {
+          guestIdInboxWrap.style.display = isGuest ? 'flex' : 'none';
+        }
+        if (profileNameInput) {
+          if (isGuest) profileNameInput.value = 'Guest';
+          else if (userIdSelect) {
+            if (userIdSelect.value === 'kartikay1234') profileNameInput.value = 'Kartikay';
+            else if (userIdSelect.value === 'shambhavi5678') profileNameInput.value = 'Shambhavi';
           }
-        });
+        }
+      }
+
+      if (userIdSelect) {
+        userIdSelect.addEventListener('change', updateForSelection);
+        updateForSelection();
       }
     });
 

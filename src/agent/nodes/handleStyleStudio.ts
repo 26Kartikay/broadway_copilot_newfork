@@ -7,6 +7,7 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { isValidImageUrl } from '../../utils/urlValidation';
+import { isGuestUser } from '../../utils/user';
 import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, searchProducts } from '../tools';
 
@@ -117,13 +118,16 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
     const result = executorResult.output;
     const toolResults = executorResult.toolResults;
 
-    // Ensure reply_text exists
     if (!result.reply_text) {
       logger.warn({ userId, subIntent, result }, 'Missing reply_text in Style Studio result');
       result.reply_text = "I've prepared some styling recommendations for you.";
     }
+    const guestPrefix = isGuestUser(state.user)
+      ? "I don't have any saved information about your style or colors yet. "
+      : '';
+    const replyText = guestPrefix + result.reply_text;
 
-    const replies: Replies = [{ reply_type: 'text', reply_text: result.reply_text }];
+    const replies: Replies = [{ reply_type: 'text', reply_text: replyText }];
 
     // Extract products directly from searchProducts tool results
     const productResults = toolResults.filter((tr) => tr.name === 'searchProducts');

@@ -3,9 +3,15 @@ import { AssistantMessage, MessageContent, MessageContentPart, UserMessage } fro
 
 import { prisma } from '../../lib/prisma';
 import { queueImageUpload } from '../../lib/tasks';
+import {
+  appendGuestHistory,
+  EPHEMERAL_GUEST_CONVERSATION_ID,
+  getGuestHistory,
+} from '../../utils/context';
 import { logger } from '../../utils/logger';
 import { convertLocalhostUrlToDataUrl, processMediaForAI } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
+import { isGuestUser } from '../../utils/user';
 import { GraphState } from '../state';
 
 /**
@@ -53,6 +59,48 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
         'Failed to process image, proceeding without it.',
       );
     }
+  }
+
+  const isGuest =
+    state.conversationId === EPHEMERAL_GUEST_CONVERSATION_ID || isGuestUser(user);
+
+  if (isGuest) {
+    const guestHistory = await getGuestHistory(user.appUserId);
+    const textContent = extractTextContent(content);
+    await appendGuestHistory(user.appUserId, 'user', textContent);
+
+    const conversationHistoryWithImages: (UserMessage | AssistantMessage)[] = [];
+    const conversationHistoryTextOnly: (UserMessage | AssistantMessage)[] = [];
+    for (const msg of guestHistory) {
+      if (msg.role === 'user') {
+        conversationHistoryWithImages.push(new UserMessage(msg.text));
+        conversationHistoryTextOnly.push(new UserMessage(msg.text));
+      } else {
+        conversationHistoryWithImages.push(new AssistantMessage(msg.text));
+        conversationHistoryTextOnly.push(new AssistantMessage(msg.text));
+      }
+    }
+    const currentUserText = new UserMessage(textContent);
+    const currentUserWithImage = new UserMessage(content);
+    conversationHistoryWithImages.push(currentUserWithImage);
+    conversationHistoryTextOnly.push(currentUserText);
+
+    logger.debug(
+      { userId, graphRunId, guestMessageCount: guestHistory.length + 1 },
+      'Guest message ingested (Redis only)',
+    );
+    return {
+      ...state,
+      conversationHistoryWithImages,
+      conversationHistoryTextOnly,
+      pending: state.pending ?? PendingType.NONE,
+      selectedTonality: state.selectedTonality ?? null,
+      thisOrThatFirstImageId: state.thisOrThatFirstImageId,
+      productRecommendationContext: state.productRecommendationContext,
+      seasonalPaletteToSave: state.seasonalPaletteToSave,
+      user,
+      input,
+    };
   }
 
   // These will be populated inside the transaction

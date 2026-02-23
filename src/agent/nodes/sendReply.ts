@@ -7,8 +7,10 @@ import { Tonality } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { queueFeedbackRequest } from '../../lib/tasks';
+import { appendGuestHistory, EPHEMERAL_GUEST_CONVERSATION_ID } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { isGuestUser } from '../../utils/user';
 import { GraphState, Replies } from '../state';
 
 /**
@@ -90,19 +92,31 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
   logger.debug({ userId }, 'HTTP delivery mode: collecting replies for response');
   await redis.hSet(messageKey, { status: 'delivered' });
 
-  await prisma.message.create({
-    data: {
-      conversationId,
-      role: MessageRole.AI,
-      content: formattedContent,
-      pending: pendingToPersist,
-      selectedTonality: selectedTonalityToPersality,
-      additionalKwargs:
-        Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
-    },
-  });
+  const isGuest =
+    conversationId === EPHEMERAL_GUEST_CONVERSATION_ID || isGuestUser(user);
 
-  queueFeedbackRequest(user.id, conversationId);
+  if (isGuest) {
+    const assistantText = orderedReplies
+      .map((r) => ('reply_text' in r && r.reply_text ? r.reply_text : ''))
+      .filter(Boolean)
+      .join('\n');
+    if (assistantText) {
+      await appendGuestHistory(user.appUserId, 'assistant', assistantText);
+    }
+  } else {
+    await prisma.message.create({
+      data: {
+        conversationId,
+        role: MessageRole.AI,
+        content: formattedContent,
+        pending: pendingToPersist,
+        selectedTonality: selectedTonalityToPersality,
+        additionalKwargs:
+          Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
+      },
+    });
+    queueFeedbackRequest(user.id, conversationId);
+  }
 
   logger.info({ userId, replyCount: orderedReplies.length }, 'Replies prepared for HTTP response');
 

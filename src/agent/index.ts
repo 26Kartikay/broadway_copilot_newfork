@@ -1,11 +1,15 @@
 import 'dotenv/config';
 
-import { Conversation, GraphRunStatus, MessageRole, PendingType, Prisma } from '@prisma/client';
+import { Conversation, GraphRunStatus, MessageRole, PendingType, Prisma, User } from '@prisma/client';
 import { MessageInput } from '../lib/chat/types';
 import { StateGraph } from '../lib/graph';
 import { prisma } from '../lib/prisma';
 import { redis } from '../lib/redis';
-import { getOrCreateUserAndConversation } from '../utils/context';
+import {
+  EPHEMERAL_GUEST_CONVERSATION_ID,
+  getGuestPreviousState,
+  tryGetUserAndConversation,
+} from '../utils/context';
 import { logError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { buildAgentGraph } from './graph';
@@ -15,6 +19,27 @@ let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
 let subscriber: ReturnType<typeof redis.duplicate> | undefined;
 
 const getUserAbortChannel = (id: string) => `user_abort:${id}`;
+
+/** Builds a synthetic User object for ephemeral guest sessions (never persisted). */
+function buildSyntheticGuestUser(appUserId: string): User {
+  return {
+    id: 'ephemeral-guest',
+    appUserId,
+    whatsappId: appUserId,
+    profileName: 'Guest',
+    inferredGender: null,
+    inferredAgeGroup: null,
+    confirmedGender: null,
+    confirmedAgeGroup: null,
+    fitPreference: null,
+    lastVibeCheckAt: null,
+    lastColorAnalysisAt: null,
+    lastSyncedAt: null,
+    syncVersion: null,
+    createdAt: new Date(),
+    dailyPromptOptIn: false,
+  } as User;
+}
 
 async function getSubscriber() {
   if (!subscriber || !subscriber.isOpen) {
@@ -189,22 +214,59 @@ export async function runAgentForHttp(
   }
 
   let conversation: Conversation | undefined;
+  let isGuest = false;
   let finalState: Partial<GraphState> | null = null;
   const graphRunId = messageId;
   try {
-    // In production, profileName is ignored - database values are never updated
-    // Only pass it for development mode compatibility
-    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
+    const resolved = await tryGetUserAndConversation(
       identifierId,
       profileName ?? '',
-      identifierId, // appUserId is the same as identifierId for initial user creation
+      identifierId,
     );
-    conversation = _conversation;
+    let user: User;
+    let previousState: Partial<GraphState> | null = null;
+    if (!resolved) {
+      isGuest = true;
+      user = buildSyntheticGuestUser(identifierId);
+      conversation = { id: EPHEMERAL_GUEST_CONVERSATION_ID } as Conversation;
+      const guestState = await getGuestPreviousState(identifierId);
+      if (guestState) {
+        previousState = {
+          quizQuestions: guestState.quizQuestions as GraphState['quizQuestions'],
+          quizAnswers: guestState.quizAnswers as GraphState['quizAnswers'],
+          currentQuestionIndex: guestState.currentQuestionIndex,
+        };
+      }
+    } else {
+      user = resolved.user;
+      conversation = resolved.conversation;
+      previousState = await loadPreviousConversationState(conversation.id);
+      await prisma.graphRun.create({
+        data: {
+          id: graphRunId,
+          userId: user.id,
+          conversationId: conversation.id,
+          initialState: {
+            input,
+            user,
+            ...(previousState
+              ? {
+                  quizQuestions: previousState.quizQuestions,
+                  quizAnswers: previousState.quizAnswers,
+                  currentQuestionIndex: previousState.currentQuestionIndex,
+                  pending: previousState.pending,
+                  selectedTonality: previousState.selectedTonality,
+                  intent: previousState.intent,
+                  subIntent: previousState.subIntent,
+                  assistantReply: previousState.assistantReply,
+                }
+              : {}),
+          } as Prisma.InputJsonValue,
+        },
+      });
+    }
 
-    // Load previous conversation state
-    const previousState = await loadPreviousConversationState(conversation.id);
-
-    // Create serializable initial state (exclude non-serializable properties)
+    // Create serializable previous state for merging
     const serializablePreviousState = previousState
       ? {
           quizQuestions: previousState.quizQuestions,
@@ -218,23 +280,12 @@ export async function runAgentForHttp(
         }
       : {};
 
-    await prisma.graphRun.create({
-      data: {
-        id: graphRunId,
-        userId: user.id,
-        conversationId: conversation.id,
-        initialState: { input, user, ...serializablePreviousState } as Prisma.InputJsonValue,
-      },
-    });
-
-    // Create initial state with input, merging only persistent data from previous state
     const initialState: GraphState = {
       input,
       user,
       graphRunId,
       conversationId: conversation.id,
       traceBuffer: { nodeRuns: [], llmTraces: [] },
-      // Required properties with defaults
       conversationHistoryWithImages: [],
       conversationHistoryTextOnly: [],
       intent: null,
@@ -245,7 +296,6 @@ export async function runAgentForHttp(
       assistantReply: null,
       pending: null,
       selectedTonality: null,
-      // Only merge persistent game state, not routing decisions
       ...(previousState
         ? {
             quizQuestions: previousState.quizQuestions,
@@ -259,17 +309,19 @@ export async function runAgentForHttp(
       signal: controller.signal,
       runId: graphRunId,
     });
-    logGraphResult(graphRunId, 'COMPLETED', finalState);
+    if (!isGuest) {
+      logGraphResult(graphRunId, 'COMPLETED', finalState);
+    }
 
     const replies = (finalState?.httpResponse ?? []) as NonNullable<GraphState['httpResponse']>;
     return { replies, pending: finalState?.pending ?? null };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
-      logGraphResult(graphRunId, 'ABORTED', finalState, err);
+      if (!isGuest) logGraphResult(graphRunId, 'ABORTED', finalState, err);
       throw err;
     }
 
-    logGraphResult(graphRunId, 'ERROR', finalState, err);
+    if (!isGuest) logGraphResult(graphRunId, 'ERROR', finalState, err);
 
     const error = logError(err, {
       userId: identifierId,
@@ -277,9 +329,7 @@ export async function runAgentForHttp(
       location: 'runAgentForHttp',
     });
 
-    // For HTTP mode, we don't send error messages via external service
-    // The error will be returned in the HTTP response
-    if (conversation) {
+    if (conversation && !isGuest) {
       try {
         await prisma.message.create({
           data: {

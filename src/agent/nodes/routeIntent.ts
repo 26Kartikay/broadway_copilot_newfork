@@ -6,6 +6,7 @@ import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { isGuestUser } from '../../utils/user';
 import { GraphState, IntentLabel } from '../state';
 
 const validTonalities = ['friendly', 'savage', 'hype_bff'];
@@ -46,6 +47,14 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   const { user, input, conversationHistoryWithImages, pending } = state;
   const userId = user.id;
   const buttonPayload = input.ButtonPayload;
+
+  // When guest would get vibe_check or color_analysis, redirect to login_prompt instead
+  function applyGuestIntent(state: GraphState, intent: IntentLabel, extra: Partial<GraphState> = {}): GraphState {
+    if (isGuestUser(state.user) && (intent === 'vibe_check' || intent === 'color_analysis')) {
+      return { ...state, ...extra, intent: 'guest_login_required', guestLoginPromptFor: intent };
+    }
+    return { ...state, ...extra, intent };
+  }
 
   // ------------------------------
   // 1️⃣ Priority 1: Handle explicit button payloads
@@ -116,26 +125,22 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       const intent = buttonPayload as IntentLabel;
       logger.debug({ buttonPayload, intent }, 'Routing to service intent');
 
-      // vibe_check → triggers quick reply tonality options
+      // vibe_check → for guest show login_prompt; else tonality selection
       if (intent === 'vibe_check') {
         logger.debug({ buttonPayload }, 'Received vibe_check payload - resetting tonality.');
-        return {
-          ...state,
-          intent: 'vibe_check',
-          pending: PendingType.TONALITY_SELECTION, // ensures quick reply
+        return applyGuestIntent(state, 'vibe_check', {
+          pending: PendingType.TONALITY_SELECTION,
           selectedTonality: null,
           missingProfileField: null,
-        };
+        });
       }
 
-      // color_analysis → goes to image upload list picker
+      // color_analysis → for guest show login_prompt; else image upload
       if (intent === 'color_analysis') {
-        return {
-          ...state,
-          intent: 'color_analysis',
+        return applyGuestIntent(state, 'color_analysis', {
           pending: PendingType.COLOR_ANALYSIS_IMAGE,
           missingProfileField: null,
-        };
+        });
       }
 
       // fashion_quiz → start charades game
@@ -152,15 +157,13 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       return { ...state, intent, missingProfileField: null };
     }
 
-    // Tonality selections
+    // Tonality selections → for guest show login_prompt
     if (validTonalities.includes(buttonPayload.toLowerCase())) {
-      return {
-        ...state,
-        intent: 'vibe_check',
+      return applyGuestIntent(state, 'vibe_check', {
         selectedTonality: buttonPayload.toLowerCase(),
         pending: PendingType.VIBE_CHECK_IMAGE,
         missingProfileField: null,
-      };
+      });
     }
 
     // Default fallback
@@ -265,11 +268,11 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   if (imageCount > 0) {
     if (pending === PendingType.VIBE_CHECK_IMAGE) {
       logger.debug({ userId }, 'Routing to vibe_check due to image presence.');
-      return { ...state, intent: 'vibe_check', missingProfileField: null };
+      return applyGuestIntent(state, 'vibe_check', { missingProfileField: null });
     }
     if (pending === PendingType.COLOR_ANALYSIS_IMAGE) {
       logger.debug({ userId }, 'Routing to color_analysis due to image presence.');
-      return { ...state, intent: 'color_analysis', missingProfileField: null };
+      return applyGuestIntent(state, 'color_analysis', { missingProfileField: null });
     }
   }
 
@@ -312,17 +315,14 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
       .run(systemPrompt, state.conversationHistoryTextOnly, state.traceBuffer, 'routeIntent');
 
     let { intent, missingProfileField } = response;
-    
-    // Prevent routing back to color_analysis if user is in COLOR_ANALYSIS_IMAGE pending and sent text
-    // This prevents the infinite loop
     if (pending === PendingType.COLOR_ANALYSIS_IMAGE && intent === 'color_analysis' && imageCount === 0) {
       logger.debug({ userId }, 'Preventing color_analysis routing loop, routing to general instead');
       intent = 'general';
     }
-
-
-
-    return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
+    return applyGuestIntent(state, intent, {
+      missingProfileField: missingProfileField ?? null,
+      generalIntent: state.generalIntent,
+    });
   } catch (err: unknown) {
     throw new InternalServerError('Failed to route intent', { cause: err });
   }

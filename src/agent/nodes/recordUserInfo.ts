@@ -3,6 +3,7 @@ import { AgeGroup, Fit, Gender, PendingType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { isGuestUser } from '../../utils/user';
 import { GraphState } from '../state';
 
 /**
@@ -57,30 +58,27 @@ export async function recordUserInfo(state: GraphState): Promise<GraphState> {
     const isProduction = process.env.NODE_ENV === 'production';
     
     if (Object.keys(dataToUpdate).length > 0) {
-      if (isProduction) {
+      if (isProduction || isGuestUser(state.user)) {
         logger.debug(
           { userId, updatedFields: Object.keys(dataToUpdate) },
-          'Skipping database update in production - database is source of truth. Updating state.user for current conversation.',
+          'Skipping database update (production or guest). Updating state.user for current conversation.',
         );
         // Update state.user object so the current conversation flow works
-        // This prevents the loop where missingProfileField keeps being set
         const updatedUser = {
           ...state.user,
           ...dataToUpdate,
         };
         return { ...state, user: updatedUser, pending: PendingType.NONE };
-      } else {
-        // In development, allow updating user for testing
-        const user = await prisma.user.update({
-          where: { id: state.user.id },
-          data: dataToUpdate,
-        });
-        logger.debug(
-          { userId, updatedFields: Object.keys(dataToUpdate) },
-          'User info recorded successfully from button payload',
-        );
-        return { ...state, user, pending: PendingType.NONE };
       }
+      const user = await prisma.user.update({
+        where: { id: state.user.id },
+        data: dataToUpdate,
+      });
+      logger.debug(
+        { userId, updatedFields: Object.keys(dataToUpdate) },
+        'User info recorded successfully from button payload',
+      );
+      return { ...state, user, pending: PendingType.NONE };
     }
 
     logger.debug({ userId, buttonPayload }, 'User may have skipped providing info.');

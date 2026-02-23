@@ -100,6 +100,9 @@ export interface GraphState {
   quizQuestions?: any[] | undefined;
   quizAnswers?: string[] | undefined;
   currentQuestionIndex?: number | undefined;
+
+  /** When guest hits vibe_check or color_analysis, set so guestLoginPrompt can show the right message */
+  guestLoginPromptFor?: 'vibe_check' | 'color_analysis' | undefined;
 }
 
 // ============================================================================
@@ -118,7 +121,8 @@ export type IntentLabel =
   | 'styling'
   | 'this_or_that'
   | 'skin_lab'
-  | 'fashion_quiz';
+  | 'fashion_quiz'
+  | 'guest_login_required';
 
 /**
  * Specific styling intents for fashion/styling related requests.
@@ -223,6 +227,10 @@ type Reply =
       vibe_check_result: number;
       recommendations: string[];
       user_image_url: string | null;
+    }
+  | {
+      reply_type: 'login_prompt';
+      reply_text: string;
     };
 
 /**

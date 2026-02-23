@@ -12,6 +12,7 @@ import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { isGuestUser } from '../../utils/user';
 
 import { AgeGroup, Gender, PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
@@ -271,28 +272,22 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       throw new InternalServerError(`Invalid palette name: ${paletteName}`);
     }
 
-    // In production, do NOT update user - database is source of truth
-    // Only update in development for testing
+    // In production or for guests, do NOT update user - database is source of truth / no persistence
     const isProduction = process.env.NODE_ENV === 'production';
-    
-    if (!isProduction) {
-      // Persist inferred gender and age group if they are not already confirmed (development only)
+    const guestUser = isGuestUser(state.user);
+
+    if (!isProduction && !guestUser) {
       const dataToUpdate: { inferredGender?: Gender; inferredAgeGroup?: AgeGroup } = {};
-      
       if (output.inferred_gender && !state.user.confirmedGender) {
         dataToUpdate.inferredGender = Gender[output.inferred_gender];
       }
-      
       if (output.inferred_age_group && !state.user.confirmedAgeGroup) {
-        // LLM output already matches Prisma enum values (TEEN/ADULT/SENIOR)
-        // Use the enum value directly
         if (Object.values(AgeGroup).includes(output.inferred_age_group as AgeGroup)) {
           dataToUpdate.inferredAgeGroup = output.inferred_age_group as AgeGroup;
         } else {
           logger.warn({ userId, inferred_age_group: output.inferred_age_group }, 'Invalid age group value from LLM');
         }
       }
-
       if (Object.keys(dataToUpdate).length > 0) {
         await prisma.user.update({
           where: { id: userId },
@@ -301,7 +296,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         logger.debug({ userId, ...dataToUpdate }, 'Updated inferred user properties.');
       }
     } else {
-      logger.debug({ userId }, 'Skipping user update in production - database is source of truth');
+      logger.debug({ userId }, 'Skipping user update (production or guest)');
     }
 
     // Get palette data from mapping

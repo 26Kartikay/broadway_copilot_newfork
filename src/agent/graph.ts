@@ -5,6 +5,7 @@ import {
   dailyFact,
   fetchColorAnalysisOnIntent,
   generateFollowUp,
+  guestLoginPrompt,
   handleFashionCharades,
   handleFeedback,
   handleGeneral,
@@ -44,6 +45,7 @@ export function buildAgentGraph() {
     .addNode('handleFashionCharades', handleFashionCharades)
     .addNode('handleSkinLab', handleSkinLab)
     .addNode('handleThisOrThat', handleThisOrThat)
+    .addNode('guestLoginPrompt', guestLoginPrompt)
     .addEdge(START, 'ingestMessage')
     .addConditionalEdges(
       'ingestMessage',
@@ -71,6 +73,8 @@ export function buildAgentGraph() {
       'routeIntent',
       (s: GraphState) => {
         switch (s.intent) {
+          case 'guest_login_required':
+            return 'guestLoginPrompt';
           case 'skin_lab':
             return 'handleSkinLab';
           case 'this_or_that':
@@ -83,6 +87,7 @@ export function buildAgentGraph() {
       },
       {
         general: 'routeGeneral',
+        guestLoginPrompt: 'guestLoginPrompt',
         vibe_check: 'vibeCheck',
         color_analysis: 'colorAnalysis',
         styling: 'routeStyleStudio',
@@ -126,6 +131,7 @@ export function buildAgentGraph() {
     .addEdge('handleThisOrThat', 'generateFollowUp')
     .addEdge('handleSaveColorAnalysis', 'generateFollowUp')
     .addEdge('handleProductRecommendationConfirmation', 'generateFollowUp')
+    .addEdge('guestLoginPrompt', 'generateFollowUp')
     // Then route from generateFollowUp to sendReply
     .addEdge('generateFollowUp', 'sendReply')
     .addEdge('sendReply', END);
