@@ -119,6 +119,9 @@ model User {
   lastVibeCheckAt     DateTime?
   lastColorAnalysisAt DateTime?
 
+  lastSyncedAt DateTime?
+  syncVersion  BigInt?
+
   createdAt DateTime @default(now())
   
   dailyPromptOptIn Boolean @default(false)
@@ -298,52 +301,44 @@ model WardrobeItem {
 // --- PRODUCT CATALOG ---
 
 model Product {
-  id        String @id @default(cuid())
-  handleId  String @unique                    // URL-friendly product identifier
-  barcode   String?                           // Product barcode/SKU
+  id          String   @id @default(cuid())
+  barcode     String
   
-  name      String                            // article_name
-  brand     String                            // Brand name
+  name        String?
+  brandName   String?
   
-  // Category & Type
-  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
-  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
+  gender      Gender
+  ageGroup    AgeGroup?
+  category    String?
+  subCategory String?
+  productType String?
   
-  // Parsed from component string (for fast filtering)
-  style       String?                         // Athleisure, Minimal, Streetwear, etc.
-  fit         String?                         // Oversized, Slim, Regular, etc.
-  colors      String[]                        // Black, Navy, Red, etc.
-  patterns    String?                         // Solid, Graphics, Stripes, etc.
-  occasions   String[]                        // Casual, Work, Party, etc.
+  colorPalette String?
+  imageUrl     String
+  colors       String[] @default([])
+  allTags      String?
   
-  // Full component tags as JSON (for category-specific tags)
-  componentTags Json                          // All parsed tags from component string
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  embeddingDim   Int?
+  embeddingAt    DateTime?
   
-  // URLs
-  imageUrl    String                          // Product image URL
-  productLink String                          // Link to product page on broadwaylive.in
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
-  // Vector search
-  searchDoc        String      @db.Text       // Combined text for embedding generation
-  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
-  embeddingModel   String?
-  embeddingDim     Int?
-  embeddingAt      DateTime?
-  
-  // Metadata
-  isActive    Boolean  @default(true)         // Whether product is available
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Indexes for fast filtering
-  @@index([category])
-  @@index([generalTag])
-  @@index([style])
-  @@index([fit])
-  @@index([patterns])
-  @@index([brand])
-  @@index([isActive])
+  @@index([name])
+  @@index([brandName])
+  @@index([gender])
+  @@index([ageGroup])
+  @@index([colors])
   @@index([createdAt])
+  @@index([category])
+  @@index([subCategory])
+  @@index([productType])
+  @@index([brandName, category])
+  @@index([gender, ageGroup])
+  @@index([colorPalette])
+  @@index([allTags])
 }
 
 // --- AGENT & LOGGING ---
