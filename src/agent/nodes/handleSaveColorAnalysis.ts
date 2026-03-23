@@ -61,26 +61,22 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
     }
 
     confirmationReplies.push({
-      // Push the text reply first
       reply_type: 'text',
       reply_text: replyText,
     });
 
-        // Only provide PDF if not a guest user AND saving was confirmed
-        if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
-          const paletteData = getPaletteData(paletteNameToSave);
-          const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
-    
-          // Use unified palette PDF path (no gender-specific paths)
-          const finalPdfPath = paletteData.pdfPath;
-    
-          confirmationReplies.push({
-            // Then push the PDF
-            reply_type: 'pdf',
-            media_url: `${baseUrl}/${finalPdfPath}`,
-            reply_text: 'Here is your color palette guide.',
-          });
-        }  } else {
+    if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
+      const paletteData = getPaletteData(paletteNameToSave);
+      const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+      const finalPdfPath = paletteData.pdfPath;
+
+      confirmationReplies.push({
+        reply_type: 'pdf',
+        media_url: `${baseUrl}/${finalPdfPath}`,
+        reply_text: 'Here is your color palette guide.',
+      });
+    }
+  } else {
     replyText = "No problem. I won't save your color palette.";
     logger.debug({ userId }, 'User declined to save color analysis result.');
     confirmationReplies.push({

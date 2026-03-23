@@ -12,6 +12,7 @@ import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { isGuestUser } from '../../utils/user';
 
 import { AgeGroup, Gender, PendingType } from '@prisma/client';
 import { GraphState, Replies } from '../state';
@@ -323,18 +324,49 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       }
     }
 
-    // Return color analysis card reply with a prompt to save the result.
+    const colorCardReply = {
+      reply_type: 'color_analysis_card' as const,
+      palette_name: paletteName,
+      description: paletteData.description,
+      top_colors: shuffleArray(paletteData.topColors),
+      two_color_combos: shuffleArray(
+        formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
+      ),
+      user_image_url: userImageUrl,
+    };
+
+    // Guests never see "save to profile" — not persisted until they sign up.
+    if (isGuestUser(state.user)) {
+      const productFollowUp: Replies = [
+        {
+          reply_type: 'quick_reply',
+          reply_text: `Now that we know you're a ${paletteName}, would you like to see some products from your palette?`,
+          buttons: [
+            { text: 'Yes, please!', id: 'product_recommendation_yes' },
+            { text: 'No, thanks', id: 'product_recommendation_no' },
+          ],
+        },
+      ];
+
+      logger.debug(
+        { userId, messageId, paletteName },
+        'Color analysis completed for guest; skipping save prompt, offering product follow-up.',
+      );
+
+      return {
+        ...state,
+        assistantReply: [colorCardReply, ...productFollowUp],
+        seasonalPaletteToSave: paletteName,
+        pending: PendingType.CONFIRM_PRODUCT_RECOMMENDATION,
+        productRecommendationContext: {
+          type: 'color_palette',
+          paletteName,
+        },
+      };
+    }
+
     const replies: Replies = [
-      {
-        reply_type: 'color_analysis_card',
-        palette_name: paletteName,
-        description: paletteData.description,
-        top_colors: shuffleArray(paletteData.topColors),
-        two_color_combos: shuffleArray(
-          formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
-        ),
-        user_image_url: userImageUrl,
-      },
+      colorCardReply,
       {
         reply_type: 'quick_reply',
         reply_text: 'Do you want to save this color analysis result?',
