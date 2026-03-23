@@ -4,7 +4,6 @@ import { randomUUID } from 'crypto';
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
 import { queueMemoryExtraction } from '../lib/tasks';
-import { NotFoundError } from './errors';
 import { logger } from './logger';
 import { isGuestUser } from './user';
 
@@ -50,36 +49,30 @@ export async function getOrCreateUserAndConversation(
   profileName: string,
   appUserId: string,
 ): Promise<{ user: User; conversation: Conversation }> {
-  // In production, only fetch existing users - NO creation, NO updates
-  // Users must be created/updated via external APIs or database directly
   const isProduction = process.env.NODE_ENV === 'production';
-  
-  let user: User | null;
-  
-  if (isProduction) {
-    // In production: ONLY fetch, never create or update
-    user = await prisma.user.findUnique({
-      where: { appUserId },
-    });
-    
-    if (!user) {
-      throw new NotFoundError(`User with appUserId ${appUserId} not found. User must be created via external API or database.`);
-    }
-    
-    // Do NOT update anything - the database values are the source of truth
-  } else {
-    // In development, allow creating users for testing
-    user = await prisma.user.upsert({
-      where: { appUserId },
-      update: {
-        whatsappId,
-        // Only update profileName if a non-empty one is provided
-        ...(profileName && profileName.trim() && { profileName: profileName.trim() }),
-      },
-      create: {
-        whatsappId,
-        profileName: profileName && profileName.trim() ? profileName.trim() : '',
+  const trimmedProfile = profileName?.trim() ?? '';
+
+  let user = await prisma.user.findUnique({
+    where: { appUserId },
+  });
+
+  if (!user) {
+    const anonymous = !trimmedProfile;
+    user = await prisma.user.create({
+      data: {
         appUserId,
+        whatsappId,
+        profileName: anonymous ? 'Guest' : trimmedProfile,
+        details: anonymous ? 'Unknown' : '',
+        isGuest: anonymous,
+      },
+    });
+  } else if (!isProduction) {
+    user = await prisma.user.update({
+      where: { appUserId },
+      data: {
+        whatsappId,
+        ...(trimmedProfile && { profileName: trimmedProfile }),
       },
     });
   }

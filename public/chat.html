@@ -867,15 +867,17 @@
   <div class="chat-container">
     <div class="chat-header">
       <img src="https://shop.broadwaylive.in/cdn/shop/files/Screen_Recording_2026-01-05_122811.gif?v=1767866062&width=180" alt="Broadway Live" class="header-logo">
-      <div style="margin-top: 10px; display: flex; justify-content: center; gap: 10px; align-items: center;">
+      <div style="margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; align-items: center;">
         <label for="userIdSelect" style="color: white; font-size: 12px;">User ID:</label>
         <select id="userIdSelect" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555;">
           <option value="guest_TEMP">Guest User</option>
           <option value="kartikay1234">Kartikay (App User)</option>
           <option value="shambhavi5678">Shambhavi (App User)</option>
+          <option value="__manual__">Custom (type below)</option>
         </select>
+        <input type="text" id="manualUserIdInput" placeholder="e.g. my_test_user_1" title="Used when Custom is selected" style="display: none; padding: 5px 8px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: min(220px, 42vw);">
         <label for="profileNameInput" style="color: white; font-size: 12px;">Name:</label>
-        <input type="text" id="profileNameInput" value="Guest" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: 100px;">
+        <input type="text" id="profileNameInput" value="Guest" style="padding: 5px; border-radius: 5px; font-size: 12px; background-color: #333; color: white; border: 1px solid #555; width: 100px;" placeholder="empty = anonymous">
       </div>
     </div>
 
@@ -946,7 +948,14 @@
     // Get current user ID and profile name from UI
     function getCurrentUserId() {
       const select = document.getElementById('userIdSelect');
-      return select ? select.value : randomGuestId;
+      if (!select) return randomGuestId;
+      if (select.value === '__manual__') {
+        const manual = document.getElementById('manualUserIdInput');
+        const typed = manual && manual.value.trim();
+        if (typed) return typed;
+        return randomGuestId;
+      }
+      return select.value;
     }
     
     function getCurrentProfileName() {
@@ -1570,10 +1579,20 @@
       isLoading = false;
     }
 
-    // Event listener for userIdSelect to update profileNameInput
+    // Event listener for userIdSelect: preset names + show/hide manual user id field
     document.addEventListener('DOMContentLoaded', () => {
       const userIdSelect = document.getElementById('userIdSelect');
       const profileNameInput = document.getElementById('profileNameInput');
+      const manualUserIdInput = document.getElementById('manualUserIdInput');
+
+      function syncUserIdControls() {
+        if (!userIdSelect || !manualUserIdInput) return;
+        const manual = userIdSelect.value === '__manual__';
+        manualUserIdInput.style.display = manual ? '' : 'none';
+        if (manual && !manualUserIdInput.value.trim()) {
+          manualUserIdInput.value = randomGuestId;
+        }
+      }
 
       if (userIdSelect && profileNameInput) {
         userIdSelect.addEventListener('change', () => {
@@ -1583,9 +1602,13 @@
             profileNameInput.value = 'Kartikay';
           } else if (userIdSelect.value === 'shambhavi5678') {
             profileNameInput.value = 'Shambhavi';
+          } else if (userIdSelect.value === '__manual__') {
+            profileNameInput.value = '';
           }
+          syncUserIdControls();
         });
       }
+      syncUserIdControls();
     });
 
     // Focus input on load

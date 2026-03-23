@@ -10,8 +10,11 @@ import { User } from '@prisma/client';
  */
 export function isGuestUser(user: User | null | undefined): boolean {
   if (!user) return true;
-  
-  // Check if appUserId starts with "guest_" or is a temporary identifier
-  return user.appUserId?.startsWith('guest_') || user.appUserId?.startsWith('TEMP_') || false;
+
+  if (user.isGuest) return true;
+
+  return Boolean(
+    user.appUserId?.startsWith('guest_') || user.appUserId?.startsWith('TEMP_'),
+  );
 }
 

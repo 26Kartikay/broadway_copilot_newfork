@@ -109,6 +109,8 @@ model User {
   appUserId   String @unique
   whatsappId  String @unique
   profileName String @default("")
+  details     String  @default("")
+  isGuest     Boolean @default(false)
 
   inferredGender    Gender?
   inferredAgeGroup  AgeGroup?

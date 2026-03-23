@@ -192,8 +192,7 @@ export async function runAgentForHttp(
   let finalState: Partial<GraphState> | null = null;
   const graphRunId = messageId;
   try {
-    // In production, profileName is ignored - database values are never updated
-    // Only pass it for development mode compatibility
+    // New HTTP users are created on first chat; anonymous users get Guest / Unknown (see context.ts).
     const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
       identifierId,
       profileName ?? '',
