@@ -18,6 +18,8 @@ import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from '../core/
 import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
 import { ensureRequiredArrays, ToolCall, toOpenAIToolSpec } from '../core/tools';
 
+import { openAiLimiter } from '../limiter';
+
 /**
  * A chat model that interacts with the OpenAI API.
  * This class extends `BaseChatCompletionsModel` and is configured for the OpenAI endpoint.
@@ -91,7 +93,7 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
     let response: Response;
     try {
-      response = await this.client.responses.create(params);
+      response = await openAiLimiter.schedule(() => this.client.responses.create(params));
     } catch (err) {
       const endTime = new Date();
       const message = err instanceof Error ? err.message : String(err);
@@ -157,7 +159,7 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
 
     let response: OpenAI.Chat.Completions.ChatCompletion;
     try {
-      response = await this.client.chat.completions.create(params);
+      response = await openAiLimiter.schedule(() => this.client.chat.completions.create(params));
     } catch (err) {
       const endTime = new Date();
       const message = err instanceof Error ? err.message : String(err);

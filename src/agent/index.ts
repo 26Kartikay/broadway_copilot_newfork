@@ -192,16 +192,18 @@ export async function runAgentForHttp(
   let finalState: Partial<GraphState> | null = null;
   const graphRunId = messageId;
   try {
-    // New HTTP users are created on first chat; anonymous users get Guest / Unknown (see context.ts).
+    // Parallelize user/conversation retrieval and initial DB lookups
     const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
       identifierId,
       profileName ?? '',
-      identifierId, // appUserId is the same as identifierId for initial user creation
+      identifierId,
     );
     conversation = _conversation;
 
-    // Load previous conversation state
-    const previousState = await loadPreviousConversationState(conversation.id);
+    // Load previous conversation state and potentially other data in parallel
+    const [previousState] = await Promise.all([
+      loadPreviousConversationState(conversation.id),
+    ]);
 
     // Create serializable initial state (exclude non-serializable properties)
     const serializablePreviousState = previousState

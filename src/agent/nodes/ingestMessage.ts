@@ -66,6 +66,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     selectedTonality: dbSelectedTonality,
     thisOrThatFirstImageId: dbThisOrThatFirstImageId,
   } = await prisma.$transaction(async (tx) => {
+    // Parallelize finding the last message and the latest assistant message
     const [lastMessage, latestAssistantMessage, latestAssistantMessageWithTonality] = await Promise.all([
       tx.message.findFirst({
         where: { conversationId },
@@ -100,7 +101,6 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     ]);
 
     // Pull state from DB
-    // Use tonality from the message that has it, otherwise from latest message
     const pendingStateDB = latestAssistantMessage?.pending ?? PendingType.NONE;
     const selectedTonalityDB = latestAssistantMessageWithTonality?.selectedTonality ?? latestAssistantMessage?.selectedTonality ?? null;
     const thisOrThatFirstImageIdDB = latestAssistantMessage?.thisOrThatFirstImageId ?? undefined;
@@ -155,7 +155,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
           conversationId,
         },
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: 5, // Reduced from 10 to 5 for optimization
         select: {
           id: true,
           role: true,

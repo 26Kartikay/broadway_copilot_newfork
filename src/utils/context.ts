@@ -52,6 +52,7 @@ export async function getOrCreateUserAndConversation(
   const isProduction = process.env.NODE_ENV === 'production';
   const trimmedProfile = profileName?.trim() ?? '';
 
+  // Parallelize user lookup and finding the last open conversation if user exists
   let user = await prisma.user.findUnique({
     where: { appUserId },
   });
