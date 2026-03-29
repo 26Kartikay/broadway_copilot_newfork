@@ -1,54 +1,149 @@
-## 🎨✨ Task: Seasonal Color Palette Identification
+## 🎨 Task: Seasonal Color Palette Identification
 
-Your task is to analyze the user's uploaded image and determine their seasonal color palette.
-The user context is as follows: {user_context}. Use this information to aid your analysis.
-
----
-
-### 🪞 Step 1: Quality Check  
-**NEVER Include Image Links**: NEVER include image links, URLs, web addresses, or any image references in your text responses (including in `error_message`). Your text should be clean and natural language only.
-
-If the image is too dark, blurry, or not showing a face clearly — set `quality_ok` to `false` and provide a friendly message asking for a clearer photo.  
-Be gentle and polite, e.g.: "Oops, can you try sending a clearer picture of your face? 💖"
+Analyze the uploaded portrait image and return the person's seasonal color palette as a JSON object.
+User context: {user_context}
 
 ---
 
-### 🎨 Step 2: Seasonal Palette Analysis  
-From a valid image, analyze the user's:
-- **Skin tone** (warm, cool, or neutral undertones)
-- **Eye color** (brightness, depth, warmth/coolness)
-- **Hair color** (warmth, depth, contrast)
-- **Overall contrast level** (low, medium, high)
-- **Inferred Gender** (MALE, FEMALE, or UNKNOWN if unable to confidently determine)
-- **Inferred Age Group** (Classify into one of: TEEN, ADULT, SENIOR)
+## STEP 1 — Quality Check
 
-Based on these characteristics, determine which of the 12 seasonal palettes best matches the user:
+Reject ONLY if the image is genuinely unusable: extreme blur, near-total darkness, no face visible, or the subject is fully obscured.
 
-**Spring Palettes:**
-- `LIGHT_SPRING` - Light, warm, clear coloring with golden undertones
-- `TRUE_SPRING` - Warm, golden, peachy coloring with medium contrast
-- `BRIGHT_SPRING` - Bright, clear, warm coloring with high contrast
-
-**Summer Palettes:**
-- `LIGHT_SUMMER` - Light, cool, soft coloring with low contrast
-- `TRUE_SUMMER` - Cool, blue/pink undertones with medium contrast
-- `SOFT_SUMMER` - Soft, muted, cool-to-neutral coloring with low contrast
-
-**Autumn Palettes:**
-- `SOFT_AUTUMN` - Soft, warm, muted coloring with low contrast
-- `TRUE_AUTUMN` - Warm, golden, rich coloring with medium contrast
-- `DARK_AUTUMN` - Deep, warm, rich coloring with high contrast
-
-**Winter Palettes:**
-- `TRUE_WINTER` - Cool, deep coloring with high contrast
-- `BRIGHT_WINTER` - Clear, bright, cool coloring with high contrast
-- `DARK_WINTER` - Deep, cool coloring with very high contrast
+IMPORTANT: Clear photos of real people — even if the lighting is slightly warm, slightly shadowed, or the face is at an angle — must NOT be rejected. Only reject truly broken or faceless images. If a face is visible and skin/hair/eyes can be assessed, set quality_ok: true and proceed.
 
 ---
 
-### 💌 Output Format (Structured JSON)
-Return your result as a **single JSON object** (no text outside JSON):
+## STEP 2 — Compensate for Image Lighting First
 
+Before analysing anything else, assess the lighting conditions of the photo:
+
+- If the photo has strong WARM lighting (orange/yellow studio light, golden hour, candlelight, warm cinematic filter) — mentally subtract that warmth. Warm lighting makes everyone look warmer than they are.
+- If the photo has strong COOL lighting (blue studio, overcast daylight, cool flash) — mentally subtract that coolness.
+- To find the true undertone, look at the SHADOW AREAS of the skin (shadows reveal undertone more reliably than highlights), the WHITES OF THE EYES (use as a neutral white-balance reference — if they look warm/yellow the whole image is warm-lit), and the LIP COLOR in its natural state.
+- Only after compensating for lighting should you proceed to feature analysis.
+
+---
+
+## STEP 3 — Observe These 4 Signals
+
+Assess each signal independently. Write out your internal observation for each before picking a palette.
+
+### Signal A — UNDERTONE (most important signal)
+
+Look at: lip color, shadow areas of skin, inner wrist veins if visible.
+
+- WARM: peachy/golden/yellow/orange-toned lips, skin has a bronze or golden glow even in shadow, greenish veins
+- COOL: pink/mauve/berry/rose lips, skin reads grey, pink, or bluish especially in shadows, blue-purple veins  
+- NEUTRAL: neither clearly warm nor cool — features are blended, lips are neutral rose-brown, skin has no obvious golden or pink cast
+
+⚠️ CRITICAL — do NOT confuse skin DEPTH with undertone:
+- A person with very dark skin can have COOL undertones (grey-brown, blue-black tones) or WARM undertones (golden-brown, bronze tones)
+- A person with medium tan/olive skin can be COOL (ashy olive) or WARM (golden olive)
+- A person with fair skin can be WARM (peachy) or COOL (pinkish)
+- Medium-brown, tan, or South Asian skin is NOT automatically warm. Check the lips and shadows.
+
+### Signal B — DEPTH
+
+How dark are the HAIR and EYES combined (ignore skin depth):
+- LIGHT: light/medium hair + light/medium eyes
+- MEDIUM: medium-dark hair + medium eyes, OR medium hair + dark eyes
+- DEEP: very dark (near-black) hair AND very dark eyes together
+
+### Signal C — CONTRAST
+
+Imagine the photo in black and white. How different is the lightness of hair vs skin vs eyes?
+- LOW: all features are similar in lightness — nothing dramatically stands out; features blend together
+- MEDIUM: visible but not dramatic difference — hair is noticeably darker than skin but not stark
+- HIGH: dramatic, striking difference — very dark hair on light skin, or very bright eyes/teeth that pop against dark features
+
+### Signal D — CHROMA (Clarity vs Mutedness)
+
+Do the person's features look VIVID and CLEAR, or MUTED and DUSTY?
+- CLEAR/BRIGHT: features pop and are striking — eyes are vivid, skin glows, coloring has energy
+- MUTED/SOFT: features blend and look dusty or greyed-down — like the saturation was turned down; nothing pops dramatically; the person would look washed out in very bright vivid colors
+
+---
+
+## STEP 4 — Follow This Decision Tree Strictly
+
+### If WARM undertone → choose between SPRING and AUTUMN
+
+**Is chroma CLEAR/BRIGHT?** → SPRING family:
+- LIGHT depth + LOW contrast → `LIGHT_SPRING` (golden-fair, peachy, delicate — think fair-skinned with golden warmth and soft features)
+- MEDIUM depth + MEDIUM contrast + golden glow → `TRUE_SPRING` (warm, golden, peachy, fresh — like Jennifer Lopez, Chris Hemsworth)
+- HIGH contrast OR very vivid coloring → `BRIGHT_SPRING` (warm but striking — clear bright features with warm base)
+
+**Is chroma MUTED/SOFT?** → AUTUMN family — now use DEPTH + CONTRAST to pick sub-palette:
+- LOW-MEDIUM contrast + features look dusty/blended + LOW-MEDIUM depth → `SOFT_AUTUMN`
+  (muted, earthy, nothing pops — like Aamir Khan, Emma Stone, Drew Barrymore, Shah Rukh Khan)
+- MEDIUM contrast + GOLDEN RICHNESS visible + MEDIUM depth → `TRUE_AUTUMN`
+  (rich, spiced, golden-brown — like Beyoncé, Robert Downey Jr, Jennifer Lopez)
+- HIGH contrast + DEEP features (near-black hair AND dark eyes) + warm undertone confirmed → `DARK_AUTUMN`
+  (deep, bronzy, dramatic warm — like Idris Elba, Oprah, Deepika Padukone)
+
+### If COOL undertone → choose between SUMMER and WINTER
+
+**Is chroma MUTED/SOFT?** → SUMMER family:
+- LIGHT depth + very LOW contrast + everything light and soft → `LIGHT_SUMMER`
+  (ash-fair, cool, ethereal, delicate — like Taylor Swift, Princess Diana)
+- MEDIUM depth + MEDIUM contrast + ashy-cool features → `TRUE_SUMMER`
+  (ash brown hair, pink-cool skin, grey/blue/green eyes — like Chris Evans, Kate Middleton, Hrithik Roshan)
+- LOW-MEDIUM contrast + features blend + slightly warm-neutral lean but overall cool → `SOFT_SUMMER`
+  (greyed-out, dusty cool, blended — like Brad Pitt, Katrina Kaif)
+
+**Is chroma CLEAR/BRIGHT?** → WINTER family:
+- HIGH contrast + COOL + MEDIUM depth (dark hair on fair-medium skin) → `TRUE_WINTER`
+  (icy cool, high contrast — like Angelina Jolie, Aishwarya Rai, Tom Cruise, Keanu Reeves)
+- HIGH contrast + COOL + VERY DEEP features (near-black skin AND hair AND eyes) → `DARK_WINTER`
+  (deep, cool-neutral, dramatic — like Kylie Jenner in natural state)
+- HIGH contrast + COOL + VERY VIVID/BRIGHT features (especially striking clear eyes) → `BRIGHT_WINTER`
+  (electric clarity, icy bright — like Megan Fox)
+
+### If NEUTRAL undertone → identify which signal dominates
+
+- Predominantly MUTED + LOW contrast + any warmth → `SOFT_AUTUMN`
+- Predominantly MUTED + LOW contrast + no warmth → `SOFT_SUMMER`
+- LIGHT overall + any warmth → `LIGHT_SPRING`
+- LIGHT overall + no warmth → `LIGHT_SUMMER`
+- Otherwise use depth + contrast to pick the closest season above
+
+---
+
+## STEP 5 — Run All Anti-Bias Checks Before Finalising
+
+### Check 1 — TRUE_AUTUMN gate (most over-predicted palette)
+If you are about to output TRUE_AUTUMN, verify ALL THREE are true:
+- ✅ Undertone is genuinely WARM — not just medium/tan/brown skin depth
+- ✅ Contrast is MEDIUM — not high (→ DARK_AUTUMN), not low (→ SOFT_AUTUMN)
+- ✅ Chroma is RICH and GOLDEN — not dusty/muted (→ SOFT_AUTUMN), not vivid/clear (→ TRUE_SPRING)
+If any one of these fails → reconsider.
+
+### Check 2 — SOFT_AUTUMN vs TRUE_AUTUMN (most confused pair)
+The single deciding factor is CHROMA:
+- TRUE_AUTUMN: warmth reads RICH, GOLDEN, ALIVE — like spiced honey or terracotta. Features glow.
+- SOFT_AUTUMN: warmth reads DUSTY, MUTED, GREYED-DOWN — like dried herbs or weathered wood. Nothing pops. The person looks best in muted earthy tones, not vivid ones.
+Ask yourself: does this person's coloring look RICH or does it look like the saturation was dialled down? Rich → TRUE_AUTUMN. Dialled down → SOFT_AUTUMN.
+
+### Check 3 — DARK_AUTUMN vs DARK_WINTER at deep skin tones
+Both have very deep features and high contrast. The ONLY differentiator is undertone warmth:
+- DARK_AUTUMN: skin has WARM, BRONZY, GOLDEN or ORANGE-BROWN quality — glows in terracotta and olive
+- DARK_WINTER: skin reads NEUTRAL-COOL, GREY-BROWN, BLUE-TONED or EBONY — no bronze warmth; ashy or cool depth
+For deep skin: look at where the skin is lightest (inner arm, forehead) — does it glow golden (DARK_AUTUMN) or read neutral-grey-cool (DARK_WINTER)?
+
+### Check 4 — South Asian / olive skin bias
+Many South Asian people are SOFT_AUTUMN, SOFT_SUMMER, TRUE_SUMMER, or even TRUE_WINTER — not automatically TRUE_AUTUMN or DARK_AUTUMN. The surface skin colour alone tells you nothing about undertone. Treat every South Asian person's undertone as unknown until confirmed by lip colour and shadow reads.
+
+### Check 5 — SOFT palette check
+If the person's features look BLENDED and nothing stands out dramatically — no vivid eye colour, no richly saturated skin, no stark contrast, no features that pop — the answer is almost certainly SOFT_AUTUMN or SOFT_SUMMER, not any TRUE or DARK season. Both TRUE and DARK seasons require features that read with more presence and definition.
+
+### Check 6 — Quality rejection gate
+Are you about to set quality_ok: false? Only do so if the image is genuinely unusable — pure black, extreme motion blur, no face visible, or subject fully hidden. A celebrity photo, a slightly shadowed selfie, a warm-lit portrait, or a face at a mild angle must be accepted. When in doubt: accept and analyse.
+
+---
+
+## STEP 6 — Output
+
+Return ONLY this JSON object. No text, no explanation, no markdown outside the JSON.
 ```json
 {
   "quality_ok": true,
@@ -59,7 +154,7 @@ Return your result as a **single JSON object** (no text outside JSON):
 }
 ```
 
-If the image quality is poor:
+If the image is genuinely unusable:
 ```json
 {
   "quality_ok": false,
@@ -70,7 +165,8 @@ If the image quality is poor:
 }
 ```
 
-**Important:** 
-- `palette_name` must be EXACTLY one of the 12 palette values listed above (e.g., `TRUE_AUTUMN`, `LIGHT_SPRING`, etc.)
-- Use uppercase with underscores (e.g., `LIGHT_SPRING`, not `Light Spring`)
-- If quality is not ok, set `palette_name` to `null`, `inferred_gender` to `null`, `inferred_age_group` to `null`, and provide `error_message`
+**Output rules:**
+- `palette_name` must be EXACTLY one of: `LIGHT_SPRING`, `TRUE_SPRING`, `BRIGHT_SPRING`, `LIGHT_SUMMER`, `TRUE_SUMMER`, `SOFT_SUMMER`, `SOFT_AUTUMN`, `TRUE_AUTUMN`, `DARK_AUTUMN`, `TRUE_WINTER`, `BRIGHT_WINTER`, `DARK_WINTER`
+- `inferred_gender`: `MALE`, `FEMALE`, or `UNKNOWN`
+- `inferred_age_group`: `TEEN`, `ADULT`, or `SENIOR`
+- If quality_ok is false: palette_name, inferred_gender, and inferred_age_group must all be null

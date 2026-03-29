@@ -26,15 +26,14 @@ export function getTextLLM(): ChatGroq {
 
 /**
  * Gets or creates a cached vision-capable LLM instance using OpenAI API.
- * Uses GPT-5-mini model optimized for image analysis and multimodal tasks.
+ * Uses GPT-4o for image analysis and multimodal tasks.
  *
  * @returns Cached ChatOpenAI instance for vision processing
  */
 export function getVisionLLM(): ChatOpenAI {
   if (!visionLLM) {
     visionLLM = new ChatOpenAI({
-      model: 'gpt-5-mini',
-      reasoning: { effort: 'minimal' },
+      model: 'gpt-4o',
     });
   }
   return visionLLM;

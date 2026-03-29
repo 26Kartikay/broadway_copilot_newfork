@@ -15,7 +15,8 @@
     "lint": "eslint \"src/**/*.ts\"",
     "prisma:generate": "npx prisma@^6.15.0 generate",
     "prisma:migrate": "npx prisma@^6.15.0 migrate",
-    "prisma:studio": "npx prisma@^6.15.0 studio"
+    "prisma:studio": "npx prisma@^6.15.0 studio",
+    "eval:color-analysis": "node scripts/color-analysis-eval/run-eval.mjs"
   },
   "keywords": [],
   "author": "",
