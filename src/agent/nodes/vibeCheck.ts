@@ -5,7 +5,6 @@ import { getTextLLM, getVisionLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import type { QuickReplyButton } from '../../lib/chat/types';
 import { prisma } from '../../lib/prisma';
-import { queueWardrobeIndex } from '../../lib/tasks';
 import { numImagesInMessage } from '../../utils/context';
 import { loadPrompt } from '../../utils/prompts';
 
@@ -193,7 +192,6 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
       ]);
       updatedUser = userTransactionResult; // Update user object if transaction was successful
 
-      queueWardrobeIndex(userId, latestMessageId); // Only queue if not guest
     }
 
     // Find the latest message with an image in the conversation history

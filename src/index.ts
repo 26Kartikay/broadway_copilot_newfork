@@ -11,8 +11,12 @@ import { connectPrisma } from './lib/prisma';
 import { connectRedis } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { requestLogger } from './middleware/requestLogger';
+import { clearUploadsDirectory } from './utils/clearUploads';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
+
+/** Purge container-local upload files periodically (see scripts/clear-uploads.mjs for manual run). */
+const UPLOADS_PURGE_INTERVAL_MS = 30 * 60 * 1000;
 
 const app = express();
 app.set('trust proxy', true);
@@ -179,6 +183,15 @@ void (async function bootstrap() {
     app.listen(PORT, '0.0.0.0', () => {
       logger.info({ port: PORT }, 'Broadway Chat Bot server started');
     });
+
+    setInterval(() => {
+      void clearUploadsDirectory().catch((err: unknown) => {
+        logger.error(
+          { err: err instanceof Error ? err.message : String(err) },
+          'Scheduled uploads purge failed',
+        );
+      });
+    }, UPLOADS_PURGE_INTERVAL_MS);
   } catch (err: unknown) {
     logger.error(
       {

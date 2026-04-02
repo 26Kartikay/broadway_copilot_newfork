@@ -3,7 +3,6 @@ import { randomUUID } from 'crypto';
 
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
-import { queueMemoryExtraction } from '../lib/tasks';
 import { logger } from './logger';
 import { isGuestUser } from './user';
 
@@ -32,14 +31,6 @@ async function handleStaleConversation(
       data: { userId: user.id },
     }),
   ]);
-
-  if (!isGuestUser(user)) {
-    queueMemoryExtraction(user.id, conversation.id);
-    logger.debug(
-      { userId: user.id, conversationId: conversation.id },
-      'Queued memory extraction for closed conversation.',
-    );
-  }
 
   return newConversation;
 }

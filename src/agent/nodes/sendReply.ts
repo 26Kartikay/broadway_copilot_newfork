@@ -6,7 +6,6 @@ import { MessageContent, MessageContentPart } from '../../lib/ai';
 import { Tonality } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
-import { queueFeedbackRequest } from '../../lib/tasks';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { GraphState, Replies } from '../state';
@@ -14,7 +13,7 @@ import { GraphState, Replies } from '../state';
 /**
  * Prepares and returns the reply for HTTP responses.
  * Records the assistant's message in the database and updates processing status.
- * Schedules memory extraction after sending.
+ * Persists the assistant turn for HTTP delivery.
  *
  * @param state The current agent state containing reply and user info.
  * @returns Updated state with httpResponse containing the replies.
@@ -101,8 +100,6 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
         Object.keys(additionalKwargs).length > 0 ? additionalKwargs : Prisma.JsonNull,
     },
   });
-
-  queueFeedbackRequest(user.id, conversationId);
 
   logger.info({ userId, replyCount: orderedReplies.length }, 'Replies prepared for HTTP response');
 

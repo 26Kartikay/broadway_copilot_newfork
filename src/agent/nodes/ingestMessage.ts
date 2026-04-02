@@ -2,7 +2,6 @@ import { MessageRole, PendingType } from '@prisma/client';
 import { AssistantMessage, MessageContent, MessageContentPart, UserMessage } from '../../lib/ai';
 
 import { prisma } from '../../lib/prisma';
-import { queueImageUpload } from '../../lib/tasks';
 import { logger } from '../../utils/logger';
 import { convertLocalhostUrlToDataUrl, processMediaForAI } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
@@ -184,8 +183,6 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     },
     'IngestMessage: Final state before returning',
   );
-
-  queueImageUpload(user.id, savedMessage.id);
 
   const conversationHistoryWithImages: (UserMessage | AssistantMessage)[] = [];
   const conversationHistoryTextOnly: (UserMessage | AssistantMessage)[] = [];

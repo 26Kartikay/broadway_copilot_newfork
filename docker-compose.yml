@@ -1,3 +1,6 @@
+# Local stack: app + Postgres + Redis. The Node service does not use Google Cloud Tasks,
+# GCS image upload, wardrobe indexing, feedback jobs, or memory extraction queuing (removed from the app).
+# User images are stored under /usr/src/app/uploads (named volume below), matching container-local uploads in prod.
 services:
   app:
     image: node:22
@@ -62,6 +65,7 @@ services:
       POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
       REDIS_URL: redis://redis:6379
+      # localhost keeps vision on data URLs in dev (OpenAI cannot reach private URLs). Port is published for the host browser.
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       # Enable polling for file watching in Docker (works better on Windows/Mac)
       CHOKIDAR_USEPOLLING: "true"
@@ -77,7 +81,8 @@ services:
       - .:/usr/src/app
       - node_modules:/usr/src/app/node_modules
       - dist:/usr/src/app/dist
-      - ./functions:/usr/src/app/functions
+      # Keeps chat uploads inside Docker (not your git working tree); cleared periodically by the app.
+      - uploads_data:/usr/src/app/uploads
 
     # Enable better file watching in Docker
     stdin_open: true
@@ -142,5 +147,6 @@ services:
 volumes:
   node_modules:
   dist:
+  uploads_data:
   postgres_data_v0_8_0:
   redis_data:
