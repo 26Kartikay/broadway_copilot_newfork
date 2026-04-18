@@ -4,7 +4,8 @@
 #
 # Usage (on the VM):
 #   cp .env .env.production   # optional
-#   export SERVER_URL=http://3.108.221.167:8080   # use https://... if you terminate TLS in front
+#   export PORT=8081   # optional; default 8080. SERVER_URL must use the same port.
+#   export SERVER_URL=http://3.108.221.167:8081
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
 # Uploads on the host (default ./uploads) → container /app/uploads. Override with UPLOADS_HOST_DIR.
@@ -29,7 +30,7 @@ services:
       # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
       SERVER_URL: ${SERVER_URL:?Set SERVER_URL to your public base URL, e.g. https://example.com}
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     depends_on:
       db:
         condition: service_healthy
