@@ -2,9 +2,9 @@
 # User/chat images are written under /app/uploads in the container. Mount a host
 # directory so uploads survive restarts and you can add files from the host.
 #
-# Usage:
-#   cp .env .env.production   # optional: keep secrets out of the default .env
-#   export SERVER_URL=https://your-public-host:8080
+# Usage (on the VM):
+#   cp .env .env.production   # optional
+#   export SERVER_URL=http://3.108.221.167:8080   # use https://... if you terminate TLS in front
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
 # Uploads on the host (default ./uploads) → container /app/uploads. Override with UPLOADS_HOST_DIR.
