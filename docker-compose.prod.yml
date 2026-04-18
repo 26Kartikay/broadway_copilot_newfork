@@ -1,0 +1,104 @@
+# Production-style stack: built image (no bind-mounted source), Postgres, Redis.
+# User/chat images are written under /app/uploads in the container. Mount a host
+# directory so uploads survive restarts and you can add files from the host.
+#
+# Usage:
+#   cp .env .env.production   # optional: keep secrets out of the default .env
+#   export SERVER_URL=https://your-public-host:8080
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# Uploads on the host (default ./uploads) → container /app/uploads. Override with UPLOADS_HOST_DIR.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-8080}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-broadway}?schema=public
+      REDIS_URL: redis://redis:6379
+      # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
+      SERVER_URL: ${SERVER_URL:?Set SERVER_URL to your public base URL, e.g. https://example.com}
+    ports:
+      - "${PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      # Persist chat/user uploads; place files here on the host to expose them as /uploads/...
+      - ${UPLOADS_HOST_DIR:-./uploads}:/app/uploads
+
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -Eeuo pipefail
+        log() { printf '%s\n' "$${*}"; }
+
+        log "Waiting for Postgres..."
+        until node <<'NODE' >/dev/null 2>&1; do
+        const net = require('net');
+        const host = process.env.POSTGRES_HOST || 'db';
+        const port = Number(process.env.POSTGRES_PORT || 5432);
+        const socket = net.createConnection({ host, port }, () => {
+          socket.end();
+          process.exit(0);
+        });
+        const fail = () => process.exit(1);
+        socket.on('error', fail);
+        setTimeout(fail, 2000);
+        NODE
+          sleep 1
+        done
+        log "Postgres is ready."
+
+        log "Syncing database schema (db push)..."
+        npx prisma db push
+        log "Starting app..."
+        exec node dist/index.js
+
+  db:
+    image: pgvector/pgvector:pg16-bookworm
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - log_min_messages=fatal
+      - -c
+      - client_min_messages=warning
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-broadway}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --loglevel
+      - warning
+    volumes:
+      - redis_prod_data:/data
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:

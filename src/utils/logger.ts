@@ -1,6 +1,16 @@
+import { createRequire } from 'node:module';
 import pino, { LoggerOptions } from 'pino';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
+const requireModule = createRequire(__dirname);
+
+function resolvePinoPrettyPath(): string | null {
+  try {
+    return requireModule.resolve('pino-pretty');
+  } catch {
+    return null;
+  }
+}
 
 type PinoLevelLabel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
@@ -30,9 +40,10 @@ const loggerOptions: LoggerOptions = {
   },
 };
 
-if (isDevelopment) {
+const pinoPrettyPath = isDevelopment ? resolvePinoPrettyPath() : null;
+if (pinoPrettyPath) {
   loggerOptions.transport = {
-    target: 'pino-pretty',
+    target: pinoPrettyPath,
     options: {
       colorize: true,
       messageKey: 'message',
