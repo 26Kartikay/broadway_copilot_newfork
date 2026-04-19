@@ -70,8 +70,9 @@ services:
       # Enable polling for file watching in Docker (works better on Windows/Mac)
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: 1000
+    # Host and container must use the same port: the app reads PORT (see src/index.ts).
     ports:
-      - "${PORT:-8080}:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
     depends_on:
       db:
         condition: service_healthy
@@ -135,7 +136,7 @@ services:
     command:
       - http
       - --domain=${NGROK_DOMAIN}
-      - app:8080
+      - "app:${PORT:-8080}"
       - --log=stdout
       - --log-level=warn
     environment:

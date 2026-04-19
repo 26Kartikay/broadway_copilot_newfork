@@ -29,6 +29,8 @@ services:
       REDIS_URL: redis://redis:6379
       # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
       SERVER_URL: ${SERVER_URL:?Set SERVER_URL to your public base URL, e.g. https://example.com}
+    # Host:container must be the SAME port as PORT above. If `docker ps` shows
+    # 8081->8080 while PORT=8081, nothing listens on 8080 inside — curl will fail.
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     depends_on:
