@@ -8,6 +8,10 @@
 #   export SERVER_URL=http://3.108.221.167:8081
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
+# DATABASE_URL: set in .env (or shell) to your real Postgres (e.g. vibe_db / RDS). If unset,
+# defaults to the bundled `db` service. Do not use localhost for a DB on the host — from inside
+# the container use the host's IP, host.docker.internal (Docker Desktop), or the cloud hostname.
+#
 # Uploads on the host (default ./uploads) → container /app/uploads. Override with UPLOADS_HOST_DIR.
 
 services:
@@ -25,7 +29,8 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-broadway}?schema=public
+      # Prefer DATABASE_URL from --env-file / shell so the app can use an external DB; else bundled Postgres.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
       REDIS_URL: redis://redis:6379
       # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
       SERVER_URL: ${SERVER_URL:?Set SERVER_URL to your public base URL, e.g. https://example.com}
