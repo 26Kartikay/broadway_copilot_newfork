@@ -699,8 +699,7 @@ export function searchProducts(): Tool {
         const embeddedQuery = await embeddingModel.embedQuery(enhancedQuery);
         const vector = JSON.stringify(embeddedQuery);
 
-        // Helper function to convert enum name to database value
-        // Database stores: MALE, FEMALE, OTHER (uppercase)
+        // Normalize to Prisma @map / Postgres enum labels: male, female, other (lowercase).
         const enumToDbValue = (enumValue: string | null): string | null => {
           if (!enumValue) return null;
           return enumValue.toLowerCase();
@@ -745,10 +744,10 @@ export function searchProducts(): Tool {
         if (genderDbValue) {
           if (genderDbValue === 'male') {
             // For male users: include only male or null (exclude female and other)
-            baseConditions.push(`(gender = 'MALE' OR gender IS NULL)`);
+            baseConditions.push(`(gender = 'male' OR gender IS NULL)`);
           } else if (genderDbValue === 'female') {
-            // For female users: include female, unisex, other, or null (exclude male)
-            baseConditions.push(`(gender = 'FEMALE' OR gender IS NULL OR gender = 'OTHER')`);
+            // For female users: include female, other, or null (exclude male)
+            baseConditions.push(`(gender = 'female' OR gender IS NULL OR gender = 'other')`);
           }
           // Note: 'other' gender from filters allows all products (no filter applied)
         }
@@ -818,7 +817,7 @@ export function searchProducts(): Tool {
             const candidateGenderDb = enumToDbValue(candidate.gender);
             if (candidateGenderDb === genderDbValue) {
               score += 0.3; // Strong boost for gender match
-            } else if (candidateGenderDb === null || candidateGenderDb === 'OTHER' || candidateGenderDb === 'UNISEX') {
+            } else if (candidateGenderDb === null || candidateGenderDb === 'other') {
               score += 0.1; // Small boost for unisex/other products
             }
             // No penalty for mismatch - we want to show results even if not perfect match
