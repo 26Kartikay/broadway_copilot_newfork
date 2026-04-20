@@ -30,6 +30,50 @@ const prisma = new PrismaClient();
 
 // Removed BATCH_SIZE, EMBEDDING_MODEL, EMBEDDING_DIM as they are no longer needed.
 
+/** Prisma @map uses lowercase labels; older DBs often have uppercase enum labels. */
+type PgEnumCasing = 'lower' | 'upper';
+
+async function detectPgEnumCasing(): Promise<{ gender: PgEnumCasing; ageGroup: PgEnumCasing }> {
+  const rows = await prisma.$queryRaw<{ typname: string; enumlabel: string }[]>`
+    SELECT t.typname AS typname, e.enumlabel AS enumlabel
+    FROM pg_type t
+    JOIN pg_enum e ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname IN ('Gender', 'AgeGroup')
+    ORDER BY t.typname, e.enumsortorder
+  `;
+  const ageLabels = rows.filter((r) => r.typname === 'AgeGroup').map((r) => r.enumlabel);
+  const genderLabels = rows.filter((r) => r.typname === 'Gender').map((r) => r.enumlabel);
+
+  const ageGroup: PgEnumCasing =
+    ageLabels.includes('adult') || ageLabels.includes('teen') || ageLabels.includes('senior')
+      ? 'lower'
+      : ageLabels.includes('ADULT') || ageLabels.includes('TEEN') || ageLabels.includes('SENIOR')
+        ? 'upper'
+        : 'lower';
+
+  const gender: PgEnumCasing =
+    genderLabels.includes('male') || genderLabels.includes('female') || genderLabels.includes('other')
+      ? 'lower'
+      : genderLabels.includes('MALE') || genderLabels.includes('FEMALE') || genderLabels.includes('OTHER')
+        ? 'upper'
+        : 'lower';
+
+  return { gender, ageGroup };
+}
+
+function genderToDbLiteral(g: Gender, casing: PgEnumCasing): string {
+  const base = g === Gender.MALE ? 'male' : g === Gender.FEMALE ? 'female' : 'other';
+  return casing === 'upper' ? base.toUpperCase() : base;
+}
+
+function ageGroupToDbLiteral(a: AgeGroup | undefined, casing: PgEnumCasing): string | null {
+  if (!a) return null;
+  const base = a === AgeGroup.TEEN ? 'teen' : a === AgeGroup.ADULT ? 'adult' : 'senior';
+  return casing === 'upper' ? base.toUpperCase() : base;
+}
+
 // Removed CATEGORY_MAP as category field is no longer in Product model.
 
 // Removed ParsedComponent interface and parseComponent function as component_tags are no longer processed.
@@ -116,6 +160,11 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
   }
 
   console.log(`📋 Found ${rawProducts.length} products to import`);
+
+  const pgEnumCasing = await detectPgEnumCasing();
+  console.log(
+    `📎 PostgreSQL enum label casing (raw SQL): Gender=${pgEnumCasing.gender}, AgeGroup=${pgEnumCasing.ageGroup}`,
+  );
 
   // Debug: Show column names from first row
   if (rawProducts.length > 0) {
@@ -281,15 +330,8 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       // Insert into database
       console.log(`💾 Inserting product ${product.barcode} into database...`);
       
-      // Convert Prisma enum to database value (lowercase due to @map directive)
-      // Gender.MALE -> "male", Gender.FEMALE -> "female", Gender.OTHER -> "other"
-      const genderDbValue = product.gender === Gender.MALE ? 'male' : 
-                           product.gender === Gender.FEMALE ? 'female' : 'other';
-      
-      // AgeGroup enum values: TEEN -> "teen", ADULT -> "adult", SENIOR -> "senior"
-      const ageGroupDbValue = product.ageGroup === AgeGroup.TEEN ? 'teen' :
-                             product.ageGroup === AgeGroup.ADULT ? 'adult' :
-                             product.ageGroup === AgeGroup.SENIOR ? 'senior' : null;
+      const genderDbValue = genderToDbLiteral(product.gender, pgEnumCasing.gender);
+      const ageGroupDbValue = ageGroupToDbLiteral(product.ageGroup, pgEnumCasing.ageGroup);
       
       try {
         // Use raw SQL to bypass Prisma enum validation issues with duplicate enum values
@@ -319,8 +361,8 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
           product.barcode,
           product.name || null,
           product.brandName || null,
-          genderDbValue,  // Always lowercase: 'male', 'female', or 'other'
-          ageGroupDbValue, // Always lowercase: 'teen', 'adult', 'senior', or null
+          genderDbValue,
+          ageGroupDbValue,
           product.category || null,
           product.subCategory || null,
           product.productType || null,
