@@ -66,6 +66,9 @@ services:
         done
         log "Postgres is ready."
 
+        log "Preflight (legacy Product.handleId unique constraint)..."
+        npx prisma db execute --file scripts/preflight-db-push.sql --schema prisma/schema.prisma
+
         log "Syncing database schema (db push)..."
         npx prisma db push
         log "Starting app..."

@@ -41,6 +41,7 @@ COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client
 COPY --from=build /app/package*.json ./
 # From build stage so CI contexts that omit loose files still get the script
 COPY --from=build /app/scripts/clear-uploads.mjs ./scripts/clear-uploads.mjs
+COPY --from=build /app/scripts/preflight-db-push.sql ./scripts/preflight-db-push.sql
 # Scripts are compiled to dist/scripts/ during build
 
 EXPOSE 8080
