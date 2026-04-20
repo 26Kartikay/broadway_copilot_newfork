@@ -73,3 +73,8 @@ uploads/
 
 # TypeScript
 *.tsbuildinfo
+
+# Local eval data and images
+celeb_images/
+scripts/color-analysis-eval/*.csv
+AWS_MIGRATION.md

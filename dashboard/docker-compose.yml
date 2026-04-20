@@ -1,0 +1,28 @@
+services:
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
+      # We pass these as args so Prisma generate can see them if needed, 
+      # but they are primarily runtime envs.
+      args:
+        - DATABASE_URL=${DATABASE_URL:-}
+        - REDIS_URL=${REDIS_URL:-}
+        - PORT=8090
+    env_file:
+      - ../.env
+    ports:
+      - "8090:8090"
+    # By only listing the keys, Compose will take them from the .env file or host environment
+    environment:
+      - DATABASE_URL
+      - REDIS_URL
+      - PORT=8090
+      - ADMIN_SECRET
+    networks:
+      - broadway-network
+
+networks:
+  broadway-network:
+    name: broadway-network
+    external: true

@@ -87,6 +87,8 @@ services:
       - dist:/usr/src/app/dist
       # Keeps chat uploads inside Docker (not your git working tree); cleared periodically by the app.
       - uploads_data:/usr/src/app/uploads
+    networks:
+      - broadway-network
 
     # Enable better file watching in Docker
     stdin_open: true
@@ -121,6 +123,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - broadway-network
 
   redis:
     image: redis:8
@@ -130,6 +134,8 @@ services:
       - warning
     volumes:
       - redis_data:/data
+    networks:
+      - broadway-network
 
   # Optional: ngrok for exposing local server (useful for mobile app testing)
   ngrok:
@@ -147,6 +153,12 @@ services:
       NGROK_DOMAIN: ${NGROK_DOMAIN:-}
     ports:
       - "4040:4040"
+    networks:
+      - broadway-network
+
+networks:
+  broadway-network:
+    name: broadway-network
 
 volumes:
   node_modules:

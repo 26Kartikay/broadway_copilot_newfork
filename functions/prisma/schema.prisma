@@ -97,6 +97,15 @@ enum Tonality {
   hype_bff
 }
 
+enum Severity {
+  DEBUG
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+  DEFAULT
+}
+
 enum Fit {
   LOW @map("low")
   MEDIUM @map("medium")
@@ -133,6 +142,7 @@ model User {
   colorAnalyses ColorAnalysis[]
   tasks         Task[]
   graphRuns     GraphRun[]
+  logs          ServiceLog[]
 
   @@index([createdAt])
   @@index([appUserId])
@@ -524,4 +534,42 @@ model AdminAuthenticator {
   admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, credentialID])
+}
+
+model ServiceLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  severity  Severity @default(INFO)
+  service   String
+  message   String
+  context   Json?
+
+  userId              String?
+  appUserId           String?
+  whatsappId          String?
+  profileNameSnapshot String?
+  user                User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  conversationId String?
+  graphRunId     String?
+
+  traceId String?
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([severity, createdAt(sort: Desc)])
+  @@index([service, createdAt(sort: Desc)])
+  @@index([appUserId])
+  @@index([whatsappId])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  adminId   String?
+  action    String
+  target    String?
+  details   Json?
+
+  @@index([createdAt(sort: Desc)])
 }

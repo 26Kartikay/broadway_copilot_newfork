@@ -10,3 +10,6 @@ README.md
 langgraph.png
 prisma/migrations
 functions
+celeb_images/
+scripts/color-analysis-eval/
+AWS_MIGRATION.md

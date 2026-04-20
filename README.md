@@ -334,7 +334,7 @@ npx ts-node scripts/deleteProducts.ts --confirm
 - **Twilio** – Primary messaging channel. Configure webhook URLs to point at the running server. Signature validation can be toggled via `TWILIO_VALIDATE_WEBHOOK`.
 - **Ngrok** – Provides a stable HTTPS endpoint for local development. Token is required for the bundled ngrok container to start.
 - **LLM Providers** – OpenAI and Groq chat/vision models are supported. Select providers within `src/lib/ai/config/llm.ts`.
-- **Google Cloud Tasks** – Optional asynchronous execution path used for memory extraction and wardrobe indexing (`src/lib/tasks.ts`). In development the calls short-circuit; production requires service account credentials and queue configuration.
+- **Google Cloud Tasks** – Not used by the main app anymore (memory extraction, wardrobe indexing, image upload, and feedback jobs were removed from the Node service). The `functions/` Cloud Functions may still exist for legacy deployments; pause or delete their queues/functions in GCP if unused.
 
 ---
 
@@ -382,6 +382,10 @@ Automated deployments are configured via `.github/workflows/google-cloudrun-depl
 
 The workflow builds the Docker image, pushes it to Artifact Registry, and deploys the latest tag to Cloud Run.
 
+### AWS
+
+For migrating to RDS, ElastiCache, ECS/App Runner, secrets, and networking, see **[AWS_MIGRATION.md](./AWS_MIGRATION.md)**.
+
 ---
 
 ## Production Infrastructure
@@ -409,6 +413,37 @@ The workflow builds the Docker image, pushes it to Artifact Registry, and deploy
 - **Tracing Database:** Inspect `GraphRun`, `NodeRun`, and `LLMTrace` tables to replay agent runs and review raw LLM payloads.
 - **Redis Keys:** `message:<MessageSid>` (status hash), `user_active:<WaId>` (message currently processing), `user_queue:<WaId>` (pending messages), `twilio:status:<sid>` / `twilio:seen:<sid>` (delivery tracking channels), and publish to `user_abort:<WaId>` to cancel an active run.
 - **Common Issues:** Signature validation failures → ensure the ngrok domain matches `SERVER_URL`; temporarily disable via `TWILIO_VALIDATE_WEBHOOK=false` for local debugging. Messages stuck in `running` → inspect Redis keys above and confirm abort signals fire. LLM errors → check `LLMTrace.errorTrace` and API usage limits. Media download failures → verify Twilio MMS permissions and that `uploads/` is writable.
+
+---
+
+## Admin Dashboard
+
+An internal dashboard for operators is available in the `dashboard/` directory.
+
+- **Port:** 8090
+- **Features:** Service health monitoring, user search/management, and centralized application logs.
+- **Tech Stack:** React (Vite) frontend, Express (BFF) backend, Prisma ORM.
+
+### Running Locally
+
+1. Navigate to the dashboard directory:
+   ```bash
+   cd dashboard
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server (client + server):
+   ```bash
+   # Terminal 1: Client
+   npm run dev:client
+   
+   # Terminal 2: Server
+   npm run dev:server
+   ```
+
+For detailed deployment and operator instructions, see **[DASHBOARD_GUIDE.md](./DASHBOARD_GUIDE.md)**.
 
 ---
 
