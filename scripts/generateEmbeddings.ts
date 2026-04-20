@@ -246,22 +246,21 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
         }
 
         try {
-          // Update searchDoc first
-          await prisma.product.update({
-            where: { id: product.id },
-            data: {
-              embeddingModel: EMBEDDING_MODEL,
-              embeddingDim: EMBEDDING_DIM,
-              embeddingAt: new Date(),
-            },
-          });
-
-          // Update embedding using raw SQL (Prisma doesn't support vector type directly)
+          // Use one raw UPDATE: Prisma's product.update() re-reads the row and fails to
+          // deserialize Postgres enum labels (e.g. ADULT) when the client uses @map("adult").
           const vectorString = `[${embedding.join(',')}]`;
           await prisma.$executeRawUnsafe(
-            `UPDATE "Product" SET embedding = $1::vector WHERE id = $2`,
+            `UPDATE "Product"
+             SET "embeddingModel" = $1,
+                 "embeddingDim" = $2,
+                 "embeddingAt" = $3::timestamptz,
+                 embedding = $4::vector
+             WHERE id = $5`,
+            EMBEDDING_MODEL,
+            EMBEDDING_DIM,
+            new Date(),
             vectorString,
-            product.id
+            product.id,
           );
 
           updated++;
