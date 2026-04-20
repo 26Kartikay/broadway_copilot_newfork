@@ -90,10 +90,29 @@ services:
     networks:
       - broadway-network
 
-    # Enable better file watching in Docker
-    stdin_open: true
-    tty: true
+  # --- Admin Dashboard ---
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+      args:
+        - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+        - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/broadway?schema=public
+      - REDIS_URL=redis://redis:6379
+      - PORT=8090
+      - ADMIN_SECRET=${ADMIN_SECRET}
+    ports:
+      - "8090:8090"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - broadway-network
 
+  # --- Infrastructure ---
   db:
     image: pgvector/pgvector:pg16-bookworm
     command:
