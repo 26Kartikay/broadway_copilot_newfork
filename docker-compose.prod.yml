@@ -8,9 +8,11 @@
 #   export SERVER_URL=http://3.108.221.167:8081
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
-# DATABASE_URL: set in .env (or shell) to your real Postgres (e.g. vibe_db / RDS). If unset,
-# defaults to the bundled `db` service. Do not use localhost for a DB on the host — from inside
-# the container use the host's IP, host.docker.internal (Docker Desktop), or the cloud hostname.
+# DATABASE_URL: set in .env to your real Postgres (e.g. RDS). If unset, defaults to bundled `db`.
+# External URLs must not use host "localhost" from inside the container — use the cloud hostname
+# or host IP. For RDS/managed DBs, `db push` is skipped automatically (it cannot reconcile enum
+# drift without dropping columns). Apply schema with `prisma migrate deploy` or manual SQL.
+# To skip push even for bundled db: SKIP_PRISMA_DB_PUSH=true
 #
 # Uploads on the host (default ./uploads) → container /app/uploads. Override with UPLOADS_HOST_DIR.
 
@@ -34,6 +36,8 @@ services:
       REDIS_URL: redis://redis:6379
       # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
       SERVER_URL: ${SERVER_URL:?Set SERVER_URL to your public base URL, e.g. https://example.com}
+      # Set true to never run `prisma db push` on startup (e.g. strict production policy).
+      SKIP_PRISMA_DB_PUSH: ${SKIP_PRISMA_DB_PUSH:-}
     # Host:container must be the SAME port as PORT above. If `docker ps` shows
     # 8081->8080 while PORT=8081, nothing listens on 8080 inside — curl will fail.
     ports:
@@ -74,8 +78,17 @@ services:
         log "Preflight (legacy Product.handleId unique constraint)..."
         npx prisma db execute --file scripts/preflight-db-push.sql --schema prisma/schema.prisma
 
-        log "Syncing database schema (db push)..."
-        npx prisma db push
+        # db push against RDS often fails on enum/type drift (e.g. gender) — it would DROP columns.
+        USE_BUNDLED_DB=0
+        case "$${DATABASE_URL:-}" in *"@db:"*) USE_BUNDLED_DB=1 ;; esac
+        if [ "$${SKIP_PRISMA_DB_PUSH:-}" = "true" ]; then
+          log "Skipping prisma db push (SKIP_PRISMA_DB_PUSH=true)."
+        elif [ "$$USE_BUNDLED_DB" -eq 1 ]; then
+          log "Syncing database schema (db push) against bundled Postgres..."
+          npx prisma db push
+        else
+          log "External DATABASE_URL: skipping prisma db push (managed DB; push cannot alter existing enum columns safely)."
+        fi
         log "Starting app..."
         exec node dist/index.js
 
