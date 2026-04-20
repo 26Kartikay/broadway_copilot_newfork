@@ -741,15 +741,16 @@ export function searchProducts(): Tool {
         let paramIndex = 1;
 
         // Apply gender filter as hard constraint to ensure gender-appropriate recommendations
+        // genderDbValue is lowercase (see enumToDbValue); compare to 'male' | 'female' | 'other'.
         if (genderDbValue) {
-          if (genderDbValue === 'MALE') {
+          if (genderDbValue === 'male') {
             // For male users: include only male or null (exclude female and other)
             baseConditions.push(`(gender = 'MALE' OR gender IS NULL)`);
-          } else if (genderDbValue === 'FEMALE') {
+          } else if (genderDbValue === 'female') {
             // For female users: include female, unisex, other, or null (exclude male)
             baseConditions.push(`(gender = 'FEMALE' OR gender IS NULL OR gender = 'OTHER')`);
           }
-          // Note: 'OTHER' gender from filters will allow all products (no filter applied)
+          // Note: 'other' gender from filters allows all products (no filter applied)
         }
         
         const whereClause = baseConditions.join(' AND ');
@@ -798,7 +799,10 @@ export function searchProducts(): Tool {
 
         // If vector search returns 0, return empty array (no text fallback)
         if (vectorCandidates.length === 0) {
-          logger.debug({ query }, 'Vector search returned 0 results');
+          logger.info(
+            { query: query.slice(0, 200) },
+            'Product search: vector recall returned 0 rows (empty catalog, missing embeddings, or DB mismatch)',
+          );
           return [];
         }
 
@@ -987,8 +991,18 @@ export function searchProducts(): Tool {
           };
         });
 
-        logger.debug(
-          { query, resultCount: mappedResults.length },
+        if (mappedResults.length === 0 && rerankedCandidates.length > 0) {
+          logger.warn(
+            {
+              query: query.slice(0, 200),
+              recallCount: rerankedCandidates.length,
+            },
+            'Product search: vector recall had rows but none had a valid http(s) or data: imageUrl after filters',
+          );
+        }
+
+        logger.info(
+          { query: query.slice(0, 120), resultCount: mappedResults.length },
           'Product search completed',
         );
 

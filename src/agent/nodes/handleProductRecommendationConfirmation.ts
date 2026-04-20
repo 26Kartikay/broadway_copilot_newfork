@@ -156,9 +156,11 @@ export async function handleProductRecommendationConfirmation(
     // Extract products from the tool results
     const productResults = toolResults.filter((tr) => tr.name === 'searchProducts');
     const allProducts: ProductRecommendation[] = [];
+    let rawSearchProductCount = 0;
 
     for (const toolResult of productResults) {
       if (Array.isArray(toolResult.result)) {
+        rawSearchProductCount += toolResult.result.length;
         // Filter products: must have name and valid imageUrl (brand is optional)
         const products = toolResult.result.filter((p: ProductSearchResult) => {
           // Allow products with name (even if "N/A") and valid imageUrl
@@ -176,7 +178,23 @@ export async function handleProductRecommendationConfirmation(
             barcode: (p as any).barcode || '', // Include barcode if available
           })),
         );
+      } else if (toolResult.result !== undefined) {
+        logger.warn(
+          { userId: user.id, resultType: typeof toolResult.result },
+          'searchProducts tool returned non-array result',
+        );
       }
+    }
+
+    if (allProducts.length === 0) {
+      logger.info(
+        {
+          userId: user.id,
+          searchCalls: productResults.length,
+          rawRowsFromSearch: rawSearchProductCount,
+        },
+        'Product recommendation: no catalog items passed validation (empty search, bad image URLs, or tool not invoked)',
+      );
     }
 
     // Add product card if we have products with valid imageUrls
@@ -223,14 +241,13 @@ export async function handleProductRecommendationConfirmation(
         products: finalProducts,
       });
     } else {
-      // Only show this message if the text conclusion wasn't already generated
-      if (replies.length === 0) {
-        replies.push({
-          reply_type: 'text',
-          reply_text:
-            "I couldn't find any specific recommendations at the moment, but I'll keep an eye out!",
-        });
-      }
+      // Model may still write an upbeat conclusion_text even when the catalog returned nothing.
+      // Always add an honest follow-up so the UI does not imply products were shown.
+      replies.push({
+        reply_type: 'text',
+        reply_text:
+          "I couldn't load matching items from our product catalog just yet. If this keeps happening, the catalog or image links on the server may need a quick check.",
+      });
     }
 
     const menuReply = getMainMenuReply();
