@@ -19,6 +19,7 @@
  */
 
 import 'dotenv/config';
+import { createId } from '@paralleldrive/cuid2';
 import Papa from 'papaparse';
 import { PrismaClient, Gender, AgeGroup } from '@prisma/client';
 import * as fs from 'fs';
@@ -334,30 +335,32 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       const ageGroupDbValue = ageGroupToDbLiteral(product.ageGroup, pgEnumCasing.ageGroup);
       
       try {
-        // Use raw SQL to bypass Prisma enum validation issues with duplicate enum values
-        // This ensures we insert the correct lowercase values directly, working in both local and production
-        await prisma.$executeRawUnsafe(`
+        // Raw SQL for enum label casing; Prisma @default(cuid()) is client-side, so set id explicitly.
+        await prisma.$executeRawUnsafe(
+          `
           INSERT INTO "Product" (
-            "barcode", "name", "brandName", "gender", "ageGroup",
+            "id", "barcode", "name", "brandName", "gender", "ageGroup",
             "category", "subCategory", "productType", "colorPalette",
             "imageUrl", "colors", "allTags", "createdAt", "updatedAt"
           ) VALUES (
             $1::text,
             $2::text,
             $3::text,
-            $4::"Gender",
-            $5::"AgeGroup",
-            $6::text,
+            $4::text,
+            $5::"Gender",
+            $6::"AgeGroup",
             $7::text,
             $8::text,
             $9::text,
             $10::text,
-            $11::text[],
-            $12::text,
+            $11::text,
+            $12::text[],
+            $13::text,
             NOW(),
             NOW()
           )
-        `, 
+        `,
+          createId(),
           product.barcode,
           product.name || null,
           product.brandName || null,
@@ -369,7 +372,7 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
           product.colorPalette || null,
           product.imageUrl,
           product.colors,
-          product.allTags || null
+          product.allTags || null,
         );
         imported++;
       } catch (createError: any) {
