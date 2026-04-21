@@ -12,6 +12,8 @@ dist
 dist-ssr
 # Stale CJS emit; real config is vite.config.mts
 vite.config.js
+# Never commit compiled JS beside TS in src (breaks Vite resolve + named exports)
+src/**/*.js
 *.local
 
 # Editor directories and files

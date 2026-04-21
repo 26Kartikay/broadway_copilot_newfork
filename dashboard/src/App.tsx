@@ -1,7 +1,7 @@
 import { Activity, LayoutDashboard, LogOut, Search, Settings, Trash2, Users } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useSearchParams } from 'react-router-dom';
-import { api, ServiceLog, User } from './api';
+import { api, ServiceLog, User } from './api.ts';
 
 const Dashboard = () => {
   const [health, setHealth] = useState<any>(null);
