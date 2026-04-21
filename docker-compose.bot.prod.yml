@@ -1,22 +1,17 @@
-# Production-style stack: built image (no bind-mounted source), Postgres, Redis.
-# User/chat images are written under /app/uploads in the container. Mount a host
-# directory so uploads survive restarts and you can add files from the host.
+# Production-style **bot** stack: built app image + Postgres + Redis (no dashboard).
+# User/chat images under /app/uploads — mount a host directory so uploads survive restarts.
 #
-# Usage (on the VM):
-#   cp .env .env.production   # optional
-#   export PORT=8081   # optional; default 8080. SERVER_URL must use the same port.
+# Usage (from repo root):
+#   docker compose -f docker-compose.bot.prod.yml --env-file .env up -d --build
+#
+# Set PORT / SERVER_URL consistently (same port inside container and in SERVER_URL).
 #   export SERVER_URL=https://api.yourdomain.com
-#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
-#
-# All URLs come from env (see `environment` below). Set in `.env` or the shell; no baked-in API host.
 #
 # DATABASE_URL: set in .env to your real Postgres (e.g. RDS). If unset, defaults to bundled `db`.
-# External URLs must not use host "localhost" from inside the container — use the cloud hostname
-# or host IP. For RDS/managed DBs, `db push` is skipped automatically (it cannot reconcile enum
-# drift without dropping columns). Apply schema with `prisma migrate deploy` or manual SQL.
-# To skip push even for bundled db: SKIP_PRISMA_DB_PUSH=true
-#
-# Uploads on the host (default ./uploads) → container /app/uploads. Override with UPLOADS_HOST_DIR.
+# External URLs must not use host "localhost" from inside the container.
+# For RDS/managed DBs, `db push` is skipped automatically. Use `prisma migrate deploy` or manual SQL.
+# SKIP_PRISMA_DB_PUSH=true to never run db push on startup.
+# UPLOADS_HOST_DIR: host dir → /app/uploads (default ./uploads).
 
 services:
   app:
@@ -33,15 +28,10 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # Prefer DATABASE_URL from --env-file / shell so the app can use an external DB; else bundled Postgres.
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
       REDIS_URL: redis://redis:6379
-      # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
       SERVER_URL: ${SERVER_URL:?Set SERVER_URL in .env or environment (public base URL, no default)}
-      # Set true to never run `prisma db push` on startup (e.g. strict production policy).
       SKIP_PRISMA_DB_PUSH: ${SKIP_PRISMA_DB_PUSH:-}
-    # Host:container must be the SAME port as PORT above. If `docker ps` shows
-    # 8081->8080 while PORT=8081, nothing listens on 8080 inside — curl will fail.
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     depends_on:
@@ -50,7 +40,6 @@ services:
       redis:
         condition: service_started
     volumes:
-      # Persist chat/user uploads; place files here on the host to expose them as /uploads/...
       - ${UPLOADS_HOST_DIR:-./uploads}:/app/uploads
 
     command:
@@ -80,7 +69,6 @@ services:
         log "Preflight (legacy Product.handleId unique constraint)..."
         npx prisma db execute --file scripts/preflight-db-push.sql --schema prisma/schema.prisma
 
-        # db push against RDS often fails on enum/type drift (e.g. gender) — it would DROP columns.
         USE_BUNDLED_DB=0
         case "$${DATABASE_URL:-}" in *"@db:"*) USE_BUNDLED_DB=1 ;; esac
         if [ "$${SKIP_PRISMA_DB_PUSH:-}" = "true" ]; then

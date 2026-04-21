@@ -342,7 +342,11 @@ npx ts-node scripts/deleteProducts.ts --confirm
 
 ```
 .
-├── docker-compose.yml # Local orchestration for app + infra + ngrok
+├── docker-compose.yml          # includes stack (default: full local dev)
+├── docker-compose.stack.yml    # bot + dashboard + db + redis (+ ngrok profile)
+├── docker-compose.bot.yml      # bot + db + redis only
+├── docker-compose.dashboard.yml # admin UI only (set DATABASE_URL)
+├── docker-compose.bot.prod.yml # production-style bot image + db + redis
 ├── src/ # Express API, agent graph, shared libraries
 │   ├── agent/ # LangGraph definition, nodes, and tools
 │   ├── lib/ # Twilio, Redis, Prisma, AI helpers

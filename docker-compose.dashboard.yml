@@ -1,0 +1,29 @@
+# Admin dashboard only (Express + SPA). Postgres must be reachable via DATABASE_URL.
+# Always run from repo root:
+#   docker compose -f docker-compose.dashboard.yml --env-file .env up -d --build
+#
+# Examples for DATABASE_URL when the bot stack runs separately:
+#   postgresql://postgres:postgres@host.docker.internal:5433/broadway?schema=public
+# Or attach to the same Docker network as the bot (see DASHBOARD_GUIDE.md).
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+      args:
+        DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env (Postgres connection string)}
+        REDIS_URL: ${REDIS_URL:-}
+        PORT: ${DASHBOARD_PORT:-8090}
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      REDIS_URL: ${REDIS_URL:-}
+      PORT: ${DASHBOARD_PORT:-8090}
+      ADMIN_SECRET: ${ADMIN_SECRET:-}
+      NODE_ENV: ${NODE_ENV:-production}
+      SERVER_URL: ${SERVER_URL:-}
+      CHAT_API_URL: ${CHAT_API_URL:-}
+    ports:
+      - "${DASHBOARD_PORT:-8090}:${DASHBOARD_PORT:-8090}"
