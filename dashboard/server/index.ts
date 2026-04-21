@@ -2,6 +2,9 @@ import { Prisma, PrismaClient, type Severity } from '@prisma/client';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import fs from 'fs';
+import multer from 'multer';
+import Papa from 'papaparse';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,6 +15,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 8090;
+
+const upload = multer({ dest: '/tmp/uploads/' });
+
+// Ensure upload directory exists
+if (!fs.existsSync('/tmp/uploads/')) {
+  fs.mkdirSync('/tmp/uploads/', { recursive: true });
+}
 
 // Startup Check
 if (!process.env.DATABASE_URL) {
@@ -141,6 +151,74 @@ app.post('/admin/users', authMiddleware, async (req, res) => {
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
+});
+
+app.post('/admin/users/bulk', authMiddleware, upload.single('file'), async (req: any, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  const filePath = req.file.path;
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+
+  Papa.parse(fileContent, {
+    header: true,
+    skipEmptyLines: true,
+    complete: async (results) => {
+      const usersData = results.data as any[];
+      const resultsSummary = {
+        total: usersData.length,
+        created: 0,
+        errors: 0,
+        details: [] as any[],
+      };
+
+      for (const userData of usersData) {
+        if (!userData.appUserId || !userData.whatsappId) {
+          resultsSummary.errors++;
+          resultsSummary.details.push({ user: userData, error: 'Missing appUserId or whatsappId' });
+          continue;
+        }
+
+        try {
+          // Clean up data
+          const isGuest = userData.isGuest === 'true' || userData.isGuest === true;
+          
+          await prisma.user.upsert({
+            where: { appUserId: userData.appUserId },
+            update: {
+              whatsappId: userData.whatsappId,
+              profileName: userData.profileName || '',
+              details: userData.details || '',
+              isGuest: isGuest,
+            },
+            create: {
+              appUserId: userData.appUserId,
+              whatsappId: userData.whatsappId,
+              profileName: userData.profileName || '',
+              details: userData.details || '',
+              isGuest: isGuest,
+            },
+          });
+          resultsSummary.created++;
+        } catch (error: any) {
+          resultsSummary.errors++;
+          resultsSummary.details.push({ user: userData, error: error.message });
+        }
+      }
+
+      // Clean up uploaded file
+      fs.unlinkSync(filePath);
+
+      res.json(resultsSummary);
+    },
+    error: (error: any) => {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      res.status(500).json({ error: 'CSV parsing failed', message: error.message });
+    },
+  });
 });
 
 app.delete('/admin/users/:id', authMiddleware, async (req, res) => {

@@ -195,6 +195,10 @@ const UsersPage = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState(urlSearch);
   const [loading, setLoading] = useState(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   useEffect(() => {
     setSearch(urlSearch);
@@ -214,11 +218,40 @@ const UsersPage = () => {
     }
   };
 
+  const handleUpload = async () => {
+    if (!file) {
+      alert('Please select a CSV file first.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const result = await api.bulkCreateUsers(file);
+      setUploadResult(result);
+      // Refresh user list
+      api.getUsers(search).then(setUsers);
+      setFile(null);
+      // Reset file input
+      const fileInput = document.getElementById('bulk-user-upload') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+    } catch (e) {
+      console.error('Upload failed', e);
+      alert('Upload failed. Check the console for details.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">User Operations</h1>
         <div className="flex gap-4">
+          <button 
+            className="btn btn-secondary" 
+            onClick={() => setShowBulkUpload(!showBulkUpload)}
+          >
+            {showBulkUpload ? 'Hide Bulk Upload' : 'Bulk Upload Users'}
+          </button>
           <div className="flex items-center gap-2 border rounded p-1" style={{ backgroundColor: 'var(--color-surface)' }}>
             <Search size={18} className="text-muted ml-2" />
             <input 
@@ -233,6 +266,57 @@ const UsersPage = () => {
           <button className="btn btn-primary">Create User</button>
         </div>
       </div>
+
+      {showBulkUpload && (
+        <div className="card mb-6" style={{ border: '1px solid var(--color-border)' }}>
+          <h2 className="text-lg font-semibold mb-2">Bulk Upload Users via CSV</h2>
+          <p className="text-sm text-muted mb-4">
+            Upload a CSV file with the following headers: 
+            <code className="bg-surface p-1 rounded ml-1">appUserId,whatsappId,profileName,details,isGuest</code>
+          </p>
+          
+          <div className="flex flex-col gap-4">
+            <div className="bg-surface p-4 rounded text-xs font-mono border border-color-border">
+              <p className="text-muted mb-1">CSV Format Example:</p>
+              appUserId,whatsappId,profileName,details,isGuest<br/>
+              user_1,911234567890,John Doe,Some details,false<br/>
+              user_2,911234567891,Jane Smith,Another user,true
+            </div>
+
+            <div className="flex items-center gap-4">
+              <input 
+                id="bulk-user-upload"
+                type="file" 
+                accept=".csv"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:opacity-90"
+              />
+              <button 
+                className="btn btn-primary" 
+                onClick={handleUpload}
+                disabled={!file || uploading}
+              >
+                {uploading ? 'Uploading...' : 'Upload CSV'}
+              </button>
+            </div>
+
+            {uploadResult && (
+              <div className={`mt-2 p-3 rounded text-sm ${uploadResult.errors > 0 ? 'bg-error-light text-error' : 'bg-success-light text-success'}`} style={{ backgroundColor: uploadResult.errors > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)' }}>
+                <strong>Upload Summary:</strong> {uploadResult.created} users processed successfully. {uploadResult.errors} errors.
+                {uploadResult.details.length > 0 && (
+                  <ul className="mt-2 list-disc list-inside">
+                    {uploadResult.details.slice(0, 5).map((d: any, i: number) => (
+                      <li key={i}>{d.user.appUserId || 'Unknown'}: {d.error}</li>
+                    ))}
+                    {uploadResult.details.length > 5 && <li>...and {uploadResult.details.length - 5} more errors.</li>}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="table">
           <thead>

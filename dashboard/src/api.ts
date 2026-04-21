@@ -86,6 +86,15 @@ export const api = {
     });
     return res.json();
   },
+  bulkCreateUsers: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/users/bulk`, {
+      method: 'POST',
+      body: formData,
+    });
+    return res.json();
+  },
   deleteUser: async (id: string) => {
     const res = await fetch(`${API_BASE}/users/${id}`, { method: 'DELETE' });
     return res.json();
