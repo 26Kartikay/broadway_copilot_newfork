@@ -10,11 +10,11 @@ services:
       - -lc
       - |
         set -Eeuo pipefail
-
         log() { printf '%s\n' "$${*}"; }
 
         log "Installing dependencies..."
-        npm install --legacy-peer-deps
+        # In production, we still need devDeps to build if we are doing it inside the container
+        npm install --legacy-peer-deps --include=dev
         log "Dependencies installed."
 
         log "Checking Postgres availability..."
@@ -35,28 +35,24 @@ services:
         log "Postgres is ready."
 
         log "Generating Prisma client..."
-        if ! npx prisma generate >/tmp/prisma-generate.log 2>&1; then
-          log "Prisma generate failed:"
-          cat /tmp/prisma-generate.log >&2
-          exit 1
-        fi
-        rm -f /tmp/prisma-generate.log
-        log "Prisma client ready."
+        npx prisma generate
 
         log "Preflight (legacy Product.handleId unique constraint)..."
         npx prisma db execute --file scripts/preflight-db-push.sql --schema prisma/schema.prisma
 
         log "Pushing database schema..."
-        if ! npx prisma db push >/tmp/prisma-db-push.log 2>&1; then
-          log "Prisma db push failed:"
-          cat /tmp/prisma-db-push.log >&2
-          exit 1
-        fi
-        rm -f /tmp/prisma-db-push.log
+        npx prisma db push --accept-data-loss
         log "Database schema is in sync."
 
-        log "Starting development server..."
-        npm run dev
+        if [ "$$NODE_ENV" = "production" ]; then
+          log "Building project..."
+          npm run build
+          log "Starting production server..."
+          npm start
+        else
+          log "Starting development server..."
+          npm run dev
+        fi
     env_file:
       - .env
     environment:
@@ -68,12 +64,9 @@ services:
       POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
       REDIS_URL: redis://redis:6379
-      # localhost keeps vision on data URLs in dev (OpenAI cannot reach private URLs). Port is published for the host browser.
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
-      # Enable polling for file watching in Docker (works better on Windows/Mac)
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: 1000
-    # Host and container must use the same port: the app reads PORT (see src/index.ts).
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     depends_on:
@@ -85,7 +78,6 @@ services:
       - .:/usr/src/app
       - node_modules:/usr/src/app/node_modules
       - dist:/usr/src/app/dist
-      # Keeps chat uploads inside Docker (not your git working tree); cleared periodically by the app.
       - uploads_data:/usr/src/app/uploads
     networks:
       - broadway-network
@@ -96,14 +88,16 @@ services:
       context: .
       dockerfile: dashboard/Dockerfile
       args:
-        - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
-        - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-    env_file: .env
+        - DATABASE_URL=postgresql://postgres:postgres@db:5432/broadway?schema=public
+        - REDIS_URL=redis://redis:6379
+        - PORT=8090
+    # Explicitly set environment to override any empty values from .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/broadway?schema=public
-      - REDIS_URL=redis://redis:6379
-      - PORT=8090
-      - ADMIN_SECRET=${ADMIN_SECRET}
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/broadway?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: 8090
+      ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
+      NODE_ENV: ${NODE_ENV:-production}
     ports:
       - "8090:8090"
     depends_on:
