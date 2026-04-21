@@ -36,6 +36,15 @@ const authMiddleware = (req: express.Request, res: express.Response, next: expre
   next();
 };
 
+// Public config for SPA (no secrets)
+app.get('/admin/config', (_req, res) => {
+  const chatApiUrl = process.env.CHAT_API_URL || process.env.SERVER_URL || '';
+  res.json({
+    chatApiUrl,
+    nodeEnv: process.env.NODE_ENV || 'production',
+  });
+});
+
 // Admin Routes
 app.get('/admin/health', async (req, res) => {
   try {

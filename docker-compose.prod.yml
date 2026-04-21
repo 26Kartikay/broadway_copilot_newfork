@@ -5,8 +5,10 @@
 # Usage (on the VM):
 #   cp .env .env.production   # optional
 #   export PORT=8081   # optional; default 8080. SERVER_URL must use the same port.
-#   export SERVER_URL=http://3.108.221.167:8081
+#   export SERVER_URL=https://api.yourdomain.com
 #   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# All URLs come from env (see `environment` below). Set in `.env` or the shell; no baked-in API host.
 #
 # DATABASE_URL: set in .env to your real Postgres (e.g. RDS). If unset, defaults to bundled `db`.
 # External URLs must not use host "localhost" from inside the container — use the cloud hostname
@@ -35,7 +37,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
       REDIS_URL: redis://redis:6379
       # Must be reachable by clients that load /uploads/... URLs (browser, vision APIs).
-      SERVER_URL: ${SERVER_URL:?Set SERVER_URL to your public base URL, e.g. https://example.com}
+      SERVER_URL: ${SERVER_URL:?Set SERVER_URL in .env or environment (public base URL, no default)}
       # Set true to never run `prisma db push` on startup (e.g. strict production policy).
       SKIP_PRISMA_DB_PUSH: ${SKIP_PRISMA_DB_PUSH:-}
     # Host:container must be the SAME port as PORT above. If `docker ps` shows

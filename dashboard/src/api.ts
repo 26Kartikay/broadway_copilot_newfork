@@ -38,7 +38,17 @@ export type LogQuery = {
   offset?: string;
 };
 
+export type AdminConfig = {
+  chatApiUrl: string;
+  nodeEnv: string;
+};
+
 export const api = {
+  getConfig: async (): Promise<AdminConfig> => {
+    const res = await fetch(`${API_BASE}/config`);
+    if (!res.ok) return { chatApiUrl: '', nodeEnv: 'production' };
+    return res.json();
+  },
   getHealth: async () => {
     const res = await fetch(`${API_BASE}/health`);
     return res.json();

@@ -271,18 +271,36 @@ const UsersPage = () => {
   );
 };
 
-const SettingsPage = () => (
+const SettingsPage = () => {
+  const [chatApiUrl, setChatApiUrl] = useState('');
+  const [nodeEnv, setNodeEnv] = useState('');
+
+  useEffect(() => {
+    api.getConfig().then((c) => {
+      setChatApiUrl(c.chatApiUrl || '');
+      setNodeEnv(c.nodeEnv || '');
+    });
+  }, []);
+
+  return (
   <div className="p-6">
     <h1 className="text-2xl font-bold mb-6">Admin Settings</h1>
     <div className="card" style={{ maxWidth: '600px' }}>
       <div className="mb-4">
-        <label className="text-sm font-medium text-muted block mb-1">API Base URL</label>
-        <input type="text" className="input" value="https://api.broadwaylive.in" readOnly />
+        <label className="text-sm font-medium text-muted block mb-1">Chat API base URL</label>
+        <input
+          type="text"
+          className="input"
+          value={chatApiUrl}
+          placeholder="Set CHAT_API_URL or SERVER_URL on the dashboard container"
+          readOnly
+        />
+        <p className="text-xs text-muted mt-1">From container env: <code>CHAT_API_URL</code>, else <code>SERVER_URL</code>.</p>
       </div>
       <div className="mb-4">
         <label className="text-sm font-medium text-muted block mb-1">Environment</label>
         <p className="font-semibold flex items-center gap-2">
-          Production <span className="badge badge-error">Live</span>
+          {nodeEnv || '—'} <span className="badge badge-secondary">dashboard server</span>
         </p>
       </div>
       <div className="mb-6">
@@ -292,7 +310,8 @@ const SettingsPage = () => (
       <button className="btn btn-secondary w-full" disabled>OpenAPI Documentation</button>
     </div>
   </div>
-);
+  );
+};
 
 const App: React.FC = () => {
   const [env] = useState('production');
