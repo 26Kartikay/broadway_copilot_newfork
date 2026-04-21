@@ -8,10 +8,12 @@ import path from 'path';
 import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
 import { connectPrisma } from './lib/prisma';
+import { getOrCreateUserAndConversation } from './utils/context';
 import { connectRedis } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { requestLogger } from './middleware/requestLogger';
 import { clearUploadsDirectory } from './utils/clearUploads';
+import { dbLog } from './utils/dbLogger';
 import { logger } from './utils/logger';
 import { staticUploadsMount } from './utils/paths';
 
@@ -148,8 +150,38 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
 
     // Convert ChatRequest to internal MessageInput format
     const messageInput = chatRequestToMessageInput(chatRequest, sid);
+    const waId = messageInput.WaId;
+    if (!waId) {
+      return res.status(400).json({ error: 'Invalid message input', code: 'INVALID_INPUT' });
+    }
 
-    logger.info({ userId, messageId: sid }, 'Received chat message');
+    // Same user resolution as the agent so ServiceLog.userId is the real Prisma User.id
+    // (ChatRequest.userId is the client app user id / WaId, not the internal cuid.)
+    const { user } = await getOrCreateUserAndConversation(
+      waId,
+      messageInput.ProfileName ?? chatRequest.profileName ?? '',
+      String(userId),
+    );
+
+    logger.info(
+      { userId: user.id, appUserId: user.appUserId, messageId: sid },
+      'Received chat message',
+    );
+    const traceId =
+      typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined;
+    void dbLog(
+      'INFO',
+      'api',
+      'Received chat message',
+      { prismaUserId: user.id, appUserId: user.appUserId, messageId: sid },
+      {
+        userId: user.id,
+        appUserId: user.appUserId,
+        whatsappId: user.whatsappId,
+        profileNameSnapshot: user.profileName,
+        ...(traceId !== undefined ? { traceId } : {}),
+      },
+    );
 
     const { replies, pending } = await runAgentForHttp(String(userId), sid, messageInput);
 
@@ -182,6 +214,7 @@ void (async function bootstrap() {
     const PORT = Number(process.env.PORT || 8080);
     app.listen(PORT, '0.0.0.0', () => {
       logger.info({ port: PORT }, 'Broadway Chat Bot server started');
+      void dbLog('INFO', 'api', 'Broadway Chat Bot server started', { port: PORT });
     });
 
     setInterval(() => {

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, type Severity } from '@prisma/client';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
@@ -48,22 +48,48 @@ app.get('/admin/health', async (req, res) => {
 });
 
 app.get('/admin/logs', authMiddleware, async (req, res) => {
-  const severity = req.query.severity as string | undefined;
-  const service = req.query.service as string | undefined;
-  const userId = req.query.userId as string | undefined;
+  const severity = (req.query.severity as string | undefined)?.trim();
+  const service = (req.query.service as string | undefined)?.trim();
+  const userId = (req.query.userId as string | undefined)?.trim();
+  const search = (req.query.search as string | undefined)?.trim();
+
   const limit = (req.query.limit as string) || '50';
   const offset = (req.query.offset as string) || '0';
-  
+
   try {
+    const parts: Prisma.ServiceLogWhereInput[] = [];
+
+    if (severity && severity !== 'ALL') {
+      parts.push({ severity: severity as Severity });
+    }
+    if (service) {
+      parts.push({ service });
+    }
+    if (userId) {
+      parts.push({
+        OR: [{ userId }, { appUserId: userId }, { whatsappId: userId }],
+      });
+    }
+    if (search) {
+      parts.push({
+        OR: [
+          { message: { contains: search, mode: 'insensitive' } },
+          { appUserId: { contains: search, mode: 'insensitive' } },
+          { whatsappId: { contains: search, mode: 'insensitive' } },
+          { profileNameSnapshot: { contains: search, mode: 'insensitive' } },
+          { traceId: { contains: search, mode: 'insensitive' } },
+          { userId: { contains: search } },
+        ],
+      });
+    }
+
+    const where: Prisma.ServiceLogWhereInput = parts.length ? { AND: parts } : {};
+
     const logs = await prisma.serviceLog.findMany({
-      where: {
-        severity: severity ? (severity as any) : undefined,
-        service: service ? service : undefined,
-        userId: userId ? userId : undefined,
-      },
+      where,
       orderBy: { createdAt: 'desc' },
-      take: parseInt(limit),
-      skip: parseInt(offset),
+      take: parseInt(limit, 10),
+      skip: parseInt(offset, 10),
       include: { user: true },
     });
     res.json(logs);

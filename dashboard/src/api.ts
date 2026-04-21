@@ -29,15 +29,28 @@ export interface User {
   createdAt: string;
 }
 
+export type LogQuery = {
+  severity?: string;
+  service?: string;
+  userId?: string;
+  search?: string;
+  limit?: string;
+  offset?: string;
+};
+
 export const api = {
   getHealth: async () => {
     const res = await fetch(`${API_BASE}/health`);
     return res.json();
   },
-  getLogs: async (filters: any) => {
+  getLogs: async (filters: LogQuery) => {
     try {
-      const params = new URLSearchParams(filters);
-      const res = await fetch(`${API_BASE}/logs?${params}`);
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== '') params.set(k, v);
+      });
+      const q = params.toString();
+      const res = await fetch(`${API_BASE}/logs${q ? `?${q}` : ''}`);
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     } catch (e) {

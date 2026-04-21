@@ -1,6 +1,6 @@
 import { Activity, LayoutDashboard, LogOut, Search, Settings, Trash2, Users } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useSearchParams } from 'react-router-dom';
 import { api, ServiceLog, User } from './api';
 
 const Dashboard = () => {
@@ -46,10 +46,25 @@ const Dashboard = () => {
 const LogsPage = () => {
   const [logs, setLogs] = useState<ServiceLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [severity, setSeverity] = useState<string>('ALL');
+  const [userFilter, setUserFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    api.getLogs({}).then(setLogs).finally(() => setLoading(false));
-  }, []);
+    const t = setTimeout(() => {
+      setLoading(true);
+      api
+        .getLogs({
+          severity: severity === 'ALL' ? undefined : severity,
+          userId: userFilter.trim() || undefined,
+          search: search.trim() || undefined,
+          limit: '100',
+        })
+        .then(setLogs)
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [severity, userFilter, search]);
 
   const severityColor = (sev: string) => {
     switch (sev) {
@@ -61,18 +76,81 @@ const LogsPage = () => {
     }
   };
 
+  const userCell = (log: ServiceLog) => {
+    const label =
+      log.user?.profileName ||
+      log.profileNameSnapshot ||
+      log.appUserId ||
+      (log.userId ? `${log.userId.slice(0, 8)}…` : null);
+    const searchParam = log.userId || log.appUserId || log.whatsappId || '';
+    if (!label) return <span className="text-muted">—</span>;
+    return (
+      <NavLink
+        to={`/users?search=${encodeURIComponent(searchParam)}`}
+        className="underline font-mono text-xs"
+        style={{ color: 'var(--color-primary)' }}
+        title={log.userId || log.appUserId || ''}
+      >
+        {label}
+      </NavLink>
+    );
+  };
+
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Service Logs</h1>
-        <div className="flex gap-2">
-          <select className="input" style={{ width: 'auto' }}>
-            <option>All Severities</option>
-            <option>ERROR</option>
-            <option>WARNING</option>
-            <option>INFO</option>
-          </select>
-          <button className="btn btn-secondary">Export JSON</button>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <h1 className="text-2xl font-bold">Service Logs</h1>
+          <div className="flex gap-2 flex-wrap">
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value)}
+            >
+              <option value="ALL">All Severities</option>
+              <option value="DEBUG">DEBUG</option>
+              <option value="INFO">INFO</option>
+              <option value="WARNING">WARNING</option>
+              <option value="ERROR">ERROR</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `service-logs-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+              }}
+            >
+              Export JSON
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-2 border rounded p-1 flex-1 min-w-[200px]" style={{ backgroundColor: 'var(--color-surface)' }}>
+            <Search size={18} className="text-muted ml-2 shrink-0" />
+            <input
+              type="text"
+              className="input"
+              style={{ border: 'none', padding: '0.25rem', flex: 1 }}
+              placeholder="Search message, trace id, app user id, phone, name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <input
+            type="text"
+            className="input"
+            style={{ maxWidth: '280px' }}
+            placeholder="Match user (internal id, app id, or WA id)"
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+          />
         </div>
       </div>
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -98,13 +176,7 @@ const LogsPage = () => {
                 <td style={{ maxWidth: '400px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={log.message}>
                   {log.message}
                 </td>
-                <td>
-                  {log.userId ? (
-                    <NavLink to={`/users?search=${log.userId}`} className="underline" style={{ color: 'var(--color-primary)' }}>
-                      {log.profileNameSnapshot || log.userId.slice(0, 8)}
-                    </NavLink>
-                  ) : '-'}
-                </td>
+                <td>{userCell(log)}</td>
                 <td className="text-muted text-xs">{log.traceId || '-'}</td>
               </tr>
             )) : (
@@ -118,9 +190,15 @@ const LogsPage = () => {
 };
 
 const UsersPage = () => {
+  const [searchParams] = useSearchParams();
+  const urlSearch = searchParams.get('search') ?? '';
   const [users, setUsers] = useState<User[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(urlSearch);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setSearch(urlSearch);
+  }, [urlSearch]);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
