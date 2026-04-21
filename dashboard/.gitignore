@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Stale CJS emit; real config is vite.config.mts
+vite.config.js
 *.local
 
 # Editor directories and files
