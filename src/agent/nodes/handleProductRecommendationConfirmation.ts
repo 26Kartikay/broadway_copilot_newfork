@@ -61,9 +61,8 @@ export async function handleProductRecommendationConfirmation(
     userContext = `a ${ageGroup.toLowerCase()}`;
   }
 
-  // Convert Prisma enum to lowercase string for filter (MALE -> male, FEMALE -> female)
-  const genderFilter = gender ? gender.toLowerCase() : undefined;
-  const ageGroupFilter = ageGroup ? ageGroup.toLowerCase() : undefined;
+  const genderFilter = gender ? String(gender) : undefined;
+  const ageGroupFilter = ageGroup ? String(ageGroup) : undefined;
 
   if (
     productRecommendationContext?.type === 'color_palette' &&

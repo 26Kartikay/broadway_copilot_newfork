@@ -21,7 +21,7 @@
 import 'dotenv/config';
 import { createId } from '@paralleldrive/cuid2';
 import Papa from 'papaparse';
-import { PrismaClient, Gender, AgeGroup } from '@prisma/client';
+import { PrismaClient, Gender, AgeGroup, ProductCategory } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 // Removed OpenAI import as embeddings are no longer generated
@@ -31,53 +31,53 @@ const prisma = new PrismaClient();
 
 // Removed BATCH_SIZE, EMBEDDING_MODEL, EMBEDDING_DIM as they are no longer needed.
 
-/** Prisma @map uses lowercase labels; older DBs often have uppercase enum labels. */
-type PgEnumCasing = 'lower' | 'upper';
-
-async function detectPgEnumCasing(): Promise<{ gender: PgEnumCasing; ageGroup: PgEnumCasing }> {
-  const rows = await prisma.$queryRaw<{ typname: string; enumlabel: string }[]>`
-    SELECT t.typname AS typname, e.enumlabel AS enumlabel
-    FROM pg_type t
-    JOIN pg_enum e ON t.oid = e.enumtypid
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-    WHERE n.nspname = 'public'
-      AND t.typname IN ('Gender', 'AgeGroup')
-    ORDER BY t.typname, e.enumsortorder
-  `;
-  const ageLabels = rows.filter((r) => r.typname === 'AgeGroup').map((r) => r.enumlabel);
-  const genderLabels = rows.filter((r) => r.typname === 'Gender').map((r) => r.enumlabel);
-
-  const ageGroup: PgEnumCasing =
-    ageLabels.includes('adult') || ageLabels.includes('teen') || ageLabels.includes('senior')
-      ? 'lower'
-      : ageLabels.includes('ADULT') || ageLabels.includes('TEEN') || ageLabels.includes('SENIOR')
-        ? 'upper'
-        : 'lower';
-
-  const gender: PgEnumCasing =
-    genderLabels.includes('male') || genderLabels.includes('female') || genderLabels.includes('other')
-      ? 'lower'
-      : genderLabels.includes('MALE') || genderLabels.includes('FEMALE') || genderLabels.includes('OTHER')
-        ? 'upper'
-        : 'lower';
-
-  return { gender, ageGroup };
+function mapCategory(raw?: string | null): ProductCategory {
+  if (!raw?.trim()) return ProductCategory.CLOTHING_FASHION;
+  const compact = raw.trim().toUpperCase().replace(/\s*&\s*/g, '_').replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_');
+  if ((Object.values(ProductCategory) as string[]).includes(compact)) {
+    return compact as ProductCategory;
+  }
+  const lower = raw.toLowerCase();
+  if (lower.includes('footwear') || lower.includes('shoe') || lower.includes('sneaker')) {
+    return ProductCategory.FOOTWEAR;
+  }
+  if (lower.includes('bag') || lower.includes('luggage')) {
+    return ProductCategory.BAGS_LUGGAGE;
+  }
+  if (lower.includes('jewel') || lower.includes('accessor')) {
+    return ProductCategory.JEWELLERY_ACCESSORIES;
+  }
+  if (lower.includes('beauty') || lower.includes('skincare') || lower.includes('makeup') || lower.includes('grooming')) {
+    return ProductCategory.BEAUTY_PERSONAL_CARE;
+  }
+  if (lower.includes('health') || lower.includes('wellness') || lower.includes('supplement')) {
+    return ProductCategory.HEALTH_WELLNESS;
+  }
+  return ProductCategory.CLOTHING_FASHION;
 }
 
-function genderToDbLiteral(g: Gender, casing: PgEnumCasing): string {
-  const base = g === Gender.MALE ? 'male' : g === Gender.FEMALE ? 'female' : 'other';
-  return casing === 'upper' ? base.toUpperCase() : base;
+function slugHandleId(base: string): string {
+  const s = base
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+  return s || createId();
 }
 
-function ageGroupToDbLiteral(a: AgeGroup | undefined, casing: PgEnumCasing): string | null {
-  if (!a) return null;
-  const base = a === AgeGroup.TEEN ? 'teen' : a === AgeGroup.ADULT ? 'adult' : 'senior';
-  return casing === 'upper' ? base.toUpperCase() : base;
+function buildImportSearchDoc(p: ProductData): string {
+  const parts: string[] = [];
+  if (p.name) parts.push(p.name);
+  if (p.brandName) parts.push(`Brand: ${p.brandName}`);
+  if (p.category) parts.push(`Category: ${p.category}`);
+  if (p.subCategory) parts.push(`Subcategory: ${p.subCategory}`);
+  if (p.productType) parts.push(`Type: ${p.productType}`);
+  parts.push(`Gender: ${p.gender}`);
+  if (p.ageGroup) parts.push(`Age Group: ${p.ageGroup}`);
+  if (p.colorPalette) parts.push(`Palette: ${p.colorPalette}`);
+  if (p.colors.length) parts.push(`Colors: ${p.colors.join(', ')}`);
+  if (p.allTags) parts.push(`Tags: ${p.allTags}`);
+  return parts.join('. ') || `Product ${p.gender}`;
 }
-
-// Removed CATEGORY_MAP as category field is no longer in Product model.
-
-// Removed ParsedComponent interface and parseComponent function as component_tags are no longer processed.
 
 // ============================================================================
 // PRODUCT DATA INTERFACES
@@ -116,6 +116,7 @@ interface RawProduct {
   productType?: string;
   colorPalette?: string;
   imageUrl: string;
+  productLink?: string;
   color?: string; // This will be a comma-separated string
   colors?: string; // Alternative column name
   allTags?: string; // Comma-separated tags
@@ -161,11 +162,6 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
   }
 
   console.log(`📋 Found ${rawProducts.length} products to import`);
-
-  const pgEnumCasing = await detectPgEnumCasing();
-  console.log(
-    `📎 PostgreSQL enum label casing (raw SQL): Gender=${pgEnumCasing.gender}, AgeGroup=${pgEnumCasing.ageGroup}`,
-  );
 
   // Debug: Show column names from first row
   if (rawProducts.length > 0) {
@@ -247,12 +243,33 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       const genderValue = raw.gender || (raw as any)['gender'] || '';
       if (genderValue) {
         const genderLower = String(genderValue).toLowerCase().trim();
+        const genderUpper = String(genderValue).trim().toUpperCase();
         // Map common variations to Prisma enum values
-        if (genderLower === 'female' || genderLower === 'women' || genderLower === 'woman' || genderLower === 'f' || genderLower === 'fem') {
+        if (
+          genderLower === 'female' ||
+          genderLower === 'women' ||
+          genderLower === 'woman' ||
+          genderLower === 'f' ||
+          genderLower === 'fem' ||
+          genderUpper === 'FEMALE'
+        ) {
           genderEnum = Gender.FEMALE;
-        } else if (genderLower === 'male' || genderLower === 'men' || genderLower === 'man' || genderLower === 'm') {
+        } else if (
+          genderLower === 'male' ||
+          genderLower === 'men' ||
+          genderLower === 'man' ||
+          genderLower === 'm' ||
+          genderUpper === 'MALE'
+        ) {
           genderEnum = Gender.MALE;
-        } else if (genderLower === 'other' || genderLower === 'unisex' || genderLower === 'both' || genderLower === 'all' || genderLower === 'any') {
+        } else if (
+          genderLower === 'other' ||
+          genderLower === 'unisex' ||
+          genderLower === 'both' ||
+          genderLower === 'all' ||
+          genderLower === 'any' ||
+          genderUpper === 'OTHER'
+        ) {
           genderEnum = Gender.OTHER;
         } else {
           console.warn(`⚠️ Invalid gender value "${genderValue}" for product ${barcodeStr}. Defaulting to OTHER.`);
@@ -266,15 +283,17 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
       let ageGroupEnum: AgeGroup | undefined;
       const ageValue = raw.ageGroup || raw.age || (raw as any)['ageGroup'] || (raw as any)['age']; // Support both column names and case variations
       if (ageValue) {
-        const ageStr = String(ageValue).toLowerCase().trim();
+        const ageRaw = String(ageValue).trim();
+        const ageStr = ageRaw.toLowerCase();
+        const ageUpper = ageRaw.toUpperCase();
         // Skip empty values and common "not applicable" indicators
         if (ageStr === '' || ageStr === 'n/a' || ageStr === 'na' || ageStr === 'null' || ageStr === 'none' || ageStr === 'undefined') {
           ageGroupEnum = undefined;
-        } else if (ageStr === 'teen' || ageStr === 'teens' || ageStr === 'teenager' || ageStr === 't') {
+        } else if (ageStr === 'teen' || ageStr === 'teens' || ageStr === 'teenager' || ageStr === 't' || ageUpper === 'TEEN') {
           ageGroupEnum = AgeGroup.TEEN;
-        } else if (ageStr === 'adult' || ageStr === 'adults' || ageStr === 'a') {
+        } else if (ageStr === 'adult' || ageStr === 'adults' || ageStr === 'a' || ageUpper === 'ADULT') {
           ageGroupEnum = AgeGroup.ADULT;
-        } else if (ageStr === 'senior' || ageStr === 'seniors' || ageStr === 'elderly' || ageStr === 's') {
+        } else if (ageStr === 'senior' || ageStr === 'seniors' || ageStr === 'elderly' || ageStr === 's' || ageUpper === 'SENIOR') {
           ageGroupEnum = AgeGroup.SENIOR;
         } else {
           // If it's not a recognized value, log a warning and skip it
@@ -328,59 +347,49 @@ async function importProducts(filePath: string, clearExisting: boolean = false) 
         allTags: raw.allTags || undefined,
       };
 
-      // Insert into database
       console.log(`💾 Inserting product ${product.barcode} into database...`);
-      
-      const genderDbValue = genderToDbLiteral(product.gender, pgEnumCasing.gender);
-      const ageGroupDbValue = ageGroupToDbLiteral(product.ageGroup, pgEnumCasing.ageGroup);
-      
+
+      let handleId = slugHandleId(barcodeStr);
+      let handleSuffix = 0;
+      while (await prisma.product.findUnique({ where: { handleId } })) {
+        handleSuffix += 1;
+        handleId = `${slugHandleId(barcodeStr)}-${handleSuffix}`;
+      }
+
+      const productLink =
+        (raw.productLink && String(raw.productLink).trim()) ||
+        (imageUrlValue && String(imageUrlValue).trim()) ||
+        'https://broadwaylive.in';
+
       try {
-        // Raw SQL for enum label casing; Prisma @default(cuid()) is client-side, so set id explicitly.
-        await prisma.$executeRawUnsafe(
-          `
-          INSERT INTO "Product" (
-            "id", "barcode", "name", "brandName", "gender", "ageGroup",
-            "category", "subCategory", "productType", "colorPalette",
-            "imageUrl", "colors", "allTags", "createdAt", "updatedAt"
-          ) VALUES (
-            $1::text,
-            $2::text,
-            $3::text,
-            $4::text,
-            $5::"Gender",
-            $6::"AgeGroup",
-            $7::text,
-            $8::text,
-            $9::text,
-            $10::text,
-            $11::text,
-            $12::text[],
-            $13::text,
-            NOW(),
-            NOW()
-          )
-        `,
-          createId(),
-          product.barcode,
-          product.name || null,
-          product.brandName || null,
-          genderDbValue,
-          ageGroupDbValue,
-          product.category || null,
-          product.subCategory || null,
-          product.productType || null,
-          product.colorPalette || null,
-          product.imageUrl,
-          product.colors,
-          product.allTags || null,
-        );
+        await prisma.product.create({
+          data: {
+            id: createId(),
+            handleId,
+            barcode: product.barcode,
+            name: product.name || 'Unknown',
+            brand: product.brandName || 'Unknown',
+            category: mapCategory(product.category),
+            generalTag: product.productType || 'general',
+            colors: product.colors,
+            componentTags: {
+              gender: product.gender,
+              ageGroup: product.ageGroup ?? null,
+              legacyCategory: product.category ?? null,
+              subCategory: product.subCategory ?? null,
+              colorPalette: product.colorPalette ?? null,
+              allTags: product.allTags ?? null,
+            },
+            imageUrl: product.imageUrl,
+            productLink,
+            searchDoc: buildImportSearchDoc(product),
+            isActive: true,
+          },
+        });
         imported++;
       } catch (createError: any) {
-        // If error occurs, log details and re-throw (raw SQL should work, so this is unexpected)
         console.error(`❌ Error inserting product ${barcodeStr}:`, createError?.message);
         console.error(`   Error code: ${createError?.code}`);
-        console.error(`   Gender DB value: "${genderDbValue}"`);
-        console.error(`   AgeGroup DB value: "${ageGroupDbValue || 'null'}"`);
         console.error(`   ImageUrl: "${product.imageUrl}"`);
         throw createError;
       }

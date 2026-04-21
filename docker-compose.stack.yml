@@ -1,4 +1,5 @@
-# Full local stack: chat bot (app) + admin dashboard + Postgres + Redis (+ optional ngrok).
+# Full local dev stack: chat bot (app) + admin dashboard + Postgres + Redis (+ optional ngrok).
+# Postgres and Redis use named volumes for persistent data; the app uses a bind mount for live code.
 # Always run from repo root:
 #   docker compose -f docker-compose.stack.yml --env-file .env up -d --build
 #
@@ -100,7 +101,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORT: ${DASHBOARD_PORT:-8090}
       ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       CHAT_API_URL: ${CHAT_API_URL:-}
     ports:

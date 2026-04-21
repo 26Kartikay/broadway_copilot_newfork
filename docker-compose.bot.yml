@@ -1,4 +1,4 @@
-# Chat bot only: app + Postgres + Redis (+ optional ngrok). No admin dashboard.
+# Chat bot only (local dev): app bind-mounts the repo; Postgres + Redis use named volumes only for data.
 # Always run from repo root:
 #   docker compose -f docker-compose.bot.yml --env-file .env up -d --build
 #

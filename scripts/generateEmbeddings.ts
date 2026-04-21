@@ -13,7 +13,7 @@
  */
 
 import 'dotenv/config';
-import { PrismaClient, Gender, AgeGroup } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
 
 const prisma = new PrismaClient();
@@ -26,70 +26,57 @@ const EMBEDDING_DIM = 1536;
 
 interface ProductData {
   id: string;
-  name: string | null;
-  brandName: string | null;
-  gender: Gender;
-  ageGroup?: AgeGroup | null;
-  imageUrl: string;
+  name: string;
+  brand: string;
+  generalTag: string;
+  category: string;
   colors: string[];
-  category?: string | null;
-  subCategory?: string | null;
-  productType?: string | null;
-  colorPalette?: string | null;
-  allTags?: string | null;
+  imageUrl: string;
+  componentTags: unknown;
+  searchDoc: string | null;
 }
 
 /**
  * Builds an enriched search document for embedding generation.
  * Includes all structured attributes to improve semantic search quality.
  */
-function buildSearchDoc(product: ProductData): string {
-  const parts: string[] = [];
-  
-  if (product.name) {
-    parts.push(product.name);
-  }
-  if (product.brandName) {
-    parts.push(`Brand: ${product.brandName}`);
-  }
+type AudienceTags = {
+  gender?: string;
+  ageGroup?: string;
+  colorPalette?: string;
+  subCategory?: string;
+  allTags?: string;
+};
 
-  // Core structured attributes
-  if (product.category) {
-    parts.push(`Category: ${product.category}`);
+function audienceFromTags(tags: unknown): AudienceTags {
+  if (!tags || typeof tags !== 'object') return {};
+  const o = tags as Record<string, unknown>;
+  const out: AudienceTags = {};
+  if (typeof o.gender === 'string') out.gender = o.gender;
+  if (typeof o.ageGroup === 'string') out.ageGroup = o.ageGroup;
+  if (typeof o.colorPalette === 'string') out.colorPalette = o.colorPalette;
+  if (typeof o.subCategory === 'string') out.subCategory = o.subCategory;
+  if (typeof o.allTags === 'string') out.allTags = o.allTags;
+  return out;
+}
+
+function buildSearchDoc(product: ProductData): string {
+  if (product.searchDoc && product.searchDoc.trim().length > 0) {
+    return product.searchDoc.trim();
   }
-  if (product.subCategory) {
-    parts.push(`Subcategory: ${product.subCategory}`);
-  }
-  if (product.productType) {
-    parts.push(`Product Type: ${product.productType}`);
-  }
-  if (product.gender) {
-    parts.push(`Gender: ${product.gender}`);
-  }
-  if (product.ageGroup) {
-    parts.push(`Age Group: ${product.ageGroup}`);
-  }
-  
-  // Color palette
-  if (product.colorPalette) {
-    parts.push(`Color Palette: ${product.colorPalette}`);
-  }
-  
-  // Colors
-  if (product.colors && product.colors.length > 0) {
-    parts.push(`Colors: ${product.colors.join(', ')}`);
-  }
-  
-  // All tags
-  if (product.allTags) {
-    parts.push(`Tags: ${product.allTags}`);
-  }
-  
-  // Ensure we always return something (at minimum, use gender or a placeholder)
-  if (parts.length === 0) {
-    parts.push(`Product (Gender: ${product.gender || 'unknown'})`);
-  }
-  
+  const parts: string[] = [];
+  if (product.name) parts.push(product.name);
+  if (product.brand) parts.push(`Brand: ${product.brand}`);
+  if (product.category) parts.push(`Category: ${product.category}`);
+  if (product.generalTag) parts.push(`Type: ${product.generalTag}`);
+  const aud = audienceFromTags(product.componentTags);
+  if (aud.gender) parts.push(`Gender: ${aud.gender}`);
+  if (aud.ageGroup) parts.push(`Age Group: ${aud.ageGroup}`);
+  if (aud.colorPalette) parts.push(`Color Palette: ${aud.colorPalette}`);
+  if (product.colors?.length) parts.push(`Colors: ${product.colors.join(', ')}`);
+  if (aud.allTags) parts.push(`Tags: ${aud.allTags}`);
+  if (aud.subCategory) parts.push(`Subcategory: ${aud.subCategory}`);
+  if (parts.length === 0) parts.push(`Product ${product.id}`);
   return parts.join('. ');
 }
 
@@ -150,46 +137,29 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
   while (true) {
     batchNumber++;
       // Use raw SQL to query products (embedding field is Unsupported type, can't filter with Prisma)
-      let products: Array<{
-        id: string;
-        name: string | null;
-        brandName: string | null;
-        gender: Gender;
-        ageGroup: AgeGroup | null;
-        imageUrl: string;
-        colors: string[];
-        category: string | null;
-        subCategory: string | null;
-        productType: string | null;
-        colorPalette: string | null;
-        allTags: string | null;
-      }>;
+      let products: ProductData[];
 
       if (forceRegenerate) {
-        // Get all products using Prisma - get next batch without embeddings
-        // Query for products that either don't have embeddings or have wrong model
-        products = await prisma.$queryRawUnsafe<typeof products>(
-                `SELECT id, name, "brandName", gender, "ageGroup", "imageUrl", colors,
-                        category, "subCategory", "productType", "colorPalette", "allTags"
-                 FROM "Product"
-                 WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
-                 ORDER BY "createdAt" DESC
-                 LIMIT $2`,
+        products = await prisma.$queryRawUnsafe<ProductData[]>(
+          `SELECT id, name, brand, "generalTag", colors, category::text AS category,
+                  "componentTags", "imageUrl", "searchDoc"
+           FROM "Product"
+           WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+           ORDER BY "createdAt" DESC
+           LIMIT $2`,
           EMBEDDING_MODEL,
-          BATCH_SIZE
+          BATCH_SIZE,
         );
       } else {
-        // Use raw SQL to get products without embeddings or with wrong model
-        // Don't use OFFSET - just get the next batch of products that need embeddings
-        products = await prisma.$queryRawUnsafe<typeof products>(
-                `SELECT id, name, "brandName", gender, "ageGroup", "imageUrl", colors,
-                        category, "subCategory", "productType", "colorPalette", "allTags"
-                 FROM "Product"
-                 WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
-                 ORDER BY "createdAt" DESC
-                 LIMIT $2`,
+        products = await prisma.$queryRawUnsafe<ProductData[]>(
+          `SELECT id, name, brand, "generalTag", colors, category::text AS category,
+                  "componentTags", "imageUrl", "searchDoc"
+           FROM "Product"
+           WHERE ("embedding" IS NULL OR "embeddingModel" IS NULL OR "embeddingModel" != $1)
+           ORDER BY "createdAt" DESC
+           LIMIT $2`,
           EMBEDDING_MODEL,
-          BATCH_SIZE
+          BATCH_SIZE,
         );
       }
 
@@ -202,15 +172,26 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
 
       // Build search documents - ensure all products have valid search docs
       const searchDocs: string[] = [];
-      const validProducts: typeof products = [];
-      
+      const validProducts: ProductData[] = [];
+
       for (const product of products) {
         if (!product) continue;
-        const searchDoc = buildSearchDoc(product as any);
+        const normalized: ProductData = {
+          id: String(product.id),
+          name: String(product.name ?? ''),
+          brand: String(product.brand ?? ''),
+          generalTag: String(product.generalTag ?? ''),
+          category: String(product.category ?? ''),
+          colors: Array.isArray(product.colors) ? product.colors : [],
+          imageUrl: String(product.imageUrl ?? ''),
+          componentTags: product.componentTags,
+          searchDoc: product.searchDoc != null ? String(product.searchDoc) : null,
+        };
+        const searchDoc = buildSearchDoc(normalized);
         // buildSearchDoc now always returns a non-empty string, so we can include all products
         if (searchDoc && searchDoc.trim().length > 0) {
           searchDocs.push(searchDoc);
-          validProducts.push(product);
+          validProducts.push(normalized);
         } else {
           console.warn(`⚠️ Skipping product ${product.id} - could not generate search document`);
         }
@@ -246,8 +227,7 @@ async function generateEmbeddingsForProducts(forceRegenerate: boolean = false) {
         }
 
         try {
-          // Use one raw UPDATE: Prisma's product.update() re-reads the row and fails to
-          // deserialize Postgres enum labels (e.g. ADULT) when the client uses @map("adult").
+          // Raw UPDATE avoids reading Unsupported("vector") through Prisma's typed client.
           const vectorString = `[${embedding.join(',')}]`;
           await prisma.$executeRawUnsafe(
             `UPDATE "Product"

@@ -1,10 +1,9 @@
-# Admin dashboard only (Express + SPA). Postgres must be reachable via DATABASE_URL.
-# Always run from repo root:
+# Admin dashboard for local development: dashboard + Postgres (pgvector) + Redis.
+# Data is persisted only in the named Docker volumes below (postgres + redis).
+# From repo root:
 #   docker compose -f docker-compose.dashboard.yml --env-file .env up -d --build
 #
-# Examples for DATABASE_URL when the bot stack runs separately:
-#   postgresql://postgres:postgres@host.docker.internal:5433/broadway?schema=public
-# Or attach to the same Docker network as the bot (see DASHBOARD_GUIDE.md).
+# Default DATABASE_URL targets the bundled Postgres service. Override in .env if needed.
 
 services:
   dashboard:
@@ -12,18 +11,68 @@ services:
       context: .
       dockerfile: dashboard/Dockerfile
       args:
-        DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env (Postgres connection string)}
-        REDIS_URL: ${REDIS_URL:-}
+        DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+        REDIS_URL: ${REDIS_URL:-redis://redis:6379}
         PORT: ${DASHBOARD_PORT:-8090}
     env_file:
       - ${ENV_FILE:-.env}
     environment:
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
-      REDIS_URL: ${REDIS_URL:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORT: ${DASHBOARD_PORT:-8090}
       ADMIN_SECRET: ${ADMIN_SECRET:-}
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       SERVER_URL: ${SERVER_URL:-}
       CHAT_API_URL: ${CHAT_API_URL:-}
     ports:
       - "${DASHBOARD_PORT:-8090}:${DASHBOARD_PORT:-8090}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - broadway-dashboard-dev
+
+  db:
+    image: pgvector/pgvector:pg16-bookworm
+    command:
+      - postgres
+      - -c
+      - log_min_messages=fatal
+      - -c
+      - client_min_messages=warning
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: broadway
+    ports:
+      - "${DASHBOARD_POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgres_dashboard_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - broadway-dashboard-dev
+
+  redis:
+    image: redis:8
+    command:
+      - redis-server
+      - --loglevel
+      - warning
+    volumes:
+      - redis_dashboard_dev:/data
+    networks:
+      - broadway-dashboard-dev
+
+networks:
+  broadway-dashboard-dev:
+    name: broadway-dashboard-dev
+
+volumes:
+  postgres_dashboard_dev:
+  redis_dashboard_dev:

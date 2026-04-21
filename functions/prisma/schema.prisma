@@ -16,14 +16,14 @@ enum MessageRole {
   TOOL
 }
 enum Gender {
-  MALE @map("male")
-  FEMALE @map("female")
-  OTHER @map("other")
+  MALE
+  FEMALE
+  OTHER
 }
 enum AgeGroup {
-  TEEN @map("teen")
-  ADULT @map("adult")
-  SENIOR @map("senior")
+  TEEN
+  ADULT
+  SENIOR
 }
 enum PendingType {
   NONE
@@ -107,9 +107,9 @@ enum Severity {
 }
 
 enum Fit {
-  LOW @map("low")
-  MEDIUM @map("medium")
-  HIGH @map("high")
+  LOW
+  MEDIUM
+  HIGH
 }
 // --- CORE ---
 

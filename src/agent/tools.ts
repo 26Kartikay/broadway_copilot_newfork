@@ -1,4 +1,4 @@
-import { WardrobeItem, WardrobeItemCategory } from '@prisma/client';
+import { AgeGroup, Gender, WardrobeItem, WardrobeItemCategory } from '@prisma/client';
 import { z } from 'zod';
 
 import { ChatGroq, ChatOpenAI, OpenAIEmbeddings, SystemMessage, Tool, UserMessage } from '../lib/ai';
@@ -14,20 +14,43 @@ import { getPaletteData, isValidPalette, type SeasonalPalette } from '../data/se
 // PRODUCT TYPES
 // ============================================================================
 
+type ProductAudienceTags = {
+  gender?: string;
+  ageGroup?: string;
+  colorPalette?: string;
+  subCategory?: string;
+  allTags?: string;
+};
+
+function audienceFromTags(tags: unknown): ProductAudienceTags {
+  if (!tags || typeof tags !== 'object') return {};
+  const o = tags as Record<string, unknown>;
+  const out: ProductAudienceTags = {};
+  if (typeof o.gender === 'string') out.gender = o.gender;
+  if (typeof o.ageGroup === 'string') out.ageGroup = o.ageGroup;
+  if (typeof o.colorPalette === 'string') out.colorPalette = o.colorPalette;
+  if (typeof o.subCategory === 'string') out.subCategory = o.subCategory;
+  if (typeof o.allTags === 'string') out.allTags = o.allTags;
+  return out;
+}
+
 type ProductRow = {
   id: string;
-  barcode: string;
-  name: string | null;
-  brandName: string | null;
-  gender: string;
-  ageGroup: string | null;
-  category: string | null;
-  subCategory: string | null;
-  productType: string | null;
-  colorPalette: string | null;
-  imageUrl: string;
+  handleId: string;
+  barcode: string | null;
+  name: string;
+  brand: string;
+  category: string;
+  generalTag: string;
+  style: string | null;
+  fit: string | null;
   colors: string[];
-  allTags: string | null;
+  patterns: string | null;
+  occasions: string[];
+  componentTags: unknown;
+  imageUrl: string;
+  productLink: string;
+  searchDoc: string;
   createdAt: Date;
 };
 
@@ -423,7 +446,10 @@ export function fetchRelevantMemories(userId: string): Tool {
 /**
  * Extracts structured attributes from a natural language query using LLM.
  */
-async function understandQuery(query: string, existingFilters: { gender?: string | undefined; ageGroup?: string | undefined }): Promise<QueryAttributes> {
+async function understandQuery(
+  query: string,
+  existingFilters: { gender?: Gender | undefined; ageGroup?: AgeGroup | undefined },
+): Promise<QueryAttributes> {
   try {
     const querySchema = z.object({
       color: z.string().nullable().optional().describe('Color mentioned in query (e.g., "Black", "Navy", "White", "Burnt Orange", "Rust", "Terracotta")'),
@@ -571,8 +597,8 @@ export function searchProducts(): Tool {
         ),
       filters: z
         .object({
-          gender: z.enum(['male', 'female', 'other']).optional(),
-          ageGroup: z.enum(['teen', 'adult', 'senior']).optional(),
+          gender: z.nativeEnum(Gender).optional(),
+          ageGroup: z.nativeEnum(AgeGroup).optional(),
         })
         .strict(),
       limit: z.number().int().positive().min(8).max(12).default(12),
@@ -603,9 +629,19 @@ export function searchProducts(): Tool {
 
         // Build intent object for soft reranking
         // Note: gender and ageGroup come from filters (tool schema), not from query understanding
-        const intent = {
-          gender: filters.gender || null,
-          ageGroup: filters.ageGroup || null,
+        const intent: {
+          gender: Gender | null;
+          ageGroup: AgeGroup | null;
+          color: string | null;
+          brand: string | null;
+          style: string | null;
+          occasion: string | null;
+          palette: string | null;
+          category: string | null;
+          subCategory: string | null;
+        } = {
+          gender: filters.gender ?? null,
+          ageGroup: filters.ageGroup ?? null,
           color: queryAttrs.color || null, // Normalized color from AI
           brand: queryAttrs.brand || null,
           style: queryAttrs.style || null,
@@ -699,15 +735,8 @@ export function searchProducts(): Tool {
         const embeddedQuery = await embeddingModel.embedQuery(enhancedQuery);
         const vector = JSON.stringify(embeddedQuery);
 
-        // Normalize to Prisma @map / Postgres enum labels: male, female, other (lowercase).
-        const enumToDbValue = (enumValue: string | null): string | null => {
-          if (!enumValue) return null;
-          return enumValue.toLowerCase();
-        };
-
-        // Convert gender enum to database value for querying
-        const genderDbValue = intent.gender ? enumToDbValue(intent.gender) : null;
-        const ageGroupDbValue = intent.ageGroup ? enumToDbValue(intent.ageGroup) : null;
+        const genderFilter = intent.gender;
+        const ageGroupFilter = intent.ageGroup;
         
         // Normalize color early to check if this is a color-focused query
         const normalizedColor = intent.color ? intent.color.toLowerCase().trim() : null;
@@ -733,23 +762,17 @@ export function searchProducts(): Tool {
 
 
 
-        const baseConditions: string[] = [
-          '"embedding" IS NOT NULL',
-        ];
+        const baseConditions: string[] = ['"embedding" IS NOT NULL', '"isActive" = true'];
         const baseParams: (string | number)[] = [];
         let paramIndex = 1;
 
-        // Apply gender filter as hard constraint to ensure gender-appropriate recommendations
-        // genderDbValue is lowercase (see enumToDbValue); compare to 'male' | 'female' | 'other'.
-        if (genderDbValue) {
-          if (genderDbValue === 'male') {
-            // For male users: include only male or null (exclude female and other)
-            baseConditions.push(`(gender = 'male' OR gender IS NULL)`);
-          } else if (genderDbValue === 'female') {
-            // For female users: include female, other, or null (exclude male)
-            baseConditions.push(`(gender = 'female' OR gender IS NULL OR gender = 'other')`);
-          }
-          // Note: 'other' gender from filters allows all products (no filter applied)
+        // Audience gender is stored on Product.componentTags (import pipeline); values match Prisma Gender.
+        if (genderFilter === Gender.MALE) {
+          baseConditions.push(`(NOT ("componentTags" ? 'gender') OR ("componentTags"->>'gender') = 'MALE')`);
+        } else if (genderFilter === Gender.FEMALE) {
+          baseConditions.push(
+            `(NOT ("componentTags" ? 'gender') OR ("componentTags"->>'gender') IN ('FEMALE', 'OTHER'))`,
+          );
         }
         
         const whereClause = baseConditions.join(' AND ');
@@ -758,9 +781,9 @@ export function searchProducts(): Tool {
         // Vector similarity search - retrieve top 200 candidates for reranking
         // Use alias to ensure consistent column name in results
         const vectorRecallQuery = `
-          SELECT id, barcode, name, "brandName", gender, "ageGroup", 
-                 "imageUrl" as "imageUrl", colors,
-                 category, "subCategory", "productType", "colorPalette", "allTags", "createdAt",
+          SELECT id, "handleId", barcode, name, brand, category::text AS category,
+                 "generalTag", style, fit, colors, patterns, occasions,
+                 "componentTags", "imageUrl", "productLink", "searchDoc", "createdAt",
                  ("embedding" <=> $${vectorParamIndex}::vector) as distance,
                  (1 - ("embedding" <=> $${vectorParamIndex}::vector)) as similarity
           FROM "Product"
@@ -780,17 +803,40 @@ export function searchProducts(): Tool {
         // Map to ProductSemanticRow - handle both camelCase and lowercase column names
         // PostgreSQL with $queryRawUnsafe returns column names as-is (case-sensitive when quoted)
         const mappedCandidates: ProductSemanticRow[] = vectorCandidates.map((row: any) => {
-          // Try all possible case variations for imageUrl
-          const imageUrl = row.imageUrl || 
-                          row.imageurl || 
-                          row['imageUrl'] || 
-                          row['imageurl'] ||
-                          (Object.keys(row).find(k => k.toLowerCase() === 'imageurl') ? row[Object.keys(row).find(k => k.toLowerCase() === 'imageurl')!] : null) ||
-                          '';
-          
+          const imageUrl =
+            row.imageUrl ||
+            row.imageurl ||
+            row['imageUrl'] ||
+            row['imageurl'] ||
+            (Object.keys(row).find((k) => k.toLowerCase() === 'imageurl')
+              ? row[Object.keys(row).find((k) => k.toLowerCase() === 'imageurl')!]
+              : null) ||
+            '';
+          const colors = Array.isArray(row.colors) ? row.colors : [];
+          const occasions = Array.isArray(row.occasions) ? row.occasions : [];
+          const mapped: ProductRow = {
+            id: String(row.id),
+            handleId: String(row.handleId ?? row.handleid ?? ''),
+            barcode: row.barcode ?? null,
+            name: row.name ?? '',
+            brand: row.brand ?? '',
+            category: String(row.category ?? ''),
+            generalTag: row.generalTag ?? row.generaltag ?? '',
+            style: row.style ?? null,
+            fit: row.fit ?? null,
+            colors,
+            patterns: row.patterns ?? null,
+            occasions,
+            componentTags: row.componentTags ?? row.componenttags,
+            imageUrl,
+            productLink: row.productLink ?? row.productlink ?? '',
+            searchDoc: row.searchDoc ?? row.searchdoc ?? '',
+            createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+          };
           return {
-            ...row,
-            imageUrl: imageUrl,
+            ...mapped,
+            distance: Number(row.distance),
+            similarity: Number(row.similarity),
           };
         });
 
@@ -810,30 +856,24 @@ export function searchProducts(): Tool {
         // normalizedColor already defined above
         
         const rerankedCandidates = mappedCandidates.map((candidate) => {
+          const aud = audienceFromTags(candidate.componentTags);
           let score = candidate.similarity; // Start with semantic similarity score
 
-          // Gender matching boost (strong preference)
-          if (genderDbValue && candidate.gender) {
-            const candidateGenderDb = enumToDbValue(candidate.gender);
-            if (candidateGenderDb === genderDbValue) {
-              score += 0.3; // Strong boost for gender match
-            } else if (candidateGenderDb === null || candidateGenderDb === 'other') {
-              score += 0.1; // Small boost for unisex/other products
+          if (genderFilter && aud.gender) {
+            if (aud.gender === genderFilter) {
+              score += 0.3;
+            } else if (aud.gender === Gender.OTHER) {
+              score += 0.1;
             }
-            // No penalty for mismatch - we want to show results even if not perfect match
           }
 
-          // AgeGroup matching boost
-          if (ageGroupDbValue && candidate.ageGroup) {
-            const candidateAgeDb = enumToDbValue(candidate.ageGroup);
-            if (candidateAgeDb === ageGroupDbValue) {
-              score += 0.15; // Boost for age group match
-            }
+          if (ageGroupFilter && aud.ageGroup && aud.ageGroup === ageGroupFilter) {
+            score += 0.15;
           }
 
           // Color palette matching boost (strongest preference - matches seasonal palette)
-          if (normalizedPalette && candidate.colorPalette) {
-            const candidatePalette = candidate.colorPalette.trim();
+          if (normalizedPalette && aud.colorPalette) {
+            const candidatePalette = aud.colorPalette.trim();
             // Exact match (case-insensitive)
             if (candidatePalette.toLowerCase() === normalizedPalette.toLowerCase()) {
               score += 0.5; // Very strong boost for exact palette match
@@ -865,33 +905,30 @@ export function searchProducts(): Tool {
             }
           }
 
-          // Category matching boost - similarity matching (not exact)
+          // Category matching boost — Product.category is a Postgres enum (e.g. CLOTHING_FASHION)
           if (intent.category && candidate.category) {
-            const candidateCategory = (candidate.category || '').toLowerCase().trim();
+            const candidateCategory = (candidate.category || '').toLowerCase().replace(/_/g, ' ').trim();
             const intentCategory = (intent.category || '').toLowerCase().trim();
-            
-            // Exact match
+
             if (candidateCategory === intentCategory) {
-              score += 0.3; // Strong boost for exact category match
+              score += 0.3;
             } else {
-              // Similarity matching - check if categories are similar
-              const hasSimilarMatch = 
+              const hasSimilarMatch =
                 candidateCategory.includes(intentCategory) ||
                 intentCategory.includes(candidateCategory) ||
-                // Special handling for "Clothing & Fashion" and "Footwear"
                 (intentCategory.includes('clothing') && candidateCategory.includes('clothing')) ||
                 (intentCategory.includes('fashion') && candidateCategory.includes('fashion')) ||
                 (intentCategory.includes('footwear') && candidateCategory.includes('footwear'));
-              
+
               if (hasSimilarMatch) {
-                score += 0.15; // Moderate boost for similar category match
+                score += 0.15;
               }
             }
           }
 
-          // SubCategory matching boost - similarity matching (not exact)
-          if (intent.subCategory && candidate.subCategory) {
-            const candidateSubCategory = (candidate.subCategory || '').toLowerCase().trim();
+          // SubCategory from import metadata JSON
+          if (intent.subCategory && aud.subCategory) {
+            const candidateSubCategory = (aud.subCategory || '').toLowerCase().trim();
             const intentSubCategory = (intent.subCategory || '').toLowerCase().trim();
             
             // Exact match
@@ -909,9 +946,9 @@ export function searchProducts(): Tool {
             }
           }
 
-          // Occasion matching boost - similarity matching from allTags
-          if (intent.occasion && candidate.allTags) {
-            const candidateTags = (candidate.allTags || '').toLowerCase();
+          // Occasion matching boost — tags from import metadata JSON
+          if (intent.occasion && aud.allTags) {
+            const candidateTags = (aud.allTags || '').toLowerCase();
             const intentOccasion = (intent.occasion || '').toLowerCase().trim();
             
             // Check if allTags contains the occasion (similarity matching)
@@ -938,15 +975,13 @@ export function searchProducts(): Tool {
             }
           }
 
-          // Boost for "Clothing & Fashion" and "Footwear" categories when making recommendations
-          // This ensures these categories are prioritized in recommendations
           if (candidate.category) {
             const candidateCategory = (candidate.category || '').toLowerCase();
             if (candidateCategory.includes('clothing') || candidateCategory.includes('fashion')) {
-              score += 0.05; // Small boost for Clothing & Fashion
+              score += 0.05;
             }
             if (candidateCategory.includes('footwear')) {
-              score += 0.05; // Small boost for Footwear
+              score += 0.05;
             }
           }
 
@@ -975,18 +1010,17 @@ export function searchProducts(): Tool {
 
         // Map to final result format with barcode
         const mappedResults = validCandidates.map((result: any) => {
-          // Handle PostgreSQL column name case sensitivity
           const imageUrl = result.imageUrl || result.imageurl || result['imageUrl'] || '';
           const barcode = result.barcode || '';
-          
+          const aud = audienceFromTags(result.componentTags);
           return {
             name: result.name,
-            brand: result.brandName || result.brandname,
-            gender: result.gender,
-            ageGroup: result.ageGroup || result.agegroup,
+            brand: result.brand || result.brandName || result.brandname,
+            gender: aud.gender,
+            ageGroup: aud.ageGroup,
             colors: result.colors,
-            imageUrl: imageUrl,
-            barcode: barcode,
+            imageUrl,
+            barcode,
           };
         });
 

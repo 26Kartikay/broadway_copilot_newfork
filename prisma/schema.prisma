@@ -16,14 +16,14 @@ enum MessageRole {
   TOOL
 }
 enum Gender {
-  MALE @map("male")
-  FEMALE @map("female")
-  OTHER @map("other")
+  MALE
+  FEMALE
+  OTHER
 }
 enum AgeGroup {
-  TEEN @map("teen")
-  ADULT @map("adult")
-  SENIOR @map("senior")
+  TEEN
+  ADULT
+  SENIOR
 }
 enum PendingType {
   NONE
@@ -107,9 +107,9 @@ enum Severity {
 }
 
 enum Fit {
-  LOW @map("low")
-  MEDIUM @map("medium")
-  HIGH @map("high")
+  LOW
+  MEDIUM
+  HIGH
 }
 // --- CORE ---
 
@@ -129,9 +129,6 @@ model User {
 
   lastVibeCheckAt     DateTime?
   lastColorAnalysisAt DateTime?
-
-  lastSyncedAt DateTime?
-  syncVersion  BigInt?
 
   createdAt DateTime @default(now())
   
@@ -313,44 +310,52 @@ model WardrobeItem {
 // --- PRODUCT CATALOG ---
 
 model Product {
-  id          String   @id @default(cuid())
-  barcode     String
+  id        String @id @default(cuid())
+  handleId  String @unique                    // URL-friendly product identifier
+  barcode   String?                           // Product barcode/SKU
   
-  name        String?
-  brandName   String?
+  name      String                            // article_name
+  brand     String                            // Brand name
   
-  gender      Gender
-  ageGroup    AgeGroup?
-  category    String?
-  subCategory String?
-  productType String?
+  // Category & Type
+  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
+  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
   
-  colorPalette String?
-  imageUrl     String
-  colors       String[] @default([])
-  allTags      String?
+  // Parsed from component string (for fast filtering)
+  style       String?                         // Athleisure, Minimal, Streetwear, etc.
+  fit         String?                         // Oversized, Slim, Regular, etc.
+  colors      String[]                        // Black, Navy, Red, etc.
+  patterns    String?                         // Solid, Graphics, Stripes, etc.
+  occasions   String[]                        // Casual, Work, Party, etc.
   
-  embedding      Unsupported("vector")?
-  embeddingModel String?
-  embeddingDim   Int?
-  embeddingAt    DateTime?
+  // Full component tags as JSON (for category-specific tags)
+  componentTags Json                          // All parsed tags from component string
   
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // URLs
+  imageUrl    String                          // Product image URL
+  productLink String                          // Link to product page on broadwaylive.in
   
-  @@index([name])
-  @@index([brandName])
-  @@index([gender])
-  @@index([ageGroup])
-  @@index([colors])
-  @@index([createdAt])
+  // Vector search
+  searchDoc        String      @db.Text       // Combined text for embedding generation
+  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
+  
+  // Metadata
+  isActive    Boolean  @default(true)         // Whether product is available
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Indexes for fast filtering
   @@index([category])
-  @@index([subCategory])
-  @@index([productType])
-  @@index([brandName, category])
-  @@index([gender, ageGroup])
-  @@index([colorPalette])
-  @@index([allTags])
+  @@index([generalTag])
+  @@index([style])
+  @@index([fit])
+  @@index([patterns])
+  @@index([brand])
+  @@index([isActive])
+  @@index([createdAt])
 }
 
 // --- AGENT & LOGGING ---
@@ -526,46 +531,45 @@ model AdminAuthenticator {
   credentialBackedUp   Boolean
   transports           String?
 
-    admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-    @@id([userId, credentialID])
-  }
-  
-  model ServiceLog {
-    id        String   @id @default(cuid())
-    createdAt DateTime @default(now())
-    severity  Severity @default(INFO)
-    service   String
-    message   String
-    context   Json?
-  
-    userId              String?
-    appUserId           String?
-    whatsappId          String?
-    profileNameSnapshot String?
-    user                User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
-    conversationId String?
-    graphRunId     String?
-  
-    traceId String?
-  
-    @@index([createdAt(sort: Desc)])
-    @@index([userId, createdAt(sort: Desc)])
-    @@index([severity, createdAt(sort: Desc)])
-    @@index([service, createdAt(sort: Desc)])
-    @@index([appUserId])
-    @@index([whatsappId])
-  }
-  
-  model AdminAuditLog {
-    id        String   @id @default(cuid())
-    createdAt DateTime @default(now())
-    adminId   String?
-    action    String
-    target    String?
-    details   Json?
-  
-    @@index([createdAt(sort: Desc)])
-  }
-  
+  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+}
+
+model ServiceLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  severity  Severity @default(INFO)
+  service   String
+  message   String
+  context   Json?
+
+  userId              String?
+  appUserId           String?
+  whatsappId          String?
+  profileNameSnapshot String?
+  user                User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  conversationId String?
+  graphRunId     String?
+
+  traceId String?
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([severity, createdAt(sort: Desc)])
+  @@index([service, createdAt(sort: Desc)])
+  @@index([appUserId])
+  @@index([whatsappId])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  adminId   String?
+  action    String
+  target    String?
+  details   Json?
+
+  @@index([createdAt(sort: Desc)])
+}
