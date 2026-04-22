@@ -5,6 +5,7 @@ import { getPaletteData, isValidPalette } from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { getServerUrlBase } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user'; // Import the utility function
 import { GraphState, Replies } from '../state';
 import { getMainMenuReply } from './common';
@@ -67,7 +68,7 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
 
     if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
       const paletteData = getPaletteData(paletteNameToSave);
-      const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+      const baseUrl = getServerUrlBase();
       const finalPdfPath = paletteData.pdfPath;
 
       confirmationReplies.push({

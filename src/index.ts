@@ -20,6 +20,7 @@ import { clearUploadsDirectory } from './utils/clearUploads';
 import { dbLog } from './utils/dbLogger';
 import { logger } from './utils/logger';
 import { ensureDir, staticUploadsMount } from './utils/paths';
+import { getServerUrlBase } from './utils/serverUrl';
 
 /** Purge container-local upload files periodically (see scripts/clear-uploads.mjs for manual run). */
 const UPLOADS_PURGE_INTERVAL_MS = 30 * 60 * 1000;
@@ -51,7 +52,7 @@ app.use(
       }
 
       // Allow Cloud Run URLs and custom domains
-      const serverUrl = process.env.SERVER_URL;
+      const serverUrl = getServerUrlBase();
       if (serverUrl && origin) {
         // Extract origin from serverUrl (protocol + hostname + port)
         const serverOriginMatch = serverUrl.match(/^(https?:\/\/[^\/]+)/);

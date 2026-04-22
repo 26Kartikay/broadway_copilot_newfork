@@ -8,6 +8,7 @@ import { getPaletteData, isValidPalette, type ColorWithHex, SEASONAL_PALETTES } 
 import { WELCOME_IMAGE_URL } from '../../utils/constants';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { loadPrompt } from '../../utils/prompts';
 import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, fetchRelevantMemories } from '../tools';
@@ -194,7 +195,7 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
                       orderBy: { createdAt: 'desc' },
                     });
                     if (mediaItem?.serverUrl) {
-                      userImageUrl = mediaItem.serverUrl;
+                      userImageUrl = normalizeHttpUrlReference(mediaItem.serverUrl) || null;
                     }
                   }
                 } catch (err) {

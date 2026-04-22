@@ -5,6 +5,7 @@ import path from 'path';
 
 import { logger } from './logger';
 import { ensureDir, userUploadDir } from './paths';
+import { getServerUrlBase } from './serverUrl';
 
 // Register Poppins fonts for image generation
 try {
@@ -262,7 +263,7 @@ export async function generateColorAnalysisImage(
 
   const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
   const relativePath = `/uploads/${sanitizedId}/${filename}`;
-  const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '');
+  const serverUrl = getServerUrlBase();
 
   return serverUrl && !serverUrl.includes('localhost')
     ? `${serverUrl}${relativePath}`
@@ -430,7 +431,7 @@ export async function generateVibeCheckImage(
 
   const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
   const relativePath = `/uploads/${sanitizedId}/${filename}`;
-  const serverUrl = process.env.SERVER_URL?.replace(/\/$/, '');
+  const serverUrl = getServerUrlBase();
 
   return serverUrl && !serverUrl.includes('localhost')
     ? `${serverUrl}${relativePath}`

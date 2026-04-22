@@ -11,6 +11,7 @@ import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { loadPrompt } from '../../utils/prompts';
 import { isGuestUser } from '../../utils/user';
 
@@ -172,7 +173,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
                       orderBy: { createdAt: 'desc' },
                     });
                     if (mediaItem?.serverUrl) {
-                      userImageUrl = mediaItem.serverUrl;
+                      userImageUrl = normalizeHttpUrlReference(mediaItem.serverUrl) || null;
                     }
                   }
                 } catch (err) {

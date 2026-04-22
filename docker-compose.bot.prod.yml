@@ -6,6 +6,7 @@
 #
 # Set PORT / SERVER_URL consistently (same port inside container and in SERVER_URL).
 #   export SERVER_URL=https://api.yourdomain.com
+# SERVER_URL must be ONLY the base URL (no leading "SERVER_URL=" — do not paste a full .env line as the value).
 #
 # DATABASE_URL: set in .env to your real Postgres (e.g. RDS). If unset, defaults to bundled `db`.
 # External URLs must not use host "localhost" from inside the container.

@@ -8,6 +8,7 @@ import { extension as extFromMime } from 'mime-types';
 import { BadRequestError, InternalServerError } from './errors';
 import { logger } from './logger';
 import { ensureDir, userUploadDir } from './paths';
+import { getServerUrlBase, normalizeHttpUrlReference } from './serverUrl';
 
 /**
  * Checks if a URL is a data URL (base64 encoded).
@@ -127,11 +128,8 @@ export async function compressImage(
 }
 
 /**
- * Processes media for use with AI models.
- *
- * - If the URL is already a data URL, returns it as-is (works locally and in prod)
- * - If in production with public SERVER_URL, downloads and returns public URL
- * - If in development (localhost), downloads and converts to data URL for OpenAI compatibility
+ * Processes media for use with AI models: saves under uploads, returns a data URL for vision
+ * and a public `serverUrl` for clients/DB (built from {@link getServerUrlBase}).
  *
  * @param url - Media URL (can be data URL or remote URL)
  * @param userId - User ID for organizing uploads
@@ -178,7 +176,7 @@ export async function processMediaForAI(
     const filePath = path.join(uploadDir, filename);
     await fs.writeFile(filePath, buffer);
 
-    const baseUrl = process.env.SERVER_URL?.replace(/\/$/, '') || '';
+    const baseUrl = getServerUrlBase();
     const serverUrl = `${baseUrl}/uploads/${userId}/${filename}`;
 
     // Vision: always data URL so OpenAI does not fetch SERVER_URL (often blocked, wrong host, or /chatbot-only edge).
@@ -230,40 +228,42 @@ export async function resolveImageUrlForVisionModels(url: string): Promise<strin
     return url;
   }
 
-  const parsed = parseUploadsPath(url);
+  const normalized = normalizeHttpUrlReference(url);
+
+  const parsed = parseUploadsPath(normalized);
   if (parsed) {
     const filePath = path.join(userUploadDir(parsed.userId), parsed.filename);
     try {
       await fs.access(filePath);
       const buffer = await fs.readFile(filePath);
       const mimeType = mimeTypeFromFilename(parsed.filename);
-      logger.debug({ url: url.slice(0, 120), filePath }, 'Resolved uploads URL from disk for vision');
+      logger.debug({ url: normalized.slice(0, 120), filePath }, 'Resolved uploads URL from disk for vision');
       return bufferToDataUrl(buffer, mimeType);
     } catch {
-      logger.debug({ url: url.slice(0, 120), filePath }, 'Uploads file not on disk; trying HTTP fetch');
+      logger.debug({ url: normalized.slice(0, 120), filePath }, 'Uploads file not on disk; trying HTTP fetch');
     }
   }
 
   try {
     const signal = AbortSignal.timeout(25_000);
-    const response = await fetch(url, {
+    const response = await fetch(normalized, {
       signal,
       redirect: 'follow',
       headers: { 'User-Agent': 'BroadwayCopilot/1.0 (vision-prefetch)' },
     });
     if (!response.ok) {
       throw new InternalServerError(
-        `Could not fetch image for vision (HTTP ${response.status}): ${url.slice(0, 200)}`,
+        `Could not fetch image for vision (HTTP ${response.status}): ${normalized.slice(0, 200)}`,
       );
     }
     const buffer = Buffer.from(await response.arrayBuffer());
     const ct = response.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg';
-    logger.debug({ url: url.slice(0, 120) }, 'Resolved image URL via HTTP fetch for vision');
+    logger.debug({ url: normalized.slice(0, 120) }, 'Resolved image URL via HTTP fetch for vision');
     return bufferToDataUrl(buffer, ct);
   } catch (err: unknown) {
     if (err instanceof InternalServerError) throw err;
     logger.error(
-      { url: url.slice(0, 200), err: err instanceof Error ? err.message : String(err) },
+      { url: normalized.slice(0, 200), err: err instanceof Error ? err.message : String(err) },
       'Failed to resolve image URL for vision models',
     );
     throw new InternalServerError('Could not load image for analysis.', { cause: err });
