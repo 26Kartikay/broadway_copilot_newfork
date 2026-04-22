@@ -387,7 +387,13 @@ async function searchCatalogIlike(
   }));
 }
 
-export async function searchCatalog(input: SearchCatalogInput) {
+export type SearchCatalogResult = {
+  products: FormattedProduct[];
+  totalFound: number;
+  error?: string;
+};
+
+export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCatalogResult> {
   const limit = Math.min(Math.max(input.limit ?? 6, 1), MAX_LIMIT);
 
   try {

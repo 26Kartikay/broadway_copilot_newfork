@@ -21,33 +21,24 @@ export async function getOutfitSuggestion(input: OutfitSuggestionInput) {
     });
 
     // 2. Prepare search promises for parallel execution
-    const topSearch = searchCatalog({
-      query: `${occasion} top shirt blouse`,
-      category: 'CLOTHING_FASHION',
-      style,
-      limit: 3
+    const catalogArgs = (query: string, category: string) => ({
+      query,
+      category,
+      ...(style ? { style } : {}),
+      limit: 3,
     });
 
-    const bottomSearch = searchCatalog({
-      query: `${occasion} bottom trousers skirt pants`,
-      category: 'CLOTHING_FASHION',
-      style,
-      limit: 3
-    });
+    const topSearch = searchCatalog(catalogArgs(`${occasion} top shirt blouse`, 'CLOTHING_FASHION'));
 
-    const shoeSearch = searchCatalog({
-      query: `${occasion} shoes footwear`,
-      category: 'FOOTWEAR',
-      style,
-      limit: 3
-    });
+    const bottomSearch = searchCatalog(
+      catalogArgs(`${occasion} bottom trousers skirt pants`, 'CLOTHING_FASHION'),
+    );
 
-    const accessorySearch = searchCatalog({
-      query: `${occasion} accessory jewelry bag`,
-      category: 'JEWELLERY_ACCESSORIES',
-      style,
-      limit: 3
-    });
+    const shoeSearch = searchCatalog(catalogArgs(`${occasion} shoes footwear`, 'FOOTWEAR'));
+
+    const accessorySearch = searchCatalog(
+      catalogArgs(`${occasion} accessory jewelry bag`, 'JEWELLERY_ACCESSORIES'),
+    );
 
     // Execute all searches + DB fetch in parallel
     const [colorAnalysis, topResult, bottomResult, shoeResult, accessoryResult] = await Promise.all([

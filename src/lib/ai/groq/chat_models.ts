@@ -113,7 +113,9 @@ export class ChatGroq extends BaseChatCompletionsModel {
       requestOptions.timeout = this.params.timeout;
     }
 
-    const nodeRun = traceBuffer.nodeRuns.find((ne) => ne.nodeName === nodeName && !ne.endTime);
+    const nodeRun = traceBuffer.nodeRuns.find(
+      (ne: { nodeName: string; endTime?: Date }) => ne.nodeName === nodeName && !ne.endTime,
+    );
     if (!nodeRun) {
       throw new Error(`Could not find an active node execution for nodeName: ${nodeName}`);
     }

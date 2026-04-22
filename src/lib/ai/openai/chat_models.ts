@@ -73,7 +73,9 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
   ): Promise<RunOutcome> {
     const params = this._buildResponsesParams(systemPrompt, msgs);
 
-    const nodeRun = traceBuffer.nodeRuns.find((ne) => ne.nodeName === nodeName && !ne.endTime);
+    const nodeRun = traceBuffer.nodeRuns.find(
+      (ne: { nodeName: string; endTime?: Date }) => ne.nodeName === nodeName && !ne.endTime,
+    );
     if (!nodeRun) {
       throw new Error(`Could not find an active node execution for nodeName: ${nodeName}`);
     }
@@ -139,7 +141,9 @@ export class ChatOpenAI extends BaseChatCompletionsModel {
   ): Promise<RunOutcome> {
     const params = this._buildChatCompletionsParams(systemPrompt, msgs);
 
-    const nodeRun = traceBuffer.nodeRuns.find((ne) => ne.nodeName === nodeName && !ne.endTime);
+    const nodeRun = traceBuffer.nodeRuns.find(
+      (ne: { nodeName: string; endTime?: Date }) => ne.nodeName === nodeName && !ne.endTime,
+    );
     if (!nodeRun) {
       throw new Error(`Could not find an active node execution for nodeName: ${nodeName}`);
     }

@@ -35,7 +35,7 @@ export async function beautyAdvisor(input: BeautyAdvisorInput) {
 
     return {
       recommendations: products,
-      routine: products.slice(0, 3).map(p => `Step ${products.indexOf(p) + 1}: ${p.name}`),
+      routine: products.slice(0, 3).map((p, i) => `Step ${i + 1}: ${p.name}`),
       tips: tips.length > 0 ? tips : ['Always use sunscreen as your final skincare step.']
     };
 
