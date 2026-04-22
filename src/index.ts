@@ -1,5 +1,9 @@
 import 'dotenv/config';
 
+import { registerProcessGuards } from './lib/processGuards';
+
+registerProcessGuards();
+
 import cors from 'cors';
 import { randomUUID } from 'crypto';
 import express, { NextFunction, Request, Response } from 'express';
@@ -9,7 +13,7 @@ import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
 import { connectPrisma } from './lib/prisma';
 import { getOrCreateUserAndConversation } from './utils/context';
-import { connectRedis } from './lib/redis';
+import { connectRedis, getRedisHealthSnapshot } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { requestLogger } from './middleware/requestLogger';
 import { clearUploadsDirectory } from './utils/clearUploads';
@@ -22,22 +26,6 @@ const UPLOADS_PURGE_INTERVAL_MS = 30 * 60 * 1000;
 
 const app = express();
 app.set('trust proxy', true);
-
-process.on('unhandledRejection', (reason: unknown) => {
-  logger.fatal(
-    {
-      err: reason instanceof Error ? reason : undefined,
-      reason: reason instanceof Error ? reason.message : String(reason),
-    },
-    'Unhandled promise rejection',
-  );
-});
-
-process.on('uncaughtException', (err: unknown) => {
-  logger.fatal({ err }, 'Uncaught exception');
-  // Crash fast so Cloud Run can restart the container in a clean state.
-  process.exit(1);
-});
 
 app.use(requestLogger);
 
@@ -94,10 +82,24 @@ app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(staticUploadsMount()));
 
 /**
- * Health check endpoint
+ * Health check: process is up; includes Redis ping when socket is open.
  */
-app.get('/health', (_req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (_req: Request, res: Response) => {
+  const redisHealth = await getRedisHealthSnapshot();
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    redis: redisHealth.status,
+    redisPingMs: redisHealth.pingMs,
+    redisDetail: redisHealth.detail,
+    redisObservability: {
+      disconnectEvents: redisHealth.metrics.disconnectEvents,
+      readyEvents: redisHealth.metrics.readyEvents,
+      lastReconnectDurationMs: redisHealth.metrics.lastReconnectDurationMs,
+      connectionErrorEvents: redisHealth.metrics.connectionErrorEvents,
+      lastReconnectStrategy: redisHealth.metrics.lastReconnectStrategyLog,
+    },
+  });
 });
 
 // Internal API routes for bot user sync - removed (controllers deleted)

@@ -10,6 +10,7 @@ import { createCanvas, loadImage } from 'canvas';
 import { loadPrompt } from '../../utils/prompts';
 
 import { redis } from '../../lib/redis';
+import { runSafeRedisVoid, withRedis } from '../../lib/redisSafe';
 
 import { getMainMenuReply } from './common';
 
@@ -86,28 +87,31 @@ async function combineImagesSideBySide(url1: string, url2: string): Promise<stri
 }
 
 async function saveFirstImageUrl(userId: string, imageUrl: string, ttlSeconds: number = 3600) {
-  await redis.hSet(`${REDIS_PREFIX}:${userId}`, {
-    firstImageUrl: imageUrl,
-    pending: 'SECOND_IMAGE',
+  const key = `${REDIS_PREFIX}:${userId}`;
+  await runSafeRedisVoid('thisOrThat.saveFirstImage', async () => {
+    await redis.hSet(key, {
+      firstImageUrl: imageUrl,
+      pending: 'SECOND_IMAGE',
+    });
+    await redis.expire(key, ttlSeconds);
   });
-  await redis.expire(`${REDIS_PREFIX}:${userId}`, ttlSeconds);
 }
 
 async function saveSecondImageUrl(userId: string, imageUrl: string) {
-  await redis.hSet(`${REDIS_PREFIX}:${userId}`, {
-    secondImageUrl: imageUrl,
-    // Setting state to COMBINE_AND_ANALYZE here to trigger the next step
-    pending: 'COMBINE_AND_ANALYZE',
-  });
+  await runSafeRedisVoid('thisOrThat.saveSecondImage', () =>
+    redis.hSet(`${REDIS_PREFIX}:${userId}`, {
+      secondImageUrl: imageUrl,
+      pending: 'COMBINE_AND_ANALYZE',
+    }),
+  );
 }
 
 async function getImageState(userId: string) {
-  const state = await redis.hGetAll(`${REDIS_PREFIX}:${userId}`);
-  return state;
+  return withRedis('thisOrThat.getImageState', () => redis.hGetAll(`${REDIS_PREFIX}:${userId}`), {});
 }
 
 async function clearImageState(userId: string) {
-  await redis.del(`${REDIS_PREFIX}:${userId}`);
+  await runSafeRedisVoid('thisOrThat.clearImageState', () => redis.del(`${REDIS_PREFIX}:${userId}`));
 }
 
 export async function handleThisOrThat(state: GraphState): Promise<GraphState> {

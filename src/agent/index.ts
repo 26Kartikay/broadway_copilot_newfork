@@ -16,12 +16,33 @@ let subscriber: ReturnType<typeof redis.duplicate> | undefined;
 
 const getUserAbortChannel = (id: string) => `user_abort:${id}`;
 
-async function getSubscriber() {
-  if (!subscriber || !subscriber.isOpen) {
-    subscriber = redis.duplicate();
-    await subscriber.connect();
+/** Minimal surface used for user-abort pub/sub; noop when Redis subscriber is unavailable. */
+type UserAbortRedisClient = Pick<ReturnType<typeof redis.duplicate>, 'subscribe' | 'unsubscribe'>;
+
+const noopUserAbortClient: UserAbortRedisClient = {
+  subscribe: async () => {},
+  unsubscribe: async () => {},
+};
+
+async function getSubscriber(): Promise<UserAbortRedisClient> {
+  try {
+    if (!subscriber || !subscriber.isOpen) {
+      const dup = redis.duplicate();
+      dup.on('error', (err) => {
+        logger.warn({ err: err.message, name: err.name }, 'Redis pub/sub duplicate client error');
+      });
+      await dup.connect();
+      subscriber = dup;
+    }
+    return subscriber!;
+  } catch (err: unknown) {
+    subscriber = undefined;
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'Redis subscriber unavailable; continuing without cross-request abort signaling',
+    );
+    return noopUserAbortClient;
   }
-  return subscriber;
 }
 
 /**
@@ -176,7 +197,21 @@ export async function runAgentForHttp(
       controller.abort();
     }
   };
-  sub.subscribe(channel, listener);
+
+  let abortChannelSubscribed = false;
+  try {
+    await sub.subscribe(channel, listener);
+    abortChannelSubscribed = true;
+  } catch (err: unknown) {
+    logger.warn(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        channel,
+        userId,
+      },
+      'Redis subscribe for user abort failed; concurrent abort disabled for this request',
+    );
+  }
 
   const { WaId: identifierId, ProfileName: profileName } = input;
 
@@ -304,6 +339,19 @@ export async function runAgentForHttp(
     }
     throw error;
   } finally {
-    await sub.unsubscribe(channel);
+    if (abortChannelSubscribed) {
+      try {
+        await sub.unsubscribe(channel, listener);
+      } catch (err: unknown) {
+        logger.warn(
+          {
+            err: err instanceof Error ? err.message : String(err),
+            channel,
+            userId,
+          },
+          'Redis unsubscribe for user abort failed (non-fatal)',
+        );
+      }
+    }
   }
 }

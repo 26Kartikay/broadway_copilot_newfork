@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { ChatRequest } from '../lib/chat/types';
 import { redis } from '../lib/redis';
+import { withRedis } from '../lib/redisSafe';
 import {
   TOKEN_REFILL_PERIOD_MS,
   USER_REQUEST_LIMIT,
@@ -31,35 +32,52 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
   const key = `user:${userId}`;
 
   try {
-    if ((await redis.exists(key)) === 0) {
-      await redis.hSet(key, {
-        tokens: USER_REQUEST_LIMIT,
-        updatedAt: Date.now(),
-        lastMessageAt: Date.now(),
-      });
-      await redis.expire(key, USER_STATE_TTL_SECONDS);
-      logger.debug({ userId }, 'Rate limiter: initialized new user token bucket');
+    type RateOutcome = 'consumed' | 'exceeded' | 'degraded_allow';
+    const outcome = await withRedis(
+      'rateLimiter.tokenBucket',
+      async (): Promise<RateOutcome> => {
+        if ((await redis.exists(key)) === 0) {
+          await redis.hSet(key, {
+            tokens: USER_REQUEST_LIMIT,
+            updatedAt: Date.now(),
+            lastMessageAt: Date.now(),
+          });
+          await redis.expire(key, USER_STATE_TTL_SECONDS);
+          logger.debug({ userId }, 'Rate limiter: initialized new user token bucket');
+        }
+
+        const updatedAtStr = await redis.hGet(key, 'updatedAt');
+        const updatedAt = parseInt(updatedAtStr ?? '0', 10);
+        const timePassed = Date.now() - updatedAt;
+        const refills = Math.floor(timePassed / TOKEN_REFILL_PERIOD_MS);
+
+        let tokenRemaining = parseInt((await redis.hGet(key, 'tokens')) ?? '0', 10) + refills;
+        tokenRemaining = Math.min(tokenRemaining, USER_REQUEST_LIMIT);
+
+        if (tokenRemaining <= 0) {
+          return 'exceeded';
+        }
+        await redis.hSet(key, {
+          tokens: tokenRemaining - 1,
+          updatedAt: Date.now(),
+          lastMessageAt: Date.now(),
+        });
+        await redis.expire(key, USER_STATE_TTL_SECONDS);
+        logger.debug({ userId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
+        return 'consumed';
+      },
+      'degraded_allow',
+    );
+
+    if (outcome === 'degraded_allow') {
+      logger.warn({ userId }, 'Rate limiter skipped (Redis unavailable); allowing request');
+      next();
+      return;
     }
 
-    const updatedAtStr = await redis.hGet(key, 'updatedAt');
-    const updatedAt = parseInt(updatedAtStr ?? '0', 10);
-    const timePassed = Date.now() - updatedAt;
-    const refills = Math.floor(timePassed / TOKEN_REFILL_PERIOD_MS);
-
-    let tokenRemaining = parseInt((await redis.hGet(key, 'tokens')) ?? '0', 10) + refills;
-    tokenRemaining = Math.min(tokenRemaining, USER_REQUEST_LIMIT);
-
-    if (tokenRemaining <= 0) {
+    if (outcome === 'exceeded') {
       logger.warn({ userId, messageId }, 'Rate limit exceeded');
       throw new ServiceUnavailableError(`Rate limit exceeded for user ${userId}`);
-    } else {
-      await redis.hSet(key, {
-        tokens: tokenRemaining - 1,
-        updatedAt: Date.now(),
-        lastMessageAt: Date.now(),
-      });
-      await redis.expire(key, USER_STATE_TTL_SECONDS);
-      logger.debug({ userId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
     }
 
     next();

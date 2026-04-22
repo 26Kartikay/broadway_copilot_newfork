@@ -6,6 +6,7 @@ import { MessageContent, MessageContentPart } from '../../lib/ai';
 import { Tonality } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
+import { runSafeRedisVoid } from '../../lib/redisSafe';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { GraphState, Replies } from '../state';
@@ -29,7 +30,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
   }
 
   logger.debug({ userId }, 'Setting message status to sending in Redis');
-  await redis.hSet(messageKey, { status: 'sending' });
+  await runSafeRedisVoid('sendReply.sending', () => redis.hSet(messageKey, { status: 'sending' }));
 
   const replies: Replies = state.assistantReply ?? [];
 
@@ -87,7 +88,7 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
 
   // Mark as delivered for HTTP mode
   logger.debug({ userId }, 'HTTP delivery mode: collecting replies for response');
-  await redis.hSet(messageKey, { status: 'delivered' });
+  await runSafeRedisVoid('sendReply.delivered', () => redis.hSet(messageKey, { status: 'delivered' }));
 
   await prisma.message.create({
     data: {
