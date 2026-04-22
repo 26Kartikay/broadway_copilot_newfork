@@ -55,9 +55,14 @@
           var q = new URLSearchParams(window.location.search).get('api_base');
           if (q) {
             var u = new URL(decodeURIComponent(q));
-            return u.origin.replace(/\/$/, '') + '/api/chat';
+            var base = u.origin + (u.pathname || '').replace(/\/$/, '');
+            return base.indexOf('/api/chat') !== -1 ? base : base + '/api/chat';
           }
         } catch (e) { /* ignore */ }
+        var p = location.pathname || '';
+        if (p === '/chatbot' || p.indexOf('/chatbot/') === 0) {
+          return '/chatbot/api/chat';
+        }
         return '/api/chat';
       }
       var CHAT_API_URL = resolveChatApiUrl();

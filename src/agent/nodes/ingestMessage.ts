@@ -3,7 +3,7 @@ import { AssistantMessage, MessageContent, MessageContentPart, UserMessage } fro
 
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { convertLocalhostUrlToDataUrl, processMediaForAI } from '../../utils/media';
+import { processMediaForAI, resolveImageUrlForVisionModels } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
 import { GraphState } from '../state';
 
@@ -203,7 +203,7 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     const contentWithImage: MessageContent = await Promise.all(
       rawContent.map(async (part: MessageContentPart) => {
         if (part.type === 'image_url' && part.image_url?.url) {
-          const convertedUrl = await convertLocalhostUrlToDataUrl(part.image_url.url);
+          const convertedUrl = await resolveImageUrlForVisionModels(part.image_url.url);
           return { ...part, image_url: { ...part.image_url, url: convertedUrl } };
         }
         return part;

@@ -957,10 +957,15 @@
         var q = new URLSearchParams(window.location.search).get('api_base');
         if (q) {
           var u = new URL(decodeURIComponent(q));
-          var origin = u.origin.replace(/\/$/, '');
-          return origin + '/api/chat';
+          var base = u.origin + (u.pathname || '').replace(/\/$/, '');
+          return base.indexOf('/api/chat') !== -1 ? base : base + '/api/chat';
         }
       } catch (e) { /* ignore */ }
+      // Same-origin under nginx path prefix (e.g. /chatbot/ → /chatbot/api/chat)
+      var p = location.pathname || '';
+      if (p === '/chatbot' || p.indexOf('/chatbot/') === 0) {
+        return '/chatbot/api/chat';
+      }
       return '/api/chat';
     }
     var API_URL = resolveChatApiUrl();
