@@ -669,3 +669,33 @@ export function isValidPalette(palette: string): palette is SeasonalPalette {
 export function getPaletteData(palette: SeasonalPalette): PaletteData {
   return SEASONAL_PALETTES[palette];
 }
+
+/** Maps LLM / DB display strings to canonical SeasonalPalette keys (legacy graph used enum keys on cards). */
+const DISPLAY_NAME_TO_PALETTE: Record<string, SeasonalPalette> = {
+  'light spring': 'LIGHT_SPRING',
+  'true spring': 'TRUE_SPRING',
+  'bright spring': 'BRIGHT_SPRING',
+  'light summer': 'LIGHT_SUMMER',
+  'true summer': 'TRUE_SUMMER',
+  'soft summer': 'SOFT_SUMMER',
+  'soft autumn': 'SOFT_AUTUMN',
+  'true autumn': 'TRUE_AUTUMN',
+  'dark autumn': 'DARK_AUTUMN',
+  'true winter': 'TRUE_WINTER',
+  'bright winter': 'BRIGHT_WINTER',
+  'dark winter': 'DARK_WINTER',
+  'warm spring': 'TRUE_SPRING',
+};
+
+export function resolveSeasonalPalette(raw: string | null | undefined): SeasonalPalette | null {
+  const t = raw?.trim();
+  if (!t) return null;
+  if (isValidPalette(t)) return t;
+  const lower = t.replace(/\s+/g, ' ').toLowerCase();
+  if (DISPLAY_NAME_TO_PALETTE[lower]) {
+    return DISPLAY_NAME_TO_PALETTE[lower];
+  }
+  const underscored = lower.replace(/ /g, '_').toUpperCase();
+  if (isValidPalette(underscored)) return underscored;
+  return null;
+}

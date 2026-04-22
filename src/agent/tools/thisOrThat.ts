@@ -1,10 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type OpenAI from 'openai';
 import { prisma } from '../../lib/prisma';
 import { getUserContext } from '../memory/redis';
 import { logger } from '../../utils/logger';
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const VISION_MODEL = "claude-opus-4-7";
+import { openaiVisionUserCompletion } from '../openaiVision';
 
 export interface ThisOrThatInput {
   userId: string;
@@ -34,8 +32,8 @@ export async function thisOrThat(input: ThisOrThatInput) {
     const prompt = `Compare these two items for the user based on their profile:
     User Name: ${profile.name}
     Color Season: ${profile.colorSeason}
-    Suited Colors: ${profile.colorPalette?.suited.join(', ')}
-    Preferences: ${profile.preferences.join('; ')}
+    Suited Colors: ${Array.isArray(profile.colorPalette?.suited) ? profile.colorPalette!.suited.join(', ') : 'unknown'}
+    Preferences: ${Array.isArray(profile.preferences) ? profile.preferences.join('; ') : 'not captured'}
     Context: ${context || 'General styling advice'}
     
     Item A: ${productA ? `${productA.name} by ${productA.brand}` : 'Provided in image A'}
@@ -48,27 +46,20 @@ export async function thisOrThat(input: ThisOrThatInput) {
       "winnerDescription": "brief description of why this piece is the winner"
     }`;
 
-    let messages: any[] = [];
-    let content: any[] = [{ type: "text", text: prompt }];
+    const content: OpenAI.Chat.ChatCompletionContentPart[] = [{ type: 'text', text: prompt }];
 
     if (imageABase64 && imageBBase64 && mimeType) {
       content.push({
-        type: "image",
-        source: { type: "base64", media_type: mimeType as any, data: imageABase64 }
+        type: 'image_url',
+        image_url: { url: `data:${mimeType};base64,${imageABase64}` },
       });
       content.push({
-        type: "image",
-        source: { type: "base64", media_type: mimeType as any, data: imageBBase64 }
+        type: 'image_url',
+        image_url: { url: `data:${mimeType};base64,${imageBBase64}` },
       });
     }
 
-    const response = await anthropic.messages.create({
-      model: VISION_MODEL,
-      max_tokens: 1024,
-      messages: [{ role: "user", content }]
-    });
-
-    const text = (response.content[0] as any).text;
+    const text = await openaiVisionUserCompletion({ content, max_tokens: 1024 });
     const result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text);
 
     return result;

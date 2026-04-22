@@ -14,6 +14,18 @@ export interface StoredMessage {
   timestamp: number;
 }
 
+/** Replace image blocks with a tiny placeholder so Redis history stays small (avoids resending base64 every turn). */
+export function stripHeavyMediaFromContent(content: unknown): unknown {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return content;
+  return content.map((block: { type?: string }) => {
+    if (block?.type === 'image') {
+      return { type: 'text', text: '[image]' };
+    }
+    return block;
+  });
+}
+
 export interface UserContext {
   name: string;
   colorSeason: string | null;
@@ -27,6 +39,70 @@ export interface UserContext {
   ageGroup: string | null;
   fitPreference: string | null;
   lastVibeCheck: string | null;
+}
+
+function coerceStringArray(value: unknown): string[] {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value.map((x) => String(x)).filter((s) => s.length > 0);
+  }
+  if (typeof value === 'string') {
+    const t = value.trim();
+    return t ? [t] : [];
+  }
+  if (typeof value === 'object') {
+    const vals = Object.values(value as Record<string, unknown>);
+    if (vals.length && vals.every((v) => v != null)) {
+      return vals.map((v) => String(v)).filter((s) => s.length > 0);
+    }
+  }
+  return [];
+}
+
+/** Prisma Json + Redis round-trip can leave color lists as non-arrays — normalize before use. */
+export function normalizeUserContext(raw: unknown): UserContext {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      name: '',
+      colorSeason: null,
+      colorPalette: null,
+      preferences: [],
+      gender: null,
+      ageGroup: null,
+      fitPreference: null,
+      lastVibeCheck: null,
+    };
+  }
+  const c = raw as Record<string, unknown>;
+  let colorPalette: UserContext['colorPalette'] = null;
+  const pal = c.colorPalette;
+  if (pal && typeof pal === 'object') {
+    const p = pal as Record<string, unknown>;
+    colorPalette = {
+      suited: coerceStringArray(p.suited),
+      toWear: coerceStringArray(p.toWear),
+      toAvoid: coerceStringArray(p.toAvoid),
+    };
+  }
+  return {
+    name: typeof c.name === 'string' ? c.name : String(c.name ?? ''),
+    colorSeason:
+      c.colorSeason == null || c.colorSeason === ''
+        ? null
+        : String(c.colorSeason),
+    colorPalette,
+    preferences: coerceStringArray(c.preferences),
+    gender: c.gender == null || c.gender === '' ? null : String(c.gender),
+    ageGroup: c.ageGroup == null || c.ageGroup === '' ? null : String(c.ageGroup),
+    fitPreference:
+      c.fitPreference == null || c.fitPreference === ''
+        ? null
+        : String(c.fitPreference),
+    lastVibeCheck:
+      c.lastVibeCheck == null || c.lastVibeCheck === ''
+        ? null
+        : String(c.lastVibeCheck),
+  };
 }
 
 export async function getHistory(userId: string): Promise<StoredMessage[]> {
@@ -50,8 +126,16 @@ export async function appendToHistory(
     
     const newHistory = [
       ...history,
-      { role: 'user', content: userMsg, timestamp: Date.now() },
-      { role: 'assistant', content: assistantMsg, timestamp: Date.now() }
+      {
+        role: 'user',
+        content: stripHeavyMediaFromContent(userMsg),
+        timestamp: Date.now(),
+      },
+      {
+        role: 'assistant',
+        content: stripHeavyMediaFromContent(assistantMsg),
+        timestamp: Date.now(),
+      },
     ].slice(-MAX_MESSAGES);
 
     await redis.set(HISTORY_KEY(userId), JSON.stringify(newHistory), {
@@ -66,7 +150,9 @@ export async function getUserContext(userId: string): Promise<UserContext> {
   try {
     // 1. Check Redis cache
     const cached = await redis.get(CONTEXT_KEY(userId));
-    if (cached) return JSON.parse(cached.toString());
+    if (cached) {
+      return normalizeUserContext(JSON.parse(cached.toString()));
+    }
 
     // 2. Fetch from Prisma
     const user = await prisma.user.findUnique({
@@ -89,7 +175,7 @@ export async function getUserContext(userId: string): Promise<UserContext> {
 
     if (!user) {
       logger.info({ userId }, 'User not found in DB, returning empty guest context');
-      return {
+      return normalizeUserContext({
         name: 'Guest',
         colorSeason: null,
         colorPalette: null,
@@ -97,27 +183,29 @@ export async function getUserContext(userId: string): Promise<UserContext> {
         gender: null,
         ageGroup: null,
         fitPreference: null,
-        lastVibeCheck: null
-      };
+        lastVibeCheck: null,
+      });
     }
 
     const latestColorAnalysis = user.colorAnalyses[0];
     const latestVibeCheck = user.vibeChecks[0];
 
-    const context: UserContext = {
+    const context = normalizeUserContext({
       name: user.profileName || '',
       colorSeason: latestColorAnalysis?.palette_name || null,
-      colorPalette: latestColorAnalysis ? {
-        suited: latestColorAnalysis.colors_suited as string[] || [],
-        toWear: latestColorAnalysis.colors_to_wear as string[] || [],
-        toAvoid: latestColorAnalysis.colors_to_avoid as string[] || []
-      } : null,
-      preferences: user.memories.map(m => m.memory),
+      colorPalette: latestColorAnalysis
+        ? {
+            suited: latestColorAnalysis.colors_suited,
+            toWear: latestColorAnalysis.colors_to_wear,
+            toAvoid: latestColorAnalysis.colors_to_avoid,
+          }
+        : null,
+      preferences: user.memories.map((m) => m.memory),
       gender: user.confirmedGender || user.inferredGender || null,
       ageGroup: user.confirmedAgeGroup || user.inferredAgeGroup || null,
       fitPreference: user.fitPreference || null,
-      lastVibeCheck: latestVibeCheck?.createdAt.toISOString() || null
-    };
+      lastVibeCheck: latestVibeCheck?.createdAt.toISOString() || null,
+    });
 
     // 3. Cache in Redis
     await redis.set(CONTEXT_KEY(userId), JSON.stringify(context), {
@@ -127,17 +215,7 @@ export async function getUserContext(userId: string): Promise<UserContext> {
     return context;
   } catch (err) {
     logger.error({ err, userId }, 'Failed to get user context');
-    // Return empty context on error
-    return {
-      name: '',
-      colorSeason: null,
-      colorPalette: null,
-      preferences: [],
-      gender: null,
-      ageGroup: null,
-      fitPreference: null,
-      lastVibeCheck: null
-    };
+    return normalizeUserContext(null);
   }
 }
 

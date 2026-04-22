@@ -17,8 +17,7 @@ let visionLLM: ChatOpenAI | null = null;
 export function getTextLLM(): ChatGroq {
   if (!textLLM) {
     textLLM = new ChatGroq({
-      // Previous model was decommissioned; use current Llama 3.3 70B variant
-      model: 'llama-3.3-70b-versatile',
+      model: process.env.GROQ_AGENT_MODEL?.trim() || 'llama-3.3-70b-versatile',
     });
   }
   return textLLM;
@@ -33,7 +32,7 @@ export function getTextLLM(): ChatGroq {
 export function getVisionLLM(): ChatOpenAI {
   if (!visionLLM) {
     visionLLM = new ChatOpenAI({
-      model: 'gpt-4o',
+      model: process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o',
     });
   }
   return visionLLM;

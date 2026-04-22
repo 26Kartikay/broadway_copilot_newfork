@@ -129,9 +129,8 @@ app.get('/health', async (_req: Request, res: Response) => {
  * Response:
  * {
  *   "replies": [{
- *     "reply_type": "text_only",
- *     "reply_text": "Hi! I'd love to help with styling...",
- *     "expected_action": "input_required"
+ *     "reply_type": "text",
+ *     "reply_text": "Hi! I'd love to help with styling..."
  *   }],
  *   "pending": null
  * }
@@ -186,7 +185,7 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       },
     );
 
-    const { replies, pending } = await runAgentForHttp(String(userId), sid, messageInput);
+    const { replies, pending } = await runAgentForHttp(user.id, sid, messageInput);
 
     // Response without metadata
     const response = {

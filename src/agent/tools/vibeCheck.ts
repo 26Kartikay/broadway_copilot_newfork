@@ -1,81 +1,113 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type OpenAI from 'openai';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { normalizeHttpUrlReference } from '../../utils/serverUrl';
+import { openaiVisionUserCompletion } from '../openaiVision';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const VISION_MODEL = "claude-opus-4-7";
-
+/** Same JSON shape as legacy vibeCheck node (vision LLM structured output). */
 const VIBE_CHECK_PROMPT = `
 Analyze this outfit as a Broadway fashion stylist.
-Score each dimension 1-10:
-- fit_silhouette: How well the fit and silhouette works
-- color_harmony: How well colors work together  
-- styling_details: Accessories, layering, finishing touches
-- context_confidence: How appropriate for the likely occasion
 
-Return JSON only:
+Return JSON only in this exact shape (scores 0–10, fractional allowed):
 {
-  "comment": "overall stylish commentary",
-  "fit_silhouette_score": 0,
-  "fit_silhouette_explanation": "",
-  "color_harmony_score": 0,
-  "color_harmony_explanation": "",
-  "styling_details_score": 0,
-  "styling_details_explanation": "",
-  "context_confidence_score": 0,
-  "context_confidence_explanation": "",
-  "overall_score": 0,
-  "recommendations": []
+  "comment": "Overall stylish commentary on the outfit.",
+  "fit": { "score": 0, "explanation": "Assessment of fit and silhouette." },
+  "hair_and_skin": { "score": 0, "explanation": "Hair styling and skin / color harmony." },
+  "accessories": { "score": 0, "explanation": "Accessories and finishing details." },
+  "recommendations": ["Actionable style suggestion 1", "Suggestion 2"],
+  "identified_outfit": "Short description of main items (e.g. blue denim jacket and white chinos).",
+  "prompt": "The user context or image context you analyzed.",
+  "follow_up": "One short follow-up question to keep the chat going."
 }
 `;
+
+const MIN_SCORE = 6.0;
 
 export interface VibeCheckInput {
   userId: string;
   imageBase64?: string;
   mimeType?: string;
   description?: string;
+  sourceImageUrl?: string;
+}
+
+function clampScore(n: unknown): number {
+  const v = typeof n === 'number' ? n : Number(n);
+  if (Number.isNaN(v)) return MIN_SCORE;
+  return Math.max(MIN_SCORE, Math.min(10, v));
 }
 
 export async function vibeCheck(input: VibeCheckInput) {
-  const { userId, imageBase64, mimeType, description } = input;
+  const { userId, imageBase64, mimeType, description, sourceImageUrl } = input;
 
   try {
-    let result: any;
+    let result: Record<string, unknown>;
 
     if (imageBase64 && mimeType) {
-      const response = await anthropic.messages.create({
-        model: VISION_MODEL,
-        max_tokens: 1024,
-        messages: [{
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mimeType as any,
-                data: imageBase64
-              }
-            },
-            {
-              type: "text",
-              text: VIBE_CHECK_PROMPT
-            }
-          ]
-        }]
-      });
-
-      const text = (response.content[0] as any).text;
-      result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text);
+      const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+        {
+          type: 'image_url',
+          image_url: { url: `data:${mimeType};base64,${imageBase64}` },
+        },
+        { type: 'text', text: VIBE_CHECK_PROMPT },
+      ];
+      const text = await openaiVisionUserCompletion({ content, max_tokens: 1024 });
+      result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     } else {
-      const textPrompt = `Analyze this outfit description: ${description}. ${VIBE_CHECK_PROMPT}`;
-      const response = await anthropic.messages.create({
-        model: VISION_MODEL,
+      const textPrompt = `Analyze this outfit description: ${description ?? ''}. ${VIBE_CHECK_PROMPT}`;
+      const text = await openaiVisionUserCompletion({
+        content: [{ type: 'text', text: textPrompt }],
         max_tokens: 1024,
-        messages: [{ role: "user", content: textPrompt }]
       });
-      const text = (response.content[0] as any).text;
-      result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text);
+      result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
+    }
+
+    let fitRaw = result.fit as { score?: number; explanation?: string } | undefined;
+    let hairRaw = result.hair_and_skin as { score?: number; explanation?: string } | undefined;
+    let accRaw = result.accessories as { score?: number; explanation?: string } | undefined;
+
+    if (!fitRaw && result.fit_silhouette_score != null) {
+      fitRaw = {
+        score: Number(result.fit_silhouette_score),
+        explanation: String(result.fit_silhouette_explanation ?? ''),
+      };
+    }
+    if (!hairRaw && result.color_harmony_score != null) {
+      hairRaw = {
+        score: Number(result.color_harmony_score),
+        explanation: String(result.color_harmony_explanation ?? ''),
+      };
+    }
+    if (!accRaw && result.styling_details_score != null) {
+      accRaw = {
+        score: Number(result.styling_details_score),
+        explanation: String(result.styling_details_explanation ?? ''),
+      };
+    }
+
+    const clampedFit = {
+      score: clampScore(fitRaw?.score),
+      explanation: String(fitRaw?.explanation ?? ''),
+    };
+    const clampedHairAndSkin = {
+      score: clampScore(hairRaw?.score),
+      explanation: String(hairRaw?.explanation ?? ''),
+    };
+    const clampedAccessories = {
+      score: clampScore(accRaw?.score),
+      explanation: String(accRaw?.explanation ?? ''),
+    };
+
+    const vibeCheckResult =
+      (clampedFit.score + clampedHairAndSkin.score + clampedAccessories.score) / 3;
+
+    const recommendations = Array.isArray(result.recommendations)
+      ? (result.recommendations as unknown[]).map((x) => String(x))
+      : [];
+
+    let userImageUrl: string | null = null;
+    if (sourceImageUrl?.trim()) {
+      userImageUrl = normalizeHttpUrlReference(sourceImageUrl.trim()) || null;
     }
 
     const userExists = await prisma.user.findUnique({ where: { id: userId } });
@@ -83,29 +115,38 @@ export async function vibeCheck(input: VibeCheckInput) {
       await prisma.vibeCheck.create({
         data: {
           userId,
-          comment: result.comment,
-          fit_silhouette_score: result.fit_silhouette_score,
-          fit_silhouette_explanation: result.fit_silhouette_explanation,
-          color_harmony_score: result.color_harmony_score,
-          color_harmony_explanation: result.color_harmony_explanation,
-          styling_details_score: result.styling_details_score,
-          styling_details_explanation: result.styling_details_explanation,
-          context_confidence_score: result.context_confidence_score,
-          context_confidence_explanation: result.context_confidence_explanation,
-          overall_score: result.overall_score,
-          recommendations: result.recommendations,
-          prompt: description || "image_upload"
-        }
+          comment: String(result.comment ?? ''),
+          fit_silhouette_score: clampedFit.score,
+          fit_silhouette_explanation: clampedFit.explanation,
+          color_harmony_score: clampedHairAndSkin.score,
+          color_harmony_explanation: clampedHairAndSkin.explanation,
+          styling_details_score: clampedAccessories.score,
+          styling_details_explanation: clampedAccessories.explanation,
+          context_confidence_score: 0,
+          context_confidence_explanation: '',
+          overall_score: vibeCheckResult,
+          recommendations,
+          prompt: String(result.prompt ?? description ?? 'image_upload'),
+        },
       });
 
       await prisma.user.update({
         where: { id: userId },
-        data: { lastVibeCheckAt: new Date() }
+        data: { lastVibeCheckAt: new Date() },
       });
     }
 
-    return result;
-
+    return {
+      comment: String(result.comment ?? ''),
+      fit: clampedFit,
+      hair_and_skin: clampedHairAndSkin,
+      accessories: clampedAccessories,
+      vibe_check_result: vibeCheckResult,
+      recommendations,
+      user_image_url: userImageUrl,
+      identified_outfit: String(result.identified_outfit ?? ''),
+      follow_up: String(result.follow_up ?? ''),
+    };
   } catch (err) {
     logger.error({ err, userId }, 'Error in vibeCheck tool');
     return { error: String(err) };

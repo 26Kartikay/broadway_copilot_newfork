@@ -1,3 +1,4 @@
+import type { MessageInput } from '../../lib/chat/types';
 import { searchCatalog } from './catalog';
 import { analyzeColorSeason } from './colorAnalysis';
 import { saveUserPreference, recallUserPreferences } from './memory';
@@ -10,7 +11,8 @@ import { logger } from '../../utils/logger';
 export const ANTHROPIC_TOOLS: any[] = [
   {
     name: "search_catalog",
-    description: "Search Broadway's product catalog. Call this whenever user wants to see products, get recommendations, browse items, or needs styling suggestions. Always call this instead of making up products.",
+    description:
+      "Search Broadway's product catalog using semantic vector similarity (pgvector + OpenAI embeddings). Call when the user wants products, recommendations, or browsing. Pass a rich natural-language query plus category, colors, occasions, style, and colorSeason when known. Always call this instead of inventing products.",
     input_schema: {
       type: "object",
       properties: {
@@ -126,8 +128,15 @@ export const ANTHROPIC_TOOLS: any[] = [
   }
 ];
 
-export async function executeTool(name: string, input: any, userId: string, userImages: any[] = []) {
+export async function executeTool(
+  name: string,
+  input: any,
+  userId: string,
+  userImages: any[] = [],
+  messageInput?: MessageInput,
+) {
   logger.info({ tool: name, userId, imageCount: userImages.length }, 'Executing tool');
+  const sourceImageUrl = messageInput?.MediaUrl0;
   try {
     switch (name) {
       case 'search_catalog':
@@ -138,7 +147,10 @@ export async function executeTool(name: string, input: any, userId: string, user
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return { toolName: name, ...(await analyzeColorSeason({ ...input, userId })) };
+        return {
+          toolName: name,
+          ...(await analyzeColorSeason({ ...input, userId, sourceImageUrl })),
+        };
       case 'save_user_preference':
         return { toolName: name, ...(await saveUserPreference({ ...input, userId })) };
       case 'recall_user_preferences':
@@ -149,7 +161,7 @@ export async function executeTool(name: string, input: any, userId: string, user
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return { toolName: name, ...(await vibeCheck({ ...input, userId })) };
+        return { toolName: name, ...(await vibeCheck({ ...input, userId, sourceImageUrl })) };
       case 'get_outfit_suggestion':
         return { toolName: name, ...(await getOutfitSuggestion({ ...input, userId })) };
       case 'this_or_that':
