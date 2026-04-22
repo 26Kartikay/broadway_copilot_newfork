@@ -29,11 +29,16 @@ export async function ensureDir(dirPath: string): Promise<void> {
 }
 
 /**
- * Gets the absolute path to the uploads directory.
+ * Absolute root for `/uploads/*` static files and per-user upload folders.
  *
- * @returns Absolute path to the uploads directory
+ * In Docker, set `UPLOADS_ROOT=/app/uploads` so reads/writes match the bind mount even if
+ * `process.cwd()` is not `/app` (some process managers change cwd).
  */
-function uploadsDir(): string {
+export function uploadsRoot(): string {
+  const explicit = process.env.UPLOADS_ROOT?.trim();
+  if (explicit) {
+    return path.resolve(explicit);
+  }
   return path.resolve(process.cwd(), 'uploads');
 }
 
@@ -49,7 +54,7 @@ export function userUploadDir(whatsappId: string): string {
     throw new BadRequestError('WhatsApp ID is required');
   }
   const sanitizedId = whatsappId.replace(/[^a-zA-Z0-9_+]/g, '_');
-  return path.join(process.cwd(), 'uploads', sanitizedId);
+  return path.join(uploadsRoot(), sanitizedId);
 }
 
 /**
@@ -58,5 +63,5 @@ export function userUploadDir(whatsappId: string): string {
  * @returns Absolute path to the uploads directory for static file serving
  */
 export function staticUploadsMount(): string {
-  return uploadsDir();
+  return uploadsRoot();
 }

@@ -28,6 +28,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Align with compose bind mount ...:/app/uploads so express.static and media I/O share one directory.
+ENV UPLOADS_ROOT=/app/uploads
+
 COPY package*.json ./
 
 RUN npm ci --legacy-peer-deps --only=production

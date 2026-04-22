@@ -12,6 +12,7 @@
 # For RDS/managed DBs, `db push` is skipped automatically. Use `prisma migrate deploy` or manual SQL.
 # SKIP_PRISMA_DB_PUSH=true to never run db push on startup.
 # UPLOADS_HOST_DIR: host dir → /app/uploads (default ./uploads).
+# UPLOADS_ROOT: must match in-container mount (default /app/uploads in Dockerfile).
 
 services:
   app:
@@ -31,6 +32,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
       REDIS_URL: redis://redis:6379
       SERVER_URL: ${SERVER_URL:?Set SERVER_URL in .env or environment (public base URL, no default)}
+      UPLOADS_ROOT: ${UPLOADS_ROOT:-/app/uploads}
       SKIP_PRISMA_DB_PUSH: ${SKIP_PRISMA_DB_PUSH:-}
     ports:
       - "${PORT:-8080}:${PORT:-8080}"

@@ -19,7 +19,7 @@ import { requestLogger } from './middleware/requestLogger';
 import { clearUploadsDirectory } from './utils/clearUploads';
 import { dbLog } from './utils/dbLogger';
 import { logger } from './utils/logger';
-import { staticUploadsMount } from './utils/paths';
+import { ensureDir, staticUploadsMount } from './utils/paths';
 
 /** Purge container-local upload files periodically (see scripts/clear-uploads.mjs for manual run). */
 const UPLOADS_PURGE_INTERVAL_MS = 30 * 60 * 1000;
@@ -212,6 +212,15 @@ void (async function bootstrap() {
   try {
     await connectRedis();
     await connectPrisma();
+    await ensureDir(staticUploadsMount());
+    logger.info(
+      {
+        uploadsRoot: staticUploadsMount(),
+        cwd: process.cwd(),
+        UPLOADS_ROOT: process.env.UPLOADS_ROOT ?? '(default: cwd/uploads)',
+      },
+      'Serving GET /uploads/* from uploadsRoot',
+    );
     initializeAgent();
     const PORT = Number(process.env.PORT || 8080);
     app.listen(PORT, '0.0.0.0', () => {

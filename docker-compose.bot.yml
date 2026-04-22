@@ -68,6 +68,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
+      UPLOADS_ROOT: ${UPLOADS_ROOT:-/usr/src/app/uploads}
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: 1000
     ports:
