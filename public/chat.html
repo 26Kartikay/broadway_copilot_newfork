@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Production: set API origin if this HTML is NOT served from the same host as the bot, e.g.
+       <meta name="broadway-chat-api" content="https://your-api.example.com" />
+       Or before this page loads: window.__BROADWAY_CHAT_API__ = 'https://your-api.example.com';
+       Or one-off: ?api_base=https%3A%2F%2Fyour-api.example.com -->
   <title>Broadway Live - Your Style Concierge</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -937,7 +941,29 @@
   </div>
 
   <script>
-    const API_URL = '/api/chat';
+    /** Full URL for POST /api/chat (cross-origin when static site ≠ API host). */
+    function resolveChatApiUrl() {
+      var meta = document.querySelector('meta[name="broadway-chat-api"]');
+      var fromMeta = meta && meta.getAttribute('content') && meta.getAttribute('content').trim();
+      if (fromMeta) {
+        var b = fromMeta.replace(/\/$/, '');
+        return b.indexOf('/api/chat') !== -1 ? b : b + '/api/chat';
+      }
+      if (typeof window.__BROADWAY_CHAT_API__ === 'string' && window.__BROADWAY_CHAT_API__.trim()) {
+        var g = window.__BROADWAY_CHAT_API__.trim().replace(/\/$/, '');
+        return g.indexOf('/api/chat') !== -1 ? g : g + '/api/chat';
+      }
+      try {
+        var q = new URLSearchParams(window.location.search).get('api_base');
+        if (q) {
+          var u = new URL(decodeURIComponent(q));
+          var origin = u.origin.replace(/\/$/, '');
+          return origin + '/api/chat';
+        }
+      } catch (e) { /* ignore */ }
+      return '/api/chat';
+    }
+    var API_URL = resolveChatApiUrl();
 
     let selectedImage = null;
     let isLoading = false;
