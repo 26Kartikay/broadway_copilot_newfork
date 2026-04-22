@@ -1,5 +1,7 @@
 # Full local dev stack: chat bot (app) + admin dashboard + Postgres + Redis (+ optional ngrok).
-# Postgres and Redis use named volumes for persistent data; the app uses a bind mount for live code.
+# Postgres and Redis run in Docker (named volumes). Set POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB in .env
+# (they must match DATABASE_URL for the in-stack `db` service). Redis: REDIS_URL defaults to redis://redis:6379;
+# set REDIS_PUBLISH_PORT to expose Redis on 127.0.0.1 for host tools (default 6379).
 # Always run from repo root:
 #   docker compose -f docker-compose.stack.yml --env-file .env up -d --build
 #
@@ -62,11 +64,12 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${PORT:-8080}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+      POSTGRES_DB: ${POSTGRES_DB:-broadway}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       UPLOADS_ROOT: ${UPLOADS_ROOT:-/usr/src/app/uploads}
@@ -92,13 +95,13 @@ services:
       context: .
       dockerfile: dashboard/Dockerfile
       args:
-        DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+        DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
         REDIS_URL: ${REDIS_URL:-redis://redis:6379}
         PORT: ${DASHBOARD_PORT:-8090}
     env_file:
       - ${ENV_FILE:-.env}
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       PORT: ${DASHBOARD_PORT:-8090}
       ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
@@ -110,6 +113,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - broadway-network
 
@@ -130,15 +135,15 @@ services:
       - -c
       - log_error_verbosity=terse
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: broadway
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-broadway}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PUBLISH_PORT:-5433}:5432"
     volumes:
       - postgres_data_v0_8_0:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER:-postgres}\""]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -151,6 +156,8 @@ services:
       - redis-server
       - --loglevel
       - warning
+    ports:
+      - "127.0.0.1:${REDIS_PUBLISH_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
