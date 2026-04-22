@@ -4,6 +4,7 @@ import { agentExecutor } from '../../lib/ai/agents/executor';
 import { SystemMessage, UserMessage } from '../../lib/ai/core/messages';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { logNodeEntry } from '../utils/nodeDebug';
 import { GraphState, Replies } from '../state';
 
 import { createCanvas, loadImage } from 'canvas';
@@ -115,6 +116,7 @@ async function clearImageState(userId: string) {
 }
 
 export async function handleThisOrThat(state: GraphState): Promise<GraphState> {
+  logNodeEntry('handleThisOrThat', state);
   const { user, input } = state;
   const userId = user.id;
   const messageId = input.MessageSid;

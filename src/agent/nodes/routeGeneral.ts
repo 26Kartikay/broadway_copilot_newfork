@@ -4,9 +4,11 @@ import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { withColorSeasonBlock } from '../utils/promptAugment';
 import { extractTextContent } from '../../utils/text';
 
 import { InternalServerError } from '../../utils/errors';
+import { logNodeEntry } from '../utils/nodeDebug';
 import { GeneralIntent, GraphState } from '../state';
 
 const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
@@ -22,6 +24,7 @@ const LLMOutputSchema = z.object({
  * Routes general messages (greeting/menu/chat) via regex shortcuts, else LLM.
  */
 export async function routeGeneral(state: GraphState): Promise<GraphState> {
+  logNodeEntry('routeGeneral', state);
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
   let lastMessageContent = state.conversationHistoryTextOnly.at(-1)?.content;
@@ -83,7 +86,7 @@ export async function routeGeneral(state: GraphState): Promise<GraphState> {
   // LLM-based routing as fallback
   try {
     const systemPromptText = await loadPrompt('routing/route_general.txt', state.user);
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPrompt = new SystemMessage(withColorSeasonBlock(systemPromptText, state));
 
     const llm = getTextLLM();
 

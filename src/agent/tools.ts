@@ -583,6 +583,10 @@ const NODE_SEARCH_SUFFIXES: Record<string, string> = {
   vibe_check: "products to enhance and improve the look, complement the current outfit, and elevate the overall style",
   color_analysis:
     'suggest me some outfits that is a mix of shoes clothes accessories to make the users look better',
+  skin_lab:
+    'skincare beauty and personal care products only from Broadway catalog; do not shift to apparel unless the user explicitly asked for clothing',
+  style_studio:
+    'match the user’s stated category (e.g. skincare vs apparel); do not default unrelated categories',
 };
 
 export function searchProducts(): Tool {
@@ -725,10 +729,22 @@ export function searchProducts(): Tool {
         if (intent.style) {
           enhancedQueryParts.push(`${intent.style} style`);
         }
-        // Add features context - mention common product features
-        enhancedQueryParts.push('with features like comfort, quality, style, design');
-        // Add requirement for variety: include both clothing and footwear products
-        enhancedQueryParts.push('include variety of clothing and footwear products');
+        const beautyOrSkin =
+          contextNode === 'skin_lab' ||
+          Boolean(intent.category?.toLowerCase().includes('beauty')) ||
+          Boolean(intent.category?.toLowerCase().includes('personal')) ||
+          /\b(skincare|skin care|moistur|serum|cleanser|sunscreen|spf|face wash|toner|beauty)\b/i.test(
+            query,
+          );
+
+        if (beautyOrSkin) {
+          enhancedQueryParts.push(
+            'beauty personal care skincare focus; exclude unrelated apparel unless user asked for clothes',
+          );
+        } else {
+          enhancedQueryParts.push('with features like comfort, quality, style, design');
+          enhancedQueryParts.push('include variety of clothing and footwear products');
+        }
         
         const enhancedQuery = enhancedQueryParts.join(' ');
         logger.info({ enhancedQuery }, 'Embedding enhanced product search query');

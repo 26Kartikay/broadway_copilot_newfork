@@ -6,8 +6,11 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { isValidImageUrl } from '../../utils/urlValidation';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock, withSingleFollowUpRule } from '../utils/promptAugment';
 import { GraphState, Replies } from '../state';
 import { fetchRelevantMemories, searchProducts } from '../tools';
+import { getPostRecommendationMenuReply } from './common';
 
 /**
  * LLM output schema for Skin Lab service.
@@ -31,6 +34,7 @@ function formatLLMOutput(text: string): string {
  * Handles the Skin Lab service — AI-powered skincare recommendations, analysis, and routines.
  */
 export async function handleSkinLab(state: GraphState): Promise<GraphState> {
+  logNodeEntry('handleSkinLab', state);
   const { user, conversationHistoryTextOnly, traceBuffer, input } = state;
   const userId = user.id;
   const messageId = input.MessageSid;
@@ -50,9 +54,12 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
       (msg) => msg.role === 'assistant',
     ).length;
 
+    const skipCatalogSearch =
+      state.recommendationShown === true && input.ButtonPayload !== 'post_menu_show_more';
+
     // Only enable product search after 2+ user messages (meaning we've had at least 2 exchanges)
     // This ensures we discuss the issue first before recommending products
-    const shouldRecommendProducts = userMessageCount >= 2;
+    const shouldRecommendProducts = userMessageCount >= 2 && !skipCatalogSearch;
 
     logger.debug(
       { userId, userMessageCount, assistantMessageCount, shouldRecommendProducts },
@@ -73,7 +80,9 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
       temperature: 0.7, // Slightly creative but still reliable
     });
 
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPrompt = new SystemMessage(
+      withColorSeasonBlock(withSingleFollowUpRule(systemPromptText), state),
+    );
 
     let executorResult;
     try {
@@ -251,6 +260,14 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
             reason: 'Recommended for your skincare needs',
           })),
         });
+        return {
+          ...state,
+          assistantReply: [...replies, ...getPostRecommendationMenuReply()],
+          recommendationShown: true,
+          lastProductSource: 'skin_lab',
+          intent: 'general',
+          currentNode: 'handleSkinLab',
+        };
       }
     }
 
@@ -259,7 +276,7 @@ export async function handleSkinLab(state: GraphState): Promise<GraphState> {
       'Skin Lab: Successfully generated AI skincare advice response',
     );
 
-    return { ...state, assistantReply: replies };
+    return { ...state, assistantReply: replies, currentNode: 'handleSkinLab' };
   } catch (err: unknown) {
     logger.error(
       { userId, messageId, error: err instanceof Error ? err.message : String(err) },

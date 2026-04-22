@@ -5,6 +5,7 @@ import { SystemMessage } from '../../lib/ai/core/messages';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { logNodeEntry } from '../utils/nodeDebug';
 import { GraphState, Replies } from '../state';
 import { getMainMenuReply } from './common';
 
@@ -52,6 +53,7 @@ function gameOver(state: GraphState, message: string): GraphState {
 }
 
 export async function handleFashionCharades(state: GraphState): Promise<GraphState> {
+  logNodeEntry('handleFashionCharades', state);
   const { user, pending, input } = state;
   const userId = user.id;
 

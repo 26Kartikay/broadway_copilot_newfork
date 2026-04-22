@@ -7,10 +7,12 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { getServerUrlBase } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user'; // Import the utility function
+import { logNodeEntry } from '../utils/nodeDebug';
 import { GraphState, Replies } from '../state';
 import { getMainMenuReply } from './common';
 
 export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphState> {
+  logNodeEntry('handleSaveColorAnalysis', state);
   const userId = state.user.id;
   const userResponse = state.input.ButtonPayload;
   const paletteNameToSave = state.seasonalPaletteToSave;
@@ -121,5 +123,7 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
       type: 'color_palette',
       paletteName: paletteName,
     },
+    colorSeason: paletteName,
+    currentNode: 'handleSaveColorAnalysis',
   };
 }

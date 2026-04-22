@@ -7,8 +7,11 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
 import { isValidImageUrl } from '../../utils/urlValidation';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock, withSingleFollowUpRule } from '../utils/promptAugment';
 import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, searchProducts } from '../tools';
+import { getPostRecommendationMenuReply } from './common';
 
 const StyleStudioOutputSchema = z.object({
   reply_text: z.string().min(1, 'Reply text is required'),
@@ -21,6 +24,7 @@ const styleStudioMenuButtons = [
 ];
 
 export async function handleStyleStudio(state: GraphState): Promise<GraphState> {
+  logNodeEntry('handleStyleStudio', state);
   const { subIntent, conversationHistoryTextOnly, user, pending } = state;
   const userId = user.id; // --- START OF CONTEXT CHECK AND TRUNCATION (FIXED) ---
 
@@ -59,17 +63,20 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
         assistantReply: replies,
         pending: PendingType.STYLE_STUDIO_MENU,
         lastHandledPayload: undefined,
+        currentNode: 'handleStyleStudio',
       };
     } else {
       // Possibly user repeated same menu state; do nothing
-      return { ...state, assistantReply: [] };
+      return { ...state, assistantReply: [], currentNode: 'handleStyleStudio' };
     }
   }
 
   try {
     const intentKey = subIntent.replace('style_studio_', ''); // e.g. 'occasion', 'vacation', 'general'
     const systemPromptText = await loadPrompt(`handlers/style_studio/${intentKey}.txt`, state.user);
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPrompt = new SystemMessage(
+      withColorSeasonBlock(withSingleFollowUpRule(systemPromptText), state),
+    );
 
     // Use agentExecutor with product search tool
     // Build tool list and force-include required tools to avoid drops in request.tools.
@@ -111,7 +118,12 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
             "I'm having trouble processing that request right now. Could you try rephrasing your question or try again in a moment?",
         },
       ];
-      return { ...state, assistantReply: errorReplies, pending: PendingType.NONE };
+      return {
+        ...state,
+        assistantReply: errorReplies,
+        pending: PendingType.NONE,
+        currentNode: 'handleStyleStudio',
+      };
     }
 
     const result = executorResult.output;
@@ -243,11 +255,30 @@ export async function handleStyleStudio(state: GraphState): Promise<GraphState> 
             reason: 'Recommended for your style needs',
           })),
         } as any);
+        const postMenu = getPostRecommendationMenuReply();
+        return {
+          ...state,
+          assistantReply: [...replies, ...postMenu],
+          pending: PendingType.NONE,
+          recommendationShown: true,
+          lastProductSource: 'style_studio',
+          lastStyleStudioSubIntent: subIntent,
+          subIntent: undefined,
+          intent: 'general',
+          currentNode: 'handleStyleStudio',
+        };
       }
     }
 
     logger.debug({ userId, subIntent, replies }, 'Generated Style Studio reply');
-    return { ...state, assistantReply: replies, pending: PendingType.NONE };
+    return {
+      ...state,
+      assistantReply: replies,
+      pending: PendingType.NONE,
+      intent: 'general',
+      subIntent: undefined,
+      currentNode: 'handleStyleStudio',
+    };
   } catch (err) {
     logger.error({ userId, err }, 'Error in handleStyleStudio');
     throw new InternalServerError('Failed to handle Style Studio request', { cause: err });

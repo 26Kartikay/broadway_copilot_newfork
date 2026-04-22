@@ -10,6 +10,7 @@ import { runSafeRedisVoid } from '../../lib/redisSafe';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { GraphState, Replies } from '../state';
+import { logNodeEntry } from '../utils/nodeDebug';
 
 /**
  * Prepares and returns the reply for HTTP responses.
@@ -20,6 +21,7 @@ import { GraphState, Replies } from '../state';
  * @returns Updated state with httpResponse containing the replies.
  */
 export async function sendReply(state: GraphState): Promise<GraphState> {
+  logNodeEntry('sendReply', state);
   const { input, user, conversationId } = state;
   const messageId = input.MessageSid;
   const messageKey = `message:${messageId}`;
@@ -84,6 +86,15 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
       productRecommendationContext: state.productRecommendationContext,
     }),
     ...(state.seasonalPaletteToSave && { seasonalPaletteToSave: state.seasonalPaletteToSave }),
+    ...(typeof state.recommendationShown === 'boolean' && {
+      recommendationShown: state.recommendationShown,
+    }),
+    ...(state.colorSeason != null &&
+      String(state.colorSeason).trim() !== '' && { colorSeason: state.colorSeason }),
+    ...(state.lastStyleStudioSubIntent && {
+      lastStyleStudioSubIntent: state.lastStyleStudioSubIntent,
+    }),
+    ...(state.lastProductSource && { lastProductSource: state.lastProductSource }),
   };
 
   // Mark as delivered for HTTP mode
@@ -104,5 +115,5 @@ export async function sendReply(state: GraphState): Promise<GraphState> {
 
   logger.info({ userId, replyCount: orderedReplies.length }, 'Replies prepared for HTTP response');
 
-  return { ...state, httpResponse: orderedReplies };
+  return { ...state, currentNode: 'sendReply', httpResponse: orderedReplies };
 }

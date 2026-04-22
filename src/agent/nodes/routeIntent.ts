@@ -6,6 +6,8 @@ import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock } from '../utils/promptAugment';
 import { GraphState, IntentLabel } from '../state';
 
 const validTonalities = ['friendly', 'savage', 'hype_bff'];
@@ -33,6 +35,7 @@ const LLMOutputSchema = z.object({
 });
 
 export async function routeIntent(state: GraphState): Promise<GraphState> {
+  logNodeEntry('routeIntent', state);
   logger.debug(
     {
       buttonPayload: state.input.ButtonPayload,
@@ -51,6 +54,48 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
   // 1️⃣ Priority 1: Handle explicit button payloads
   // ------------------------------
   if (buttonPayload) {
+    const postMenuRoutes: Record<
+      string,
+      Pick<GraphState, 'intent' | 'subIntent' | 'recommendationShown'> & { missingProfileField: null }
+    > = {
+      post_menu_daily_wear: {
+        intent: 'style_studio',
+        subIntent: 'style_studio_general',
+        recommendationShown: false,
+        missingProfileField: null,
+      },
+      post_menu_workwear: {
+        intent: 'style_studio',
+        subIntent: 'style_studio_general',
+        recommendationShown: false,
+        missingProfileField: null,
+      },
+      post_menu_occasion_wear: {
+        intent: 'style_studio',
+        subIntent: 'style_studio_occasion',
+        recommendationShown: false,
+        missingProfileField: null,
+      },
+      post_menu_show_more: {
+        intent: state.lastProductSource === 'skin_lab' ? 'skin_lab' : 'style_studio',
+        subIntent:
+          state.lastProductSource === 'skin_lab'
+            ? undefined
+            : state.lastStyleStudioSubIntent &&
+                ['style_studio_occasion', 'style_studio_vacation', 'style_studio_general'].includes(
+                  state.lastStyleStudioSubIntent,
+                )
+              ? state.lastStyleStudioSubIntent
+              : 'style_studio_general',
+        recommendationShown: false,
+        missingProfileField: null,
+      },
+    };
+    const postMenu = postMenuRoutes[buttonPayload];
+    if (postMenu) {
+      return { ...state, ...postMenu, currentNode: 'routeIntent' };
+    }
+
     // Fashion Quiz/Charades buttons (a, b, c, d, hint) - stay in quiz flow
     if (['a', 'b', 'c', 'd', 'hint'].includes(buttonPayload.toLowerCase())) {
       // Check if we're in a fashion quiz/charades pending state
@@ -302,9 +347,12 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
   try {
     const systemPromptText = await loadPrompt('routing/route_intent.txt', user);
-    const formattedSystemPrompt = systemPromptText
-      .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
-      .replace('{can_do_color_analysis}', canDoColorAnalysis.toString());
+    const formattedSystemPrompt = withColorSeasonBlock(
+      systemPromptText
+        .replace('{can_do_vibe_check}', canDoVibeCheck.toString())
+        .replace('{can_do_color_analysis}', canDoColorAnalysis.toString()),
+      state,
+    );
 
     const systemPrompt = new SystemMessage(formattedSystemPrompt);
     const response = await getTextLLM()
@@ -322,7 +370,13 @@ export async function routeIntent(state: GraphState): Promise<GraphState> {
 
 
 
-    return { ...state, intent, missingProfileField, generalIntent: state.generalIntent };
+    return {
+      ...state,
+      intent,
+      missingProfileField,
+      generalIntent: state.generalIntent,
+      currentNode: 'routeIntent',
+    };
   } catch (err: unknown) {
     throw new InternalServerError('Failed to route intent', { cause: err });
   }

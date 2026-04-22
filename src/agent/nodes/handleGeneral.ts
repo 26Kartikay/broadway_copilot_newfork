@@ -10,6 +10,8 @@ import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { loadPrompt } from '../../utils/prompts';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock, withSingleFollowUpRule } from '../utils/promptAugment';
 import { GraphState, Replies } from '../state';
 import { fetchColorAnalysis, fetchRelevantMemories } from '../tools';
 
@@ -53,6 +55,7 @@ function formatLLMOutput(text: string): string {
 }
 
 export async function handleGeneral(state: GraphState): Promise<GraphState> {
+  logNodeEntry('handleGeneral', state);
   const { user, generalIntent, input, conversationHistoryTextOnly, traceBuffer } = state;
   const userId = user.id;
   const messageId = input.MessageSid;
@@ -266,7 +269,9 @@ export async function handleGeneral(state: GraphState): Promise<GraphState> {
         tools.push(fetchColorAnalysis(userId));
       }
       
-      const systemPrompt = new SystemMessage(systemPromptText);
+      const systemPrompt = new SystemMessage(
+        withColorSeasonBlock(withSingleFollowUpRule(systemPromptText), state),
+      );
 
       const executorResult = await agentExecutor(
         getTextLLM(),

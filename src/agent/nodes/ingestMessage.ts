@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger';
 import { processMediaForAI, resolveImageUrlForVisionModels } from '../../utils/media';
 import { extractTextContent } from '../../utils/text';
 import { GraphState } from '../state';
+import { logNodeEntry } from '../utils/nodeDebug';
 
 /**
  * Ingests incoming messages, processes media attachments, manages conversation history,
@@ -15,6 +16,7 @@ import { GraphState } from '../state';
  * and conversation history preparation with both image and text-only versions.
  */
 export async function ingestMessage(state: GraphState): Promise<GraphState> {
+  logNodeEntry('ingestMessage', state);
   const { input, user, conversationId, graphRunId } = state;
   const {
     Body: text,
@@ -57,6 +59,10 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
   // These will be populated inside the transaction
   let productRecommendationContextFromDB: any;
   let seasonalPaletteToSaveFromDB: any;
+  let recommendationShownFromDB: boolean | undefined;
+  let colorSeasonFromDB: string | null | undefined;
+  let lastStyleStudioSubIntentFromDB: GraphState['lastStyleStudioSubIntent'];
+  let lastProductSourceFromDB: GraphState['lastProductSource'];
 
   const {
     savedMessage,
@@ -106,6 +112,17 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     const additionalKwargs = latestAssistantMessage?.additionalKwargs as any;
     productRecommendationContextFromDB = additionalKwargs?.productRecommendationContext;
     seasonalPaletteToSaveFromDB = additionalKwargs?.seasonalPaletteToSave;
+    if (additionalKwargs?.recommendationShown === true) recommendationShownFromDB = true;
+    else if (additionalKwargs?.recommendationShown === false) recommendationShownFromDB = false;
+    else recommendationShownFromDB = undefined;
+    colorSeasonFromDB =
+      typeof additionalKwargs?.colorSeason === 'string' && additionalKwargs.colorSeason.trim()
+        ? additionalKwargs.colorSeason.trim()
+        : undefined;
+    lastStyleStudioSubIntentFromDB = additionalKwargs?.lastStyleStudioSubIntent as
+      | GraphState['lastStyleStudioSubIntent']
+      | undefined;
+    lastProductSourceFromDB = additionalKwargs?.lastProductSource as GraphState['lastProductSource'];
 
     let savedMessage;
     if (lastMessage && lastMessage.role === MessageRole.USER) {
@@ -233,8 +250,16 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
    * otherwise, use the value loaded from the DB.
    * Convert enum to string for state compatibility.
    */
+  const mergedRecommendationShown =
+    state.recommendationShown !== undefined
+      ? state.recommendationShown
+      : recommendationShownFromDB !== undefined
+        ? recommendationShownFromDB
+        : undefined;
+
   return {
     ...state,
+    currentNode: 'ingestMessage',
     conversationHistoryWithImages,
     conversationHistoryTextOnly,
     pending: state.pending ?? dbPending,
@@ -243,6 +268,12 @@ export async function ingestMessage(state: GraphState): Promise<GraphState> {
     productRecommendationContext:
       state.productRecommendationContext ?? productRecommendationContextFromDB,
     seasonalPaletteToSave: state.seasonalPaletteToSave ?? seasonalPaletteToSaveFromDB,
+    ...(mergedRecommendationShown !== undefined
+      ? { recommendationShown: mergedRecommendationShown }
+      : {}),
+    colorSeason: state.colorSeason ?? colorSeasonFromDB ?? null,
+    lastStyleStudioSubIntent: state.lastStyleStudioSubIntent ?? lastStyleStudioSubIntentFromDB,
+    lastProductSource: state.lastProductSource ?? lastProductSourceFromDB,
     user,
     input,
   };

@@ -1,5 +1,6 @@
 import { isValidPalette } from '../../data/seasonalPalettes';
 import { logger } from '../../utils/logger';
+import { logNodeEntry } from '../utils/nodeDebug';
 import { GraphState } from '../state';
 import { fetchColorAnalysis } from '../tools';
 
@@ -18,6 +19,7 @@ import { fetchColorAnalysis } from '../tools';
  * This node only fetches and stores the data - it does NOT create a card.
  */
 export async function fetchColorAnalysisOnIntent(state: GraphState): Promise<GraphState> {
+  logNodeEntry('fetchColorAnalysisOnIntent', state);
   const { user } = state;
   const userId = user.id;
 
@@ -39,12 +41,14 @@ export async function fetchColorAnalysisOnIntent(state: GraphState): Promise<Gra
         return {
           ...state,
           fetchedColorAnalysis: colorAnalysisResult,
+          colorSeason: paletteName ?? state.colorSeason ?? null,
+          currentNode: 'fetchColorAnalysisOnIntent',
         };
       }
     }
 
     logger.debug({ userId }, 'fetchColorAnalysisOnIntent: No valid color analysis found');
-    return state;
+    return { ...state, currentNode: 'fetchColorAnalysisOnIntent' };
   } catch (err: unknown) {
     logger.warn(
       { userId, err: (err as Error)?.message },
@@ -52,7 +56,7 @@ export async function fetchColorAnalysisOnIntent(state: GraphState): Promise<Gra
     );
     // Don't fail the flow if color analysis fetch fails
     // Just continue without it
-    return state;
+    return { ...state, currentNode: 'fetchColorAnalysisOnIntent' };
   }
 }
 

@@ -5,6 +5,8 @@ import { SystemMessage } from '../../lib/ai/core/messages';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock } from '../utils/promptAugment';
 import { GraphState, Replies } from '../state';
 
 const validSubIntents = [
@@ -25,6 +27,7 @@ const LLMOutputSchema = z.object({
 });
 
 export async function routeStyleStudio(state: GraphState): Promise<GraphState> {
+  logNodeEntry('routeStyleStudio', state);
   const userId = state.user.id;
   const payload = state.input.ButtonPayload ?? '';
 
@@ -43,6 +46,7 @@ export async function routeStyleStudio(state: GraphState): Promise<GraphState> {
         ...state,
         assistantReply: replies,
         pending: PendingType.NONE,
+        currentNode: 'routeStyleStudio',
       };
     }
 
@@ -54,11 +58,12 @@ export async function routeStyleStudio(state: GraphState): Promise<GraphState> {
         subIntent,
         pending: PendingType.NONE,
         lastSubIntentPayload: payload,
+        currentNode: 'routeStyleStudio',
       };
     }
 
     const systemPromptText = await loadPrompt('routing/route_style_studio.txt', state.user);
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPrompt = new SystemMessage(withColorSeasonBlock(systemPromptText, state));
 
     const response = await getTextLLM()
       .withStructuredOutput(LLMOutputSchema)
@@ -73,6 +78,7 @@ export async function routeStyleStudio(state: GraphState): Promise<GraphState> {
       ...state,
       subIntent: safeSubIntent,
       pending: PendingType.NONE,
+      currentNode: 'routeStyleStudio',
     };
   } catch (err) {
     logger.error({ userId, err }, 'Error in routeStyleStudio');

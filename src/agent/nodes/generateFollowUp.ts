@@ -3,6 +3,8 @@ import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
 import { logger } from '../../utils/logger';
 import { loadPrompt } from '../../utils/prompts';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock } from '../utils/promptAugment';
 import { GraphState, Replies } from '../state';
 
 const FollowUpOutputSchema = z.object({
@@ -28,6 +30,7 @@ const FollowUpOutputSchema = z.object({
  * - Whether a follow-up is appropriate
  */
 export async function generateFollowUp(state: GraphState): Promise<GraphState> {
+  logNodeEntry('generateFollowUp', state);
   const { user, assistantReply, conversationHistoryTextOnly, intent, generalIntent, pending, traceBuffer } = state;
   const userId = user.id;
 
@@ -44,12 +47,17 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
     // 4. Greeting/menu intents (they already have structured responses)
     if (!assistantReply || assistantReply.length === 0) {
       logger.debug({ userId }, 'Skipping follow-up: no assistant reply');
-      return state;
+      return { ...state, currentNode: 'generateFollowUp' };
+    }
+
+    if (assistantReply.some((r) => r.reply_type === 'product_card')) {
+      logger.debug({ userId }, 'Skipping follow-up: product card present');
+      return { ...state, currentNode: 'generateFollowUp' };
     }
 
     if (pending && pending !== 'NONE') {
       logger.debug({ userId, pending }, 'Skipping follow-up: user has pending action');
-      return state;
+      return { ...state, currentNode: 'generateFollowUp' };
     }
 
     const hasInteractiveReply = assistantReply.some(
@@ -57,12 +65,12 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
     );
     if (hasInteractiveReply) {
       logger.debug({ userId }, 'Skipping follow-up: reply already has interactive elements');
-      return state;
+      return { ...state, currentNode: 'generateFollowUp' };
     }
 
     if (generalIntent === 'greeting' || generalIntent === 'menu') {
       logger.debug({ userId }, 'Skipping follow-up: greeting/menu intent');
-      return state;
+      return { ...state, currentNode: 'generateFollowUp' };
     }
 
     // Check if a follow-up already exists (from message2_text in other nodes)
@@ -70,7 +78,7 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
     const textReplies = assistantReply.filter((r) => r.reply_type === 'text');
     if (textReplies.length >= 2) {
       logger.debug({ userId, textReplyCount: textReplies.length }, 'Skipping follow-up: reply already contains multiple text messages (likely has follow-up)');
-      return state;
+      return { ...state, currentNode: 'generateFollowUp' };
     }
 
     // Extract the last assistant reply text for context
@@ -122,7 +130,7 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
     const systemPromptText = await loadPrompt('handlers/follow_up/generate_followup.txt', state.user);
 
     // Inject context into the prompt
-    let enhancedPrompt = systemPromptText;
+    let enhancedPrompt = withColorSeasonBlock(systemPromptText, state);
     if (user.profileName) {
       enhancedPrompt += `\nThe user's name is ${user.profileName}.`;
     }
@@ -150,7 +158,7 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
 
     // If LLM says to skip, or no follow-up text, return state unchanged
     if (result.should_skip || !result.follow_up_text) {
-      return state;
+      return { ...state, currentNode: 'generateFollowUp' };
     }
 
     // Add the follow-up as a text reply
@@ -159,11 +167,12 @@ export async function generateFollowUp(state: GraphState): Promise<GraphState> {
     return {
       ...state,
       assistantReply: updatedReplies,
+      currentNode: 'generateFollowUp',
     };
   } catch (err: unknown) {
     logger.warn({ userId, err: (err as Error)?.message }, 'Failed to generate follow-up, continuing without it');
     // Don't fail the entire flow if follow-up generation fails
-    return state;
+    return { ...state, currentNode: 'generateFollowUp' };
   }
 }
 

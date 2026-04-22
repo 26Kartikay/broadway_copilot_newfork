@@ -93,6 +93,28 @@ export interface GraphState {
   /** Fetched color analysis data for use in product recommendations. */
   fetchedColorAnalysis?: any | undefined;
 
+  /**
+   * After catalog product cards are shown, stays true until user picks a post-menu action
+   * or starts a new styling flow (prevents re-searching on every follow-up message).
+   */
+  recommendationShown?: boolean;
+
+  /** User's seasonal palette (e.g. SOFT_AUTUMN) for consistent LLM context across nodes. */
+  colorSeason?: string | null;
+
+  /** Last Style Studio branch before product cards (used for "Show Me More"). */
+  lastStyleStudioSubIntent?:
+    | 'style_studio_occasion'
+    | 'style_studio_vacation'
+    | 'style_studio_general'
+    | undefined;
+
+  /** Which flow last showed catalog cards (routes "Show Me More" correctly). */
+  lastProductSource?: 'skin_lab' | 'style_studio' | 'product_confirmation' | undefined;
+
+  /** Last executed graph node name (debug). */
+  currentNode?: string | null;
+
   /** Replies returned in the HTTP response */
   httpResponse?: Replies | undefined;
 

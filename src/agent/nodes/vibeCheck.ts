@@ -11,6 +11,8 @@ import { loadPrompt } from '../../utils/prompts';
 import { PendingType, Prisma } from '@prisma/client';
 import { InternalServerError } from '../../utils/errors';
 import { isGuestUser } from '../../utils/user'; // Import the utility function
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock } from '../utils/promptAugment';
 import { GraphState, Replies } from '../state';
 
 const ScoringCategorySchema = z.object({
@@ -50,6 +52,7 @@ const tonalityButtons: QuickReplyButton[] = [
 ];
 
 export async function vibeCheck(state: GraphState): Promise<GraphState> {
+  logNodeEntry('vibeCheck', state);
   logger.debug(
     {
       userId: state.user.id,
@@ -86,7 +89,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
         prependPersona: false,
       });
       const systemPrompt = new SystemMessage(
-        systemPromptText.replace('{analysis_type}', 'vibe check'),
+        withColorSeasonBlock(systemPromptText.replace('{analysis_type}', 'vibe check'), state),
       );
       const response = await getTextLLM()
         .withStructuredOutput(NoImageLLMOutputSchema)
@@ -125,7 +128,7 @@ export async function vibeCheck(state: GraphState): Promise<GraphState> {
     );
     systemPromptText = systemPromptText.replace('{user_context}', userContext);
 
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPrompt = new SystemMessage(withColorSeasonBlock(systemPromptText, state));
 
     const result = await getVisionLLM()
       .withStructuredOutput(LLMOutputSchema)

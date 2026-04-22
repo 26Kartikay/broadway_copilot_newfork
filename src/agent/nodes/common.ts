@@ -54,6 +54,25 @@ export const getConversationStartersButtons = (count: number = 3): QuickReplyBut
   }));
 };
 
+/** Hardcoded menu after catalog product recommendations (not LLM-decided). */
+export function getPostRecommendationMenuReply(
+  text: string = 'What would you like to explore next?',
+): Replies {
+  return [
+    {
+      reply_type: 'quick_reply',
+      reply_text: text,
+      buttons: [
+        { text: 'Daily Wear Styling', id: 'post_menu_daily_wear' },
+        { text: 'Workwear', id: 'post_menu_workwear' },
+        { text: 'Occasion Wear', id: 'post_menu_occasion_wear' },
+        { text: 'Show Me More', id: 'post_menu_show_more' },
+        { text: 'Main Menu', id: 'main_menu' },
+      ],
+    },
+  ];
+}
+
 export const getMainMenuReply = (text: string = 'What would you like to do now?'): Replies => {
   const starters = getConversationStartersButtons(3); // Get 3 random starters
 

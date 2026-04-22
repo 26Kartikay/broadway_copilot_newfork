@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getTextLLM } from '../../lib/ai';
 import { SystemMessage } from '../../lib/ai/core/messages';
+import { logNodeEntry } from '../utils/nodeDebug';
 import type { GraphState, Replies } from '../state';
 
 // Output schema for LLM structured response
@@ -9,6 +10,7 @@ export const FactLLMOutputSchema = z.object({
 });
 
 export async function dailyFact(state: GraphState): Promise<Partial<GraphState>> {
+  logNodeEntry('dailyFact', state);
   const systemPromptText = 'Provide a fun color fact suitable for a WhatsApp daily tip.';
   const systemPrompt = new SystemMessage(systemPromptText);
 

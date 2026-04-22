@@ -11,6 +11,8 @@ import { prisma } from '../../lib/prisma';
 import { numImagesInMessage } from '../../utils/context';
 import { InternalServerError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withColorSeasonBlock } from '../utils/promptAugment';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { loadPrompt } from '../../utils/prompts';
 import { isGuestUser } from '../../utils/user';
@@ -98,6 +100,7 @@ function formatColorCombos(combos: string[], allColors: ColorWithHex[]): ColorWi
  * @param state The current agent state.
  */
 export async function colorAnalysis(state: GraphState): Promise<GraphState> {
+  logNodeEntry('colorAnalysis', state);
   const userId = state.user.id;
   const messageId = state.input.MessageSid;
 
@@ -196,6 +199,8 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
                   ...state,
                   assistantReply: replies,
                   pending: PendingType.NONE,
+                  colorSeason: paletteName,
+                  currentNode: 'colorAnalysis',
                 };
               }
             }
@@ -213,7 +218,10 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     // Ask for new image (either user wants new analysis or no existing analysis found)
     const systemPromptText = await loadPrompt('handlers/analysis/no_image_request.txt', state.user);
     const systemPrompt = new SystemMessage(
-      systemPromptText.replace('{analysis_type}', 'color analysis'),
+      withColorSeasonBlock(
+        systemPromptText.replace('{analysis_type}', 'color analysis'),
+        state,
+      ),
     );
 
     const response = await getTextLLM()
@@ -227,6 +235,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       ...state,
       assistantReply: replies,
       pending: PendingType.COLOR_ANALYSIS_IMAGE,
+      currentNode: 'colorAnalysis',
     };
   }
 
@@ -246,7 +255,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
     }
 
     const systemPromptText = systemPromptTextRaw.replace('{user_context}', userContext);
-    const systemPrompt = new SystemMessage(systemPromptText);
+    const systemPrompt = new SystemMessage(withColorSeasonBlock(systemPromptText, state));
 
     const output = await getVisionLLM()
       .withStructuredOutput(LLMOutputSchema)
@@ -263,6 +272,7 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
         ...state,
         assistantReply: replies,
         pending: PendingType.COLOR_ANALYSIS_IMAGE,
+        currentNode: 'colorAnalysis',
       };
     }
 
@@ -363,6 +373,8 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
           type: 'color_palette',
           paletteName,
         },
+        colorSeason: paletteName,
+        currentNode: 'colorAnalysis',
       };
     }
 
@@ -388,6 +400,8 @@ export async function colorAnalysis(state: GraphState): Promise<GraphState> {
       assistantReply: replies,
       seasonalPaletteToSave: paletteName,
       pending: PendingType.SAVE_COLOR_ANALYSIS,
+      colorSeason: paletteName,
+      currentNode: 'colorAnalysis',
     };
   } catch (err: unknown) {
     throw new InternalServerError('Color analysis failed', { cause: err });

@@ -99,6 +99,22 @@ export function buildAgentGraph() {
         // If user picked Style Studio from the list, show menu
         if (s.input?.ButtonPayload === 'style_studio') return 'sendReply';
 
+        const bp = s.input?.ButtonPayload ?? '';
+        const postMenuContinue = new Set([
+          'post_menu_daily_wear',
+          'post_menu_workwear',
+          'post_menu_occasion_wear',
+          'post_menu_show_more',
+          'style_studio_occasion',
+          'style_studio_vacation',
+          'style_studio_general',
+        ]);
+
+        // After product cards, do not re-enter Style Studio search on random follow-up text
+        if (s.subIntent && s.recommendationShown && !postMenuContinue.has(bp)) {
+          return 'routeGeneral';
+        }
+
         // If a sub-intent was selected (occasion, vacation, etc.)
         if (s.subIntent) return 'handleStyleStudio';
 

@@ -6,9 +6,11 @@ import { SystemMessage } from '../../lib/ai/core/messages';
 import { ChatGroq } from '../../lib/ai/groq/chat_models';
 import { logger } from '../../utils/logger';
 import { isValidImageUrl } from '../../utils/urlValidation';
+import { logNodeEntry } from '../utils/nodeDebug';
+import { withCatalogBrandLock, withColorSeasonBlock } from '../utils/promptAugment';
 import { GraphState, ProductRecommendation, Replies } from '../state';
 import { searchProducts } from '../tools';
-import { getMainMenuReply } from './common';
+import { getMainMenuReply, getPostRecommendationMenuReply } from './common';
 
 const LLMOutputSchema = z.object({
   conclusion_text: z
@@ -30,6 +32,7 @@ interface ProductSearchResult {
 export async function handleProductRecommendationConfirmation(
   state: GraphState,
 ): Promise<GraphState> {
+  logNodeEntry('handleProductRecommendationConfirmation', state);
   const { productRecommendationContext, input, user } = state;
   const userResponse = input.ButtonPayload;
 
@@ -85,7 +88,9 @@ export async function handleProductRecommendationConfirmation(
       You **MUST** include the specific colors ${colorList} in your search query to find products in these exact colors that match the ${productRecommendationContext.paletteName} palette. For example, your query should mention these colors explicitly like: "clothing in ${colorList} colors for ${productRecommendationContext.paletteName} palette".
       You **MUST** set the 'limit' parameter to at least 8 (to ensure we get enough product recommendations). The maximum limit is 12.
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response.`;
-    systemPrompt = new SystemMessage(promptText);
+    systemPrompt = new SystemMessage(
+      withCatalogBrandLock(withColorSeasonBlock(promptText, state), ''),
+    );
   } else if (productRecommendationContext?.type === 'vibe_check') {
     const identifiedOutfit = productRecommendationContext.identifiedOutfit;
     const recommendations = productRecommendationContext.recommendations || [];
@@ -121,7 +126,9 @@ export async function handleProductRecommendationConfirmation(
       You **MUST** set 'contextNode' to 'vibe_check' to ensure the search focuses on products that enhance the look.
       You **MUST** set the 'limit' parameter to at least 8 (to ensure we get enough product recommendations). The maximum limit is 12.
       After the tool returns its results, your second task is to provide a brief, friendly concluding message inside the 'conclusion_text' field of your JSON response that emphasizes how these products will enhance their look.`;
-    systemPrompt = new SystemMessage(promptText);
+    systemPrompt = new SystemMessage(
+      withCatalogBrandLock(withColorSeasonBlock(promptText, state), ''),
+    );
   } else {
     logger.warn('handleProductRecommendationConfirmation called without valid context.');
     return { ...state, assistantReply: getMainMenuReply(), pending: PendingType.NONE };
@@ -249,7 +256,11 @@ export async function handleProductRecommendationConfirmation(
       });
     }
 
-    const menuReply = getMainMenuReply();
+    const menuReply = getPostRecommendationMenuReply();
+    const paletteForSeason =
+      productRecommendationContext?.type === 'color_palette'
+        ? productRecommendationContext.paletteName
+        : state.colorSeason;
 
     return {
       ...state,
@@ -257,6 +268,10 @@ export async function handleProductRecommendationConfirmation(
       pending: PendingType.NONE,
       productRecommendationContext: undefined,
       seasonalPaletteToSave: undefined,
+      recommendationShown: true,
+      lastProductSource: 'product_confirmation',
+      colorSeason: paletteForSeason ?? state.colorSeason ?? null,
+      currentNode: 'handleProductRecommendationConfirmation',
     };
   } catch (error) {
     logger.error({ error }, 'Error in handleProductRecommendationConfirmation');

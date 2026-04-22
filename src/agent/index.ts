@@ -244,11 +244,10 @@ export async function runAgentForHttp(
           quizQuestions: previousState.quizQuestions,
           quizAnswers: previousState.quizAnswers,
           currentQuestionIndex: previousState.currentQuestionIndex,
-          pending: previousState.pending,
-          selectedTonality: previousState.selectedTonality,
-          intent: previousState.intent,
-          subIntent: previousState.subIntent,
-          assistantReply: previousState.assistantReply,
+          recommendationShown: previousState.recommendationShown,
+          colorSeason: previousState.colorSeason,
+          lastStyleStudioSubIntent: previousState.lastStyleStudioSubIntent,
+          lastProductSource: previousState.lastProductSource,
         }
       : {};
 
@@ -279,12 +278,15 @@ export async function runAgentForHttp(
       assistantReply: null,
       pending: null,
       selectedTonality: null,
-      // Only merge persistent game state, not routing decisions
       ...(previousState
         ? {
             quizQuestions: previousState.quizQuestions,
             quizAnswers: previousState.quizAnswers,
             currentQuestionIndex: previousState.currentQuestionIndex,
+            recommendationShown: previousState.recommendationShown,
+            colorSeason: previousState.colorSeason ?? null,
+            lastStyleStudioSubIntent: previousState.lastStyleStudioSubIntent,
+            lastProductSource: previousState.lastProductSource,
           }
         : {}),
     };
