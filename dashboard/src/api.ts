@@ -27,6 +27,10 @@ export interface User {
   profileName: string;
   isGuest: boolean;
   createdAt: string;
+  /** Nullable in DB; set via bulk CSV `gender` / admin. */
+  confirmedGender?: 'MALE' | 'FEMALE' | 'OTHER' | null;
+  /** Nullable in DB; Prisma `AgeGroup` (TEEN | ADULT | SENIOR). */
+  confirmedAgeGroup?: 'TEEN' | 'ADULT' | 'SENIOR' | null;
 }
 
 export type LogQuery = {
@@ -93,7 +97,17 @@ export const api = {
       method: 'POST',
       body: formData,
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(typeof data?.message === 'string' ? data.message : data?.error || res.statusText);
+    }
+    return data as {
+      total: number;
+      succeeded: number;
+      created: number;
+      errors: number;
+      details: { user: string; error: string }[];
+    };
   },
   deleteUser: async (id: string) => {
     const res = await fetch(`${API_BASE}/users/${id}`, { method: 'DELETE' });

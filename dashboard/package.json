@@ -6,7 +6,8 @@
   "scripts": {
     "dev:client": "vite",
     "dev:server": "tsx server/index.ts",
-    "build": "npm run build:client && npm run build:server",
+    "prisma:generate": "mkdir -p prisma && cp ../prisma/schema.prisma prisma/schema.prisma && prisma generate --schema=./prisma/schema.prisma",
+    "build": "npm run prisma:generate && npm run build:client && npm run build:server",
     "build:client": "tsc --noEmit && vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "lint": "eslint .",

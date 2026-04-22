@@ -8,6 +8,8 @@ import Papa from 'papaparse';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { normalizeCsvHeader, parseBulkUserRow, upsertBulkUser } from './bulkUsers.js';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +35,7 @@ if (!process.env.DATABASE_URL) {
 const prisma = new PrismaClient();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Request Logging
 app.use((req, res, next) => {
@@ -153,66 +155,95 @@ app.post('/admin/users', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/admin/users/bulk', authMiddleware, upload.single('file'), async (req: any, res) => {
-  if (!req.file) {
+app.post('/admin/users/bulk', authMiddleware, upload.single('file'), (req, res) => {
+  const uploaded = req.file;
+  if (!uploaded) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
-  const filePath = req.file.path;
+  const filePath = uploaded.path;
   const fileContent = fs.readFileSync(filePath, 'utf8');
 
-  Papa.parse(fileContent, {
+  Papa.parse<Record<string, unknown>>(fileContent, {
     header: true,
     skipEmptyLines: true,
-    complete: async (results) => {
-      const usersData = results.data as any[];
-      const resultsSummary = {
-        total: usersData.length,
-        created: 0,
-        errors: 0,
-        details: [] as any[],
-      };
-
-      for (const userData of usersData) {
-        if (!userData.appUserId || !userData.whatsappId) {
-          resultsSummary.errors++;
-          resultsSummary.details.push({ user: userData, error: 'Missing appUserId or whatsappId' });
-          continue;
-        }
+    transformHeader: normalizeCsvHeader,
+    complete: (results) => {
+      void (async () => {
+        const resultsSummary = {
+          total: 0,
+          succeeded: 0,
+          /** @deprecated use succeeded */
+          created: 0,
+          errors: 0,
+          details: [] as { user: string; error: string }[],
+        };
 
         try {
-          // Clean up data
-          const isGuest = userData.isGuest === 'true' || userData.isGuest === true;
-          
-          await prisma.user.upsert({
-            where: { appUserId: userData.appUserId },
-            update: {
-              whatsappId: userData.whatsappId,
-              profileName: userData.profileName || '',
-              details: userData.details || '',
-              isGuest: isGuest,
-            },
-            create: {
-              appUserId: userData.appUserId,
-              whatsappId: userData.whatsappId,
-              profileName: userData.profileName || '',
-              details: userData.details || '',
-              isGuest: isGuest,
-            },
-          });
-          resultsSummary.created++;
-        } catch (error: any) {
-          resultsSummary.errors++;
-          resultsSummary.details.push({ user: userData, error: error.message });
+          const parseErrors = results.errors ?? [];
+          if (parseErrors.length > 0) {
+            const first = parseErrors[0];
+            return res.status(400).json({
+              error: 'CSV parse error',
+              message: first.message ?? 'Unknown parse error',
+            });
+          }
+
+          const rows = results.data.filter((row) =>
+            Object.values(row).some((v) => v !== undefined && v !== null && String(v).trim() !== ''),
+          );
+          resultsSummary.total = rows.length;
+
+          for (const userData of rows) {
+            const parsed = parseBulkUserRow(userData);
+            if (!parsed.ok) {
+              resultsSummary.errors++;
+              resultsSummary.details.push({
+                user: pickAppUserIdForError(userData),
+                error: parsed.error,
+              });
+              continue;
+            }
+
+            try {
+              await upsertBulkUser(prisma, parsed);
+              resultsSummary.succeeded++;
+            } catch (error: unknown) {
+              resultsSummary.errors++;
+              const message = error instanceof Error ? error.message : String(error);
+              resultsSummary.details.push({ user: parsed.appUserId, error: message });
+            }
+          }
+
+          resultsSummary.created = resultsSummary.succeeded;
+
+          try {
+            await prisma.adminAuditLog.create({
+              data: {
+                action: 'users_bulk_csv',
+                details: {
+                  total: resultsSummary.total,
+                  succeeded: resultsSummary.succeeded,
+                  errors: resultsSummary.errors,
+                },
+              },
+            });
+          } catch (e) {
+            console.warn('AdminAuditLog write skipped:', e);
+          }
+
+          res.json(resultsSummary);
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          res.status(500).json({ error: 'Bulk import failed', message });
+        } finally {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
         }
-      }
-
-      // Clean up uploaded file
-      fs.unlinkSync(filePath);
-
-      res.json(resultsSummary);
+      })();
     },
-    error: (error: any) => {
+    error: (error: { message?: string }) => {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
@@ -220,6 +251,16 @@ app.post('/admin/users/bulk', authMiddleware, upload.single('file'), async (req:
     },
   });
 });
+
+function pickAppUserIdForError(row: Record<string, unknown>): string {
+  const v =
+    row.app_user_id ??
+    row.appuserid ??
+    row.user_id ??
+    row.userid ??
+    row.appUserId;
+  return v !== undefined && v !== null ? String(v) : 'unknown row';
+}
 
 app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;

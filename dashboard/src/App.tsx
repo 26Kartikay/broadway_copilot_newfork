@@ -235,7 +235,7 @@ const UsersPage = () => {
       if (fileInput) fileInput.value = '';
     } catch (e) {
       console.error('Upload failed', e);
-      alert('Upload failed. Check the console for details.');
+      alert(e instanceof Error ? e.message : 'Upload failed. Check the console for details.');
     } finally {
       setUploading(false);
     }
@@ -269,18 +269,23 @@ const UsersPage = () => {
 
       {showBulkUpload && (
         <div className="card mb-6" style={{ border: '1px solid var(--color-border)' }}>
-          <h2 className="text-lg font-semibold mb-2">Bulk Upload Users via CSV</h2>
-          <p className="text-sm text-muted mb-4">
-            Upload a CSV file with the following headers: 
-            <code className="bg-surface p-1 rounded ml-1">appUserId,whatsappId,profileName,details,isGuest</code>
+          <h2 className="text-lg font-semibold mb-2">Bulk upload users (CSV)</h2>
+          <p className="text-sm text-muted mb-2">
+            Required: <code className="bg-surface px-1 rounded">app_user_id</code> (or <code className="bg-surface px-1 rounded">user_id</code>),{' '}
+            <code className="bg-surface px-1 rounded">name</code> or <code className="bg-surface px-1 rounded">profile_name</code>.
+            Optional (nullable / omit): <code className="bg-surface px-1 rounded">whatsapp_id</code> (defaults to{' '}
+            <code className="bg-surface px-1 rounded">bulk-wa:&lt;app_user_id&gt;</code>),{' '}
+            <code className="bg-surface px-1 rounded">gender</code> (<code>MALE</code>, <code>FEMALE</code>, <code>OTHER</code>),{' '}
+            <code className="bg-surface px-1 rounded">age_group</code> (<code>TEEN</code>, <code>ADULT</code>, <code>SENIOR</code> — Prisma enum, not a number),{' '}
+            <code className="bg-surface px-1 rounded">details</code>, <code className="bg-surface px-1 rounded">is_guest</code>.
           </p>
           
           <div className="flex flex-col gap-4">
             <div className="bg-surface p-4 rounded text-xs font-mono border border-color-border">
-              <p className="text-muted mb-1">CSV Format Example:</p>
-              appUserId,whatsappId,profileName,details,isGuest<br/>
-              user_1,911234567890,John Doe,Some details,false<br/>
-              user_2,911234567891,Jane Smith,Another user,true
+              <p className="text-muted mb-1">Example (headers are case-insensitive; spaces → underscores):</p>
+              app_user_id,name,gender,age_group,whatsapp_id,details,is_guest<br/>
+              acme_001,Alice Smith,FEMALE,ADULT,whatsapp:+919876543210,,false<br/>
+              acme_002,Bob Jones,MALE,TEEN,,,true
             </div>
 
             <div className="flex items-center gap-4">
@@ -302,13 +307,15 @@ const UsersPage = () => {
 
             {uploadResult && (
               <div className={`mt-2 p-3 rounded text-sm ${uploadResult.errors > 0 ? 'bg-error-light text-error' : 'bg-success-light text-success'}`} style={{ backgroundColor: uploadResult.errors > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)' }}>
-                <strong>Upload Summary:</strong> {uploadResult.created} users processed successfully. {uploadResult.errors} errors.
-                {uploadResult.details.length > 0 && (
+                <strong>Upload summary:</strong>{' '}
+                {uploadResult.succeeded ?? uploadResult.created} succeeded, {uploadResult.errors} errors
+                {uploadResult.total !== undefined ? ` (${uploadResult.total} rows).` : '.'}
+                {uploadResult.details?.length > 0 && (
                   <ul className="mt-2 list-disc list-inside">
-                    {uploadResult.details.slice(0, 5).map((d: any, i: number) => (
-                      <li key={i}>{d.user.appUserId || 'Unknown'}: {d.error}</li>
+                    {uploadResult.details.slice(0, 8).map((d: { user: string; error: string }, i: number) => (
+                      <li key={i}>{d.user}: {d.error}</li>
                     ))}
-                    {uploadResult.details.length > 5 && <li>...and {uploadResult.details.length - 5} more errors.</li>}
+                    {uploadResult.details.length > 8 && <li>…and {uploadResult.details.length - 8} more.</li>}
                   </ul>
                 )}
               </div>
@@ -321,22 +328,28 @@ const UsersPage = () => {
         <table className="table">
           <thead>
             <tr>
-              <th>ID</th>
+              <th>Internal ID</th>
+              <th>App user ID</th>
               <th>WhatsApp ID</th>
-              <th>Profile Name</th>
+              <th>Name</th>
+              <th>Gender</th>
+              <th>Age group</th>
               <th>Type</th>
-              <th>Created At</th>
+              <th>Created</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center' }}>Loading...</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center' }}>Loading...</td></tr>
             ) : Array.isArray(users) && users.length > 0 ? users.map(user => (
               <tr key={user.id} className="text-sm">
                 <td className="text-muted text-xs font-mono">{user.id}</td>
-                <td>{user.whatsappId}</td>
-                <td className="font-medium">{user.profileName || 'Unknown'}</td>
+                <td className="font-mono text-xs">{user.appUserId}</td>
+                <td className="text-xs">{user.whatsappId}</td>
+                <td className="font-medium">{user.profileName || '—'}</td>
+                <td className="text-muted text-xs">{user.confirmedGender ?? '—'}</td>
+                <td className="text-muted text-xs">{user.confirmedAgeGroup ?? '—'}</td>
                 <td><span className="badge badge-secondary">{user.isGuest ? 'Guest' : 'User'}</span></td>
                 <td className="text-muted">{new Date(user.createdAt).toLocaleDateString()}</td>
                 <td style={{ textAlign: 'right' }}>
@@ -346,7 +359,7 @@ const UsersPage = () => {
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No users found.</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No users found.</td></tr>
             )}
           </tbody>
         </table>

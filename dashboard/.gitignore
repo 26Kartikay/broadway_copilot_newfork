@@ -8,7 +8,10 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+# Copied from repo root for `npm run prisma:generate`
+prisma/schema.prisma
 dist
+dist-server
 dist-ssr
 # Stale CJS emit; real config is vite.config.mts
 vite.config.js
