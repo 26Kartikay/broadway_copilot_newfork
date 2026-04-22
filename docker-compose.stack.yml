@@ -1,6 +1,7 @@
 # Full local dev stack: chat bot (app) + admin dashboard + Postgres + Redis (+ optional ngrok).
 # Postgres and Redis run in Docker (named volumes). Set POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB in .env
-# (they must match DATABASE_URL for the in-stack `db` service). Redis: REDIS_URL defaults to redis://redis:6379;
+# (they must match DATABASE_URL for the in-stack `db` service). Bundled Redis has no auth; app/dashboard use
+# redis://redis:6379 (hardcoded in compose so .env REDIS_URL with credentials does not cause WRONGPASS).
 # set REDIS_PUBLISH_PORT to expose Redis on 127.0.0.1 for host tools (default 6379).
 # Always run from repo root:
 #   docker compose -f docker-compose.stack.yml --env-file .env up -d --build
@@ -70,7 +71,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-broadway}
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       UPLOADS_ROOT: ${UPLOADS_ROOT:-/usr/src/app/uploads}
       CHOKIDAR_USEPOLLING: "true"
@@ -96,13 +97,13 @@ services:
       dockerfile: dashboard/Dockerfile
       args:
         DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-        REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+        REDIS_URL: redis://redis:6379
         PORT: ${DASHBOARD_PORT:-8090}
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       PORT: ${DASHBOARD_PORT:-8090}
       ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
       NODE_ENV: ${NODE_ENV:-development}

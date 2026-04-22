@@ -1,359 +1,54 @@
-import 'dotenv/config';
-
-import { Conversation, GraphRunStatus, MessageRole, PendingType, Prisma } from '@prisma/client';
-import { MessageInput } from '../lib/chat/types';
-import { StateGraph } from '../lib/graph';
-import { prisma } from '../lib/prisma';
-import { redis } from '../lib/redis';
-import { getOrCreateUserAndConversation } from '../utils/context';
-import { logError } from '../utils/errors';
+import { MessageInput, Reply } from '../lib/chat/types';
+import { runAgent } from './agent';
+import { formatReplies } from './formatReply';
 import { logger } from '../utils/logger';
-import { buildAgentGraph } from './graph';
-import { GraphState } from './state';
+import { dbLog } from '../utils/dbLogger';
+import { Severity } from '@prisma/client';
 
-let compiledApp: ReturnType<typeof StateGraph.prototype.compile> | null = null;
-let subscriber: ReturnType<typeof redis.duplicate> | undefined;
-
-const getUserAbortChannel = (id: string) => `user_abort:${id}`;
-
-/** Minimal surface used for user-abort pub/sub; noop when Redis subscriber is unavailable. */
-type UserAbortRedisClient = Pick<ReturnType<typeof redis.duplicate>, 'subscribe' | 'unsubscribe'>;
-
-const noopUserAbortClient: UserAbortRedisClient = {
-  subscribe: async () => {},
-  unsubscribe: async () => {},
-};
-
-async function getSubscriber(): Promise<UserAbortRedisClient> {
-  try {
-    if (!subscriber || !subscriber.isOpen) {
-      const dup = redis.duplicate();
-      dup.on('error', (err) => {
-        logger.warn({ err: err.message, name: err.name }, 'Redis pub/sub duplicate client error');
-      });
-      await dup.connect();
-      subscriber = dup;
-    }
-    return subscriber!;
-  } catch (err: unknown) {
-    subscriber = undefined;
-    logger.warn(
-      { err: err instanceof Error ? err.message : String(err) },
-      'Redis subscriber unavailable; continuing without cross-request abort signaling',
-    );
-    return noopUserAbortClient;
+export function initializeAgent(): void {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    logger.error('ANTHROPIC_API_KEY is required but not set in environment variables');
+    throw new Error('ANTHROPIC_API_KEY is required');
   }
+  logger.info('Broadway AI Agent initialized (Claude ReAct)');
 }
 
-/**
- * Builds and compiles the agent's state graph. This function should be called
- * once at application startup.
- */
-export async function initializeAgent(): Promise<void> {
-  logger.info('Compiling agent graph...');
-  try {
-    compiledApp = buildAgentGraph();
-    logger.info('Agent graph compiled successfully.');
-  } catch (err: unknown) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    logger.error({ err: error.message, stack: error.stack }, 'Agent graph compilation failed');
-    throw error;
-  }
-}
-
-async function loadPreviousConversationState(
-  conversationId: string,
-): Promise<Partial<GraphState> | null> {
-  try {
-    // Get the last successful graph run for this conversation
-    const lastSuccessfulRun = await prisma.graphRun.findFirst({
-      where: {
-        conversationId,
-        status: 'COMPLETED',
-      },
-      orderBy: {
-        endTime: 'desc',
-      },
-    });
-
-    if (!lastSuccessfulRun?.finalState) {
-      return null;
-    }
-
-    // Return the final state, but exclude traceBuffer and httpResponse as they're not needed
-    const state = lastSuccessfulRun.finalState as Partial<GraphState>;
-    delete state.traceBuffer;
-    delete state.httpResponse;
-
-    // Reconstruct Date objects from serialized state (they come back as strings from JSON)
-    if (state.user) {
-      if (typeof state.user.lastVibeCheckAt === 'string') {
-        state.user.lastVibeCheckAt = new Date(state.user.lastVibeCheckAt);
-      }
-      if (typeof state.user.lastColorAnalysisAt === 'string') {
-        state.user.lastColorAnalysisAt = new Date(state.user.lastColorAnalysisAt);
-      }
-    }
-
-    logger.debug(
-      { conversationId, hasPreviousState: !!state.quizQuestions },
-      'Loaded previous conversation state',
-    );
-    return state;
-  } catch (err: unknown) {
-    logger.error({ err, conversationId }, 'Failed to load previous conversation state');
-    return null;
-  }
-}
-
-async function logGraphResult(
-  graphRunId: string,
-  status: GraphRunStatus,
-  finalState: Partial<GraphState> | null,
-  error?: unknown,
-): Promise<void> {
-  try {
-    const graphRun = await prisma.graphRun.findUnique({
-      where: { id: graphRunId },
-    });
-    if (!graphRun) return;
-
-    const endTime = new Date();
-    const durationMs = endTime.getTime() - graphRun.startTime.getTime();
-
-    if (finalState?.traceBuffer) {
-      const { nodeRuns, llmTraces } = finalState.traceBuffer;
-
-      if (nodeRuns.length > 0) {
-        await prisma.nodeRun.createMany({
-          data: nodeRuns.map((ne) => ({
-            ...ne,
-            graphRunId,
-          })),
-        });
-      }
-
-      if (llmTraces.length > 0) {
-        await prisma.lLMTrace.createMany({
-          data: llmTraces.map((lt) => ({
-            ...lt,
-          })),
-        });
-      }
-
-      delete finalState.traceBuffer;
-    }
-
-    const getErrorTrace = (err: unknown): string => {
-      if (err instanceof Error) {
-        let trace = err.stack ?? err.message;
-        if (err.cause) {
-          trace += `\nCaused by: ${getErrorTrace(err.cause)}`;
-        }
-        return trace;
-      }
-      return String(err);
-    };
-
-    await prisma.graphRun.update({
-      where: { id: graphRunId },
-      data: {
-        finalState: finalState as Prisma.InputJsonValue,
-        status,
-        errorTrace: error ? getErrorTrace(error) : null,
-        endTime,
-        durationMs,
-      },
-    });
-  } catch (logErr: unknown) {
-    logger.error(
-      {
-        err: logErr instanceof Error ? logErr.message : String(logErr),
-        graphRunId,
-      },
-      'Failed to log graph result',
-    );
-  }
-}
-
-/**
- * Executes the agent graph for HTTP delivery. Returns replies and pending state.
- *
- * @param userId - The user identifier
- * @param messageId - The message identifier
- * @param input - The normalized message input
- */
 export async function runAgentForHttp(
   userId: string,
   messageId: string,
-  input: MessageInput,
-): Promise<{ replies: NonNullable<GraphState['httpResponse']>; pending: GraphState['pending'] }> {
-  const controller = new AbortController();
-  const sub = await getSubscriber();
-  const channel = getUserAbortChannel(userId);
-
-  const listener = (message: string) => {
-    if (message === messageId) {
-      controller.abort();
-    }
-  };
-
-  let abortChannelSubscribed = false;
+  messageInput: MessageInput
+): Promise<{ replies: Reply[], pending: null }> {
   try {
-    await sub.subscribe(channel, listener);
-    abortChannelSubscribed = true;
-  } catch (err: unknown) {
-    logger.warn(
-      {
-        err: err instanceof Error ? err.message : String(err),
-        channel,
-        userId,
-      },
-      'Redis subscribe for user abort failed; concurrent abort disabled for this request',
-    );
-  }
-
-  const { WaId: identifierId, ProfileName: profileName } = input;
-
-  if (!identifierId) {
-    throw new Error('User ID not found in message input');
-  }
-
-  if (!compiledApp) {
-    throw new Error('Agent not initialized. Call initializeAgent() on startup.');
-  }
-
-  let conversation: Conversation | undefined;
-  let finalState: Partial<GraphState> | null = null;
-  const graphRunId = messageId;
-  try {
-    // New HTTP users are created on first chat; anonymous users get Guest / Unknown (see context.ts).
-    const { user, conversation: _conversation } = await getOrCreateUserAndConversation(
-      identifierId,
-      profileName ?? '',
-      identifierId, // appUserId is the same as identifierId for initial user creation
-    );
-    conversation = _conversation;
-
-    // Load previous conversation state
-    const previousState = await loadPreviousConversationState(conversation.id);
-
-    // Create serializable initial state (exclude non-serializable properties)
-    const serializablePreviousState = previousState
-      ? {
-          quizQuestions: previousState.quizQuestions,
-          quizAnswers: previousState.quizAnswers,
-          currentQuestionIndex: previousState.currentQuestionIndex,
-          recommendationShown: previousState.recommendationShown,
-          colorSeason: previousState.colorSeason,
-          lastStyleStudioSubIntent: previousState.lastStyleStudioSubIntent,
-          lastProductSource: previousState.lastProductSource,
-        }
-      : {};
-
-    await prisma.graphRun.create({
-      data: {
-        id: graphRunId,
-        userId: user.id,
-        conversationId: conversation.id,
-        initialState: { input, user, ...serializablePreviousState } as Prisma.InputJsonValue,
-      },
-    });
-
-    // Create initial state with input, merging only persistent data from previous state
-    const initialState: GraphState = {
-      input,
-      user,
-      graphRunId,
-      conversationId: conversation.id,
-      traceBuffer: { nodeRuns: [], llmTraces: [] },
-      // Required properties with defaults
-      conversationHistoryWithImages: [],
-      conversationHistoryTextOnly: [],
-      intent: null,
-      stylingIntent: null,
-      generalIntent: null,
-      missingProfileField: null,
-      availableServices: [],
-      assistantReply: null,
-      pending: null,
-      selectedTonality: null,
-      ...(previousState
-        ? {
-            quizQuestions: previousState.quizQuestions,
-            quizAnswers: previousState.quizAnswers,
-            currentQuestionIndex: previousState.currentQuestionIndex,
-            recommendationShown: previousState.recommendationShown,
-            colorSeason: previousState.colorSeason ?? null,
-            lastStyleStudioSubIntent: previousState.lastStyleStudioSubIntent,
-            lastProductSource: previousState.lastProductSource,
-          }
-        : {}),
-    };
-
-    finalState = await compiledApp.invoke(initialState, {
-      signal: controller.signal,
-      runId: graphRunId,
-    });
-    logGraphResult(graphRunId, 'COMPLETED', finalState);
-
-    const replies = (finalState?.httpResponse ?? []) as NonNullable<GraphState['httpResponse']>;
-    return { replies, pending: finalState?.pending ?? null };
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      logGraphResult(graphRunId, 'ABORTED', finalState, err);
-      throw err;
-    }
-
-    logGraphResult(graphRunId, 'ERROR', finalState, err);
-
-    const error = logError(err, {
-      userId: identifierId,
+    const result = await runAgent(userId, messageInput);
+    const replies = formatReplies(result) as Reply[];
+    
+    // Log to ServiceLog
+    const userExists = await prisma.user.findUnique({ where: { id: userId } });
+    dbLog(Severity.INFO, 'agent', 'Agent run complete', {
+      userId,
       messageId,
-      location: 'runAgentForHttp',
-    });
+      toolsUsed: result.toolResults.map((t: any) => t.toolName),
+      replyCount: replies.length
+    }, userExists ? { userId } : {});
 
-    // For HTTP mode, we don't send error messages via external service
-    // The error will be returned in the HTTP response
-    if (conversation) {
-      try {
-        await prisma.message.create({
-          data: {
-            conversationId: conversation.id,
-            role: MessageRole.AI,
-            content: [
-              {
-                type: 'text',
-                text: 'Sorry, something went wrong. Please try again later.',
-              },
-            ],
-            pending: PendingType.NONE,
-          },
-        });
-      } catch (dbErr: unknown) {
-        logError(dbErr, {
-          userId: identifierId,
-          messageId,
-          location: 'runAgentForHttp.saveErrorMessage',
-          originalError: error.message,
-        });
-      }
-    }
-    throw error;
-  } finally {
-    if (abortChannelSubscribed) {
-      try {
-        await sub.unsubscribe(channel, listener);
-      } catch (err: unknown) {
-        logger.warn(
-          {
-            err: err instanceof Error ? err.message : String(err),
-            channel,
-            userId,
-          },
-          'Redis unsubscribe for user abort failed (non-fatal)',
-        );
-      }
-    }
+    return { replies, pending: null };
+  } catch (err: any) {
+    logger.error({ err, userId, messageId }, 'Agent run failed');
+    
+    const userExists = await prisma.user.findUnique({ where: { id: userId } });
+    dbLog(Severity.ERROR, 'agent', 'Agent run failed', {
+      userId,
+      messageId,
+      error: err.message
+    }, userExists ? { userId } : {});
+
+    return {
+      replies: [{
+        reply_type: "text_only",
+        reply_text: "I'm having a moment — try again in a sec! 💛",
+        expected_action: "input_required"
+      } as any],
+      pending: null
+    };
   }
 }

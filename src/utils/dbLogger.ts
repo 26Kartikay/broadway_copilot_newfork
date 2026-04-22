@@ -24,16 +24,24 @@ export interface LogParams {
  */
 export async function persistLog(params: LogParams): Promise<void> {
   try {
-    // We don't await this in the critical path to avoid adding latency to the user request.
-    // However, for bootstrap or background tasks, it's fine.
-    // exactOptionalPropertyTypes: omit keys instead of passing undefined (Prisma create input).
     const data: Prisma.ServiceLogUncheckedCreateInput = {
       severity: params.severity,
       service: params.service,
       message: params.message,
       context: params.context === undefined || params.context === null ? {} : params.context,
     };
-    if (params.userId !== undefined) data.userId = params.userId;
+
+    if (params.userId !== undefined) {
+      // Verify user exists to satisfy foreign key constraint
+      const user = await prisma.user.findUnique({ where: { id: params.userId } });
+      if (user) {
+        data.userId = params.userId;
+      } else {
+        // Log as context instead if user doesn't exist in DB (e.g. guest_TEMP)
+        data.context = { ...(data.context as object), originalUserId: params.userId };
+      }
+    }
+    
     if (params.appUserId !== undefined) data.appUserId = params.appUserId;
     if (params.whatsappId !== undefined) data.whatsappId = params.whatsappId;
     if (params.profileNameSnapshot !== undefined) data.profileNameSnapshot = params.profileNameSnapshot;

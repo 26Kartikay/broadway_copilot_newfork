@@ -6,8 +6,9 @@
 # DATABASE_URL (same user/password/db/host `db`, port `5432` inside the network). If DATABASE_URL is unset,
 # the default below uses those variables.
 #
-# Redis (container `redis`): app uses REDIS_URL (default redis://redis:6379). Optional: set REDIS_PUBLISH_PORT
-# to expose Redis on 127.0.0.1 for host-side tools (default 6379); set to a free port if 6379 is taken.
+# Redis (container `redis`): no password. The app is always given REDIS_URL=redis://redis:6379 here so a
+# REDIS_URL in .env (e.g. Redis Cloud or host.docker.internal with AUTH) does not override and break WRONGPASS.
+# Optional: set REDIS_PUBLISH_PORT to expose Redis on 127.0.0.1 for host-side tools (default 6379).
 #
 # Optional tunnel:
 #   docker compose -f docker-compose.bot.yml --profile tunnel up -d
@@ -74,7 +75,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-broadway}
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       UPLOADS_ROOT: ${UPLOADS_ROOT:-/usr/src/app/uploads}
       CHOKIDAR_USEPOLLING: "true"
