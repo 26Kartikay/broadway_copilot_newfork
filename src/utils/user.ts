@@ -13,8 +13,5 @@ export function isGuestUser(user: User | null | undefined): boolean {
 
   if (user.isGuest) return true;
 
-  return Boolean(
-    user.appUserId?.startsWith('guest_') || user.appUserId?.startsWith('TEMP_'),
-  );
+  return Boolean(user.appUserId?.startsWith('guest_') || user.appUserId?.startsWith('TEMP_'));
 }
-

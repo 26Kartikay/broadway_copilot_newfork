@@ -1,5 +1,4 @@
-import { Conversation, ConversationStatus, Prisma, User } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { Conversation, ConversationStatus, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';

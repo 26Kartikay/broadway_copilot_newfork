@@ -1,6 +1,6 @@
-import { searchCatalog } from './catalog';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
+import { searchCatalog } from './catalog';
 
 export interface OutfitSuggestionInput {
   occasion: string;
@@ -17,7 +17,7 @@ export async function getOutfitSuggestion(input: OutfitSuggestionInput) {
     // 1. Fetch user's color analysis in parallel if not provided
     const colorAnalysisPromise = prisma.colorAnalysis.findFirst({
       where: { userId },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     // 2. Prepare search promises for parallel execution
@@ -28,7 +28,9 @@ export async function getOutfitSuggestion(input: OutfitSuggestionInput) {
       limit: 3,
     });
 
-    const topSearch = searchCatalog(catalogArgs(`${occasion} top shirt blouse`, 'CLOTHING_FASHION'));
+    const topSearch = searchCatalog(
+      catalogArgs(`${occasion} top shirt blouse`, 'CLOTHING_FASHION'),
+    );
 
     const bottomSearch = searchCatalog(
       catalogArgs(`${occasion} bottom trousers skirt pants`, 'CLOTHING_FASHION'),
@@ -41,34 +43,29 @@ export async function getOutfitSuggestion(input: OutfitSuggestionInput) {
     );
 
     // Execute all searches + DB fetch in parallel
-    const [colorAnalysis, topResult, bottomResult, shoeResult, accessoryResult] = await Promise.all([
-      colorAnalysisPromise,
-      topSearch,
-      bottomSearch,
-      shoeSearch,
-      accessorySearch
-    ]);
+    const [colorAnalysis, topResult, bottomResult, shoeResult, accessoryResult] = await Promise.all(
+      [colorAnalysisPromise, topSearch, bottomSearch, shoeSearch, accessorySearch],
+    );
 
     const outfit = {
       top: topResult.products[0],
       bottom: bottomResult.products[0],
       shoes: shoeResult.products[0],
-      accessories: accessoryResult.products.slice(0, 2)
+      accessories: accessoryResult.products.slice(0, 2),
     };
 
     const allProducts = [
       ...(topResult.products || []),
       ...(bottomResult.products || []),
       ...(shoeResult.products || []),
-      ...(accessoryResult.products || [])
+      ...(accessoryResult.products || []),
     ];
 
     return {
       outfit,
       reasoning: `I've put together a ${style || 'stylish'} look perfect for ${occasion}. I selected these pieces because they coordinate well and match the ${style || 'vibe'} you're going for.`,
-      allProducts
+      allProducts,
     };
-
   } catch (err) {
     logger.error({ err, userId }, 'Error in getOutfitSuggestion tool');
     return { error: String(err) };

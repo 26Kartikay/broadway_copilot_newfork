@@ -1,39 +1,39 @@
+import { Severity } from '@prisma/client';
 import { MessageInput } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
-import { runAgent } from './agent';
+import { dbLog } from '../utils/dbLogger';
+import { logger } from '../utils/logger';
 import { formatReplies } from './formatReply';
-import {
-  buildMainMenuReplies,
-  isMainMenuTrigger,
-  type HttpReplyPayload,
-} from './httpReplies';
+import { tryHandleHttpChatFlows } from './httpChatFlows';
+import { buildMainMenuReplies, isMainMenuTrigger, type HttpReplyPayload } from './httpReplies';
+import { clearHttpPendingFlow } from './memory/redis';
+import { ChatOrchestrator } from './orchestrator';
 
 export type { HttpReplyPayload } from './httpReplies';
-import { logger } from '../utils/logger';
-import { dbLog } from '../utils/dbLogger';
-import { Severity } from '@prisma/client';
+
+const orchestrator = new ChatOrchestrator();
 
 export function initializeAgent(): void {
-  if (!process.env.GROQ_API_KEY?.trim()) {
-    logger.error('GROQ_API_KEY is required for the chat agent (Llama tool calling)');
-    throw new Error('GROQ_API_KEY is required');
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    logger.error('ANTHROPIC_API_KEY is required for the chat agent (Claude Sonnet + Haiku)');
+    throw new Error('ANTHROPIC_API_KEY is required');
   }
   if (!process.env.OPENAI_API_KEY?.trim()) {
-    logger.error('OPENAI_API_KEY is required for vision tools and catalog embeddings');
-    throw new Error('OPENAI_API_KEY is required');
+    logger.warn('OPENAI_API_KEY not set — catalog vector search will fall back to ILIKE text search');
   }
-  logger.info('Broadway AI Agent initialized (Groq Llama + OpenAI vision/embeddings)');
+  logger.info('Broadway AI Agent initialized (Claude Sonnet for chat, Claude Haiku for intent, OpenAI for embeddings)');
 }
 
 export async function runAgentForHttp(
   prismaUserId: string,
   messageId: string,
-  messageInput: MessageInput
-): Promise<{ replies: HttpReplyPayload[]; pending: null }> {
+  messageInput: MessageInput,
+): Promise<{ replies: HttpReplyPayload[]; pending: string | null }> {
   try {
     const user = await prisma.user.findUnique({ where: { id: prismaUserId } });
 
     if (isMainMenuTrigger(messageInput)) {
+      await clearHttpPendingFlow(prismaUserId);
       const replies = buildMainMenuReplies(messageInput.ProfileName);
       dbLog(
         Severity.INFO,
@@ -45,26 +45,44 @@ export async function runAgentForHttp(
       return { replies, pending: null };
     }
 
-    const result = await runAgent(prismaUserId, messageInput);
+    const flow = await tryHandleHttpChatFlows(prismaUserId, messageInput, user);
+    if (flow.handled) {
+      dbLog(
+        Severity.INFO,
+        'agent',
+        'HTTP structured flow handled',
+        {
+          userId: prismaUserId,
+          messageId,
+          replyCount: flow.replies.length,
+          pending: flow.pending,
+        },
+        user ? { userId: prismaUserId } : {},
+      );
+      return { replies: flow.replies, pending: flow.pending };
+    }
+
+    const result = await orchestrator.handleTurn(prismaUserId, messageInput);
     const replies = formatReplies(result, { user });
     dbLog(
       Severity.INFO,
       'agent',
-      'Agent run complete',
+      'Orchestrator turn complete',
       {
         userId: prismaUserId,
         messageId,
-        toolsUsed: result.toolResults.map((t: any) => t.toolName),
+        toolsUsed: result.toolResults.map((t) => t.toolName),
         replyCount: replies.length,
       },
       user ? { userId: prismaUserId } : {},
     );
 
     return { replies, pending: null };
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error({ err, userId: prismaUserId, messageId }, 'Agent run failed');
 
     const userExists = await prisma.user.findUnique({ where: { id: prismaUserId } });
+    const message = err instanceof Error ? err.message : String(err);
     dbLog(
       Severity.ERROR,
       'agent',
@@ -72,7 +90,7 @@ export async function runAgentForHttp(
       {
         userId: prismaUserId,
         messageId,
-        error: err.message,
+        error: message,
       },
       userExists ? { userId: prismaUserId } : {},
     );

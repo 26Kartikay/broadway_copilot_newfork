@@ -1,14 +1,12 @@
 import { createId } from '@paralleldrive/cuid2';
 import OpenAI from 'openai';
 import type {
-  FunctionTool,
   Response,
   ResponseCreateParamsNonStreaming,
   ResponseFunctionToolCall,
   ResponseInputItem,
   ResponseOutputItem,
 } from 'openai/resources/responses/responses';
-import z from 'zod';
 
 import { Prisma } from '@prisma/client';
 import { BufferedLlmTrace, TraceBuffer } from '../../../agent/tracing';
@@ -16,7 +14,7 @@ import { MODEL_COSTS } from '../config/costs';
 import { BaseChatCompletionsModel } from '../core/base_chat_completions_model';
 import { AssistantMessage, BaseMessage, SystemMessage, TextPart } from '../core/messages';
 import { OpenAIChatModelParams, RunOutcome } from '../core/runnables';
-import { ensureRequiredArrays, ToolCall, toOpenAIToolSpec } from '../core/tools';
+import { ToolCall, toOpenAIToolSpec } from '../core/tools';
 
 /**
  * A chat model that interacts with the OpenAI API.

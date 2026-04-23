@@ -7,9 +7,11 @@ function getGcpProjectId(): string | undefined {
   return process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
 }
 
-function parseCloudTraceContext(
-  headerValue: string,
-): { traceId?: string; spanId?: string; sampled?: boolean } {
+function parseCloudTraceContext(headerValue: string): {
+  traceId?: string;
+  spanId?: string;
+  sampled?: boolean;
+} {
   // Format: TRACE_ID/SPAN_ID;o=TRACE_TRUE
   const [traceAndSpan, options] = headerValue.split(';');
   if (!traceAndSpan) {
@@ -112,5 +114,3 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
 
   next();
 }
-
-

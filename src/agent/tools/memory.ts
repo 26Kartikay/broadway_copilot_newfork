@@ -1,6 +1,6 @@
 import { prisma } from '../../lib/prisma';
-import { invalidateContext, getUserContext } from '../memory/redis';
 import { logger } from '../../utils/logger';
+import { getUserContext, invalidateContext } from '../memory/redis';
 
 export interface SavePreferenceInput {
   userId: string;
@@ -15,21 +15,23 @@ export async function saveUserPreference(input: SavePreferenceInput) {
     if (userExists) {
       // FIRE AND FORGET: Only save the memory text record since we're Anthropic-only
       // We don't await this to speed up the agent's turn
-      prisma.memory.create({
-        data: {
-          userId,
-          memory: preference,
-          embeddingModel: 'anthropic-text', // Mark as non-OpenAI
-        }
-      }).then(() => {
-        return invalidateContext(userId);
-      }).catch(err => {
-        logger.error({ err, userId }, 'Async memory creation failed');
-      });
+      prisma.memory
+        .create({
+          data: {
+            userId,
+            memory: preference,
+            embeddingModel: 'anthropic-text', // Mark as non-OpenAI
+          },
+        })
+        .then(() => {
+          return invalidateContext(userId);
+        })
+        .catch((err) => {
+          logger.error({ err, userId }, 'Async memory creation failed');
+        });
     }
 
     return { saved: true };
-
   } catch (err) {
     logger.error({ err, userId }, 'Error in saveUserPreference tool');
     return { saved: false, error: String(err) };
@@ -46,7 +48,7 @@ export async function recallUserPreferences(input: RecallPreferencesInput) {
 
   try {
     let memories: string[] = [];
-    
+
     if (context) {
       // Use text-based search instead of vector search
       const results = await prisma.memory.findMany({
@@ -54,30 +56,30 @@ export async function recallUserPreferences(input: RecallPreferencesInput) {
           userId,
           memory: {
             contains: context,
-            mode: 'insensitive'
-          }
+            mode: 'insensitive',
+          },
         },
         orderBy: { createdAt: 'desc' },
-        take: 15
+        take: 15,
       });
-      memories = results.map(r => r.memory);
-      
+      memories = results.map((r) => r.memory);
+
       // If no keyword matches, fallback to recent
       if (memories.length === 0) {
         const fallback = await prisma.memory.findMany({
           where: { userId },
           orderBy: { createdAt: 'desc' },
-          take: 10
+          take: 10,
         });
-        memories = fallback.map(r => r.memory);
+        memories = fallback.map((r) => r.memory);
       }
     } else {
       const results = await prisma.memory.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
-        take: 15
+        take: 15,
       });
-      memories = results.map(r => r.memory);
+      memories = results.map((r) => r.memory);
     }
 
     const profile = await getUserContext(userId);
@@ -85,9 +87,8 @@ export async function recallUserPreferences(input: RecallPreferencesInput) {
     return {
       memories,
       colorSeason: profile.colorSeason,
-      profile
+      profile,
     };
-
   } catch (err) {
     logger.error({ err, userId }, 'Error in recallUserPreferences tool');
     return { memories: [], error: String(err) };

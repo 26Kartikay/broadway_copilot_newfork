@@ -43,11 +43,15 @@ export function isRecoverableRedisOrTransportError(err: unknown): boolean {
   if (err instanceof ReconnectStrategyError) return true;
 
   return walkErrorChain(err, (e) => {
-    const code = 'code' in e && typeof (e as NodeJS.ErrnoException).code === 'string' ? (e as NodeJS.ErrnoException).code : undefined;
+    const code =
+      'code' in e && typeof (e as NodeJS.ErrnoException).code === 'string'
+        ? (e as NodeJS.ErrnoException).code
+        : undefined;
     if (code && RECOVERABLE_NODE_CODES.has(code)) return true;
     const msg = `${e.name} ${e.message}`.toLowerCase();
     if (msg.includes('socket closed unexpectedly')) return true;
-    if (msg.includes('redis') && (msg.includes('econnreset') || msg.includes('broken pipe'))) return true;
+    if (msg.includes('redis') && (msg.includes('econnreset') || msg.includes('broken pipe')))
+      return true;
     return false;
   });
 }

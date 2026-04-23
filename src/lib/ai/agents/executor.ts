@@ -1,15 +1,8 @@
-import { ZodType } from 'zod';
+import { z, ZodType } from 'zod';
 import { TraceBuffer } from '../../../agent/tracing';
 import { logger } from '../../../utils/logger';
 import { BaseChatModel } from '../core/base_chat_model';
-import {
-  AssistantMessage,
-  BaseMessage,
-  SystemMessage,
-  TextPart,
-  ToolMessage,
-  UserMessage,
-} from '../core/messages';
+import { BaseMessage, SystemMessage, TextPart, ToolMessage, UserMessage } from '../core/messages';
 import { Tool } from '../core/tools';
 
 const MAX_ITERATIONS = 5;
@@ -68,18 +61,29 @@ export async function agentExecutor<T extends ZodType>(
   maxLoops: number = MAX_ITERATIONS,
 ): Promise<{ output: T['_output']; toolResults: Array<{ name: string; result: unknown }> }> {
   // Set structured output schema on the runner so it knows to return JSON
-  // This is critical when tools are involved - the model needs to know to return structured output
-  // We use type assertion to access the protected property
-  (runner as any).structuredOutputSchema = options.outputSchema;
+  runner.structuredOutputToolName = runner.structuredOutputToolName || 'json';
+  runner.attachExecutorStructuredOutput(options.outputSchema);
+
   const runnerWithTools = runner.bind(options.tools);
   const conversation: BaseMessage[] = [...history];
+
+  // Append a JSON instruction to the system prompt if not already present
+  const schemaJson = JSON.stringify(z.toJSONSchema(options.outputSchema), null, 2);
+  const jsonInstruction = `\n\nWhen you are ready to provide your final response to the user, you MUST return a single JSON object that matches this schema: ${schemaJson}. If you are calling other tools first, you can do so, but your final answer MUST be this JSON object. Do not include any text before or after the JSON. Use the key "reply" for your stylistic stylistic response to the user.`;
+
+  const systemPromptContent = systemPrompt.content
+    .filter((p): p is TextPart => p.type === 'text')
+    .map((p) => p.text)
+    .join('');
+
+  const enhancedSystemPrompt = new SystemMessage(systemPromptContent + jsonInstruction);
 
   const seenToolCallIds = new Set<string>();
   const toolResultsList: Array<{ name: string; result: unknown }> = [];
 
   for (let i = 0; i < maxLoops; i++) {
     const { assistant, toolCalls } = await runnerWithTools.run(
-      systemPrompt,
+      enhancedSystemPrompt,
       conversation,
       traceBuffer,
       options.nodeName,
@@ -97,10 +101,29 @@ export async function agentExecutor<T extends ZodType>(
 
     conversation.push(assistant);
 
+    // Check if any tool call is the structured output tool
+    const jsonToolCall = toolCalls.find((tc) => tc.name === runner.structuredOutputToolName);
+    if (jsonToolCall) {
+      logger.debug(
+        { nodeName: options.nodeName, iteration: i },
+        'agentExecutor: Model called structured output tool.',
+      );
+      try {
+        const validatedOutput = options.outputSchema.parse(jsonToolCall.arguments);
+        return { output: validatedOutput, toolResults: toolResultsList };
+      } catch (error) {
+        logger.warn(
+          { error, args: jsonToolCall.arguments },
+          'agentExecutor: Failed to parse structured output tool call.',
+        );
+        // If it failed, we'll continue and maybe the model will fix it in the next iteration
+      }
+    }
+
     if (toolCalls.length === 0) {
       logger.debug(
         { nodeName: options.nodeName, iteration: i },
-        'agentExecutor: No tool calls, attempting to parse final output.',
+        'agentExecutor: No tool calls, attempting to parse final output from text.',
       );
 
       try {
@@ -111,7 +134,7 @@ export async function agentExecutor<T extends ZodType>(
 
         // Extract JSON from markdown code blocks if present, otherwise use content as-is
         let jsonString = content.trim();
-        
+
         // Strategy 1: Try to extract from markdown code blocks
         const jsonBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
         if (jsonBlockMatch && jsonBlockMatch[1]) {
@@ -124,7 +147,7 @@ export async function agentExecutor<T extends ZodType>(
           let braceCount = 0;
           let startIdx = -1;
           let endIdx = -1;
-          
+
           for (let idx = 0; idx < jsonString.length; idx++) {
             if (jsonString[idx] === '{') {
               if (startIdx === -1) startIdx = idx;
@@ -137,7 +160,7 @@ export async function agentExecutor<T extends ZodType>(
               }
             }
           }
-          
+
           if (startIdx !== -1 && endIdx !== -1) {
             jsonString = jsonString.substring(startIdx, endIdx + 1);
           } else {
@@ -154,7 +177,7 @@ export async function agentExecutor<T extends ZodType>(
         // Strategy 3: Clean up common issues
         // Remove trailing commas before closing braces/brackets
         jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
-        
+
         // Try to parse
         const parsedJson = JSON.parse(jsonString);
         const validatedOutput = options.outputSchema.parse(parsedJson);
@@ -164,29 +187,29 @@ export async function agentExecutor<T extends ZodType>(
         // This reduces noise from warnings that recover on the next iteration
         if (i < maxLoops - 1) {
           logger.debug(
-            { 
-              nodeName: options.nodeName, 
+            {
+              nodeName: options.nodeName,
               iteration: i,
               error: error instanceof Error ? error.message : String(error),
               contentPreview: assistant.content
                 .filter((p): p is TextPart => p.type === 'text')
                 .map((p) => p.text)
                 .join('')
-                .substring(0, 200)
+                .substring(0, 200),
             },
             'agentExecutor: Failed to parse JSON output, will retry with corrective prompt.',
           );
         } else {
           // Last attempt - log as warning since we're about to throw
           logger.warn(
-            { 
-              nodeName: options.nodeName, 
+            {
+              nodeName: options.nodeName,
               error: error instanceof Error ? error.message : String(error),
               contentPreview: assistant.content
                 .filter((p): p is TextPart => p.type === 'text')
                 .map((p) => p.text)
                 .join('')
-                .substring(0, 200)
+                .substring(0, 200),
             },
             'agentExecutor: Failed to parse final JSON output after all attempts.',
           );

@@ -181,7 +181,10 @@ export async function processMediaForAI(
 
     // Vision: always data URL so OpenAI does not fetch SERVER_URL (often blocked, wrong host, or /chatbot-only edge).
     const aiUrl = bufferToDataUrl(buffer, actualMimeType);
-    logger.debug({ userId, filename, mimeType: actualMimeType }, 'Using data URL for AI (OpenAI fetch bypass)');
+    logger.debug(
+      { userId, filename, mimeType: actualMimeType },
+      'Using data URL for AI (OpenAI fetch bypass)',
+    );
 
     logger.debug(
       { userId, filename, filePath, mimeType: actualMimeType, size: buffer.length },
@@ -237,10 +240,16 @@ export async function resolveImageUrlForVisionModels(url: string): Promise<strin
       await fs.access(filePath);
       const buffer = await fs.readFile(filePath);
       const mimeType = mimeTypeFromFilename(parsed.filename);
-      logger.debug({ url: normalized.slice(0, 120), filePath }, 'Resolved uploads URL from disk for vision');
+      logger.debug(
+        { url: normalized.slice(0, 120), filePath },
+        'Resolved uploads URL from disk for vision',
+      );
       return bufferToDataUrl(buffer, mimeType);
     } catch {
-      logger.debug({ url: normalized.slice(0, 120), filePath }, 'Uploads file not on disk; trying HTTP fetch');
+      logger.debug(
+        { url: normalized.slice(0, 120), filePath },
+        'Uploads file not on disk; trying HTTP fetch',
+      );
     }
   }
 

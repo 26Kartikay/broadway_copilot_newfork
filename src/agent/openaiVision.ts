@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { logger } from '../utils/logger';
-import { OPENAI_VISION_MODEL } from './anthropicModels';
+
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o';
 
 let client: OpenAI | null = null;
 

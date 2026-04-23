@@ -1,7 +1,4 @@
 import type { User } from '@prisma/client';
-import type { AgentResult } from './agent';
-import type { QuickReplyButton } from '../lib/chat/types';
-import type { HttpReplyPayload } from './httpReplies';
 import { formatColorCombos, shuffleArray } from '../data/colorAnalysisHelpers';
 import {
   getPaletteData,
@@ -10,14 +7,16 @@ import {
   type ColorWithHex,
 } from '../data/seasonalPalettes';
 import { isGuestUser } from '../utils/user';
+import type { HttpReplyPayload } from './httpReplies';
+import { AgentResult } from './orchestrator';
 
 function hasInteractiveReplies(replies: HttpReplyPayload[]): boolean {
-  return replies.some(
-    (r) => r.reply_type === 'quick_reply' || r.reply_type === 'list_picker',
-  );
+  return replies.some((r) => r.reply_type === 'quick_reply' || r.reply_type === 'list_picker');
 }
 
-function buildColorAnalysisCardPayload(color: Record<string, unknown>): HttpReplyPayload | null {
+export function buildColorAnalysisCardPayload(
+  color: Record<string, unknown>,
+): HttpReplyPayload | null {
   if (color.error) return null;
 
   if (
@@ -32,8 +31,7 @@ function buildColorAnalysisCardPayload(color: Record<string, unknown>): HttpRepl
       description: String(color.description ?? ''),
       top_colors: color.top_colors as ColorWithHex[],
       two_color_combos: (color.two_color_combos as ColorWithHex[][]) ?? [],
-      user_image_url:
-        typeof color.user_image_url === 'string' ? color.user_image_url : null,
+      user_image_url: typeof color.user_image_url === 'string' ? color.user_image_url : null,
     };
   }
 
@@ -53,7 +51,7 @@ function buildColorAnalysisCardPayload(color: Record<string, unknown>): HttpRepl
   };
 }
 
-function buildVibeCheckCardPayload(vc: Record<string, unknown>): HttpReplyPayload | null {
+export function buildVibeCheckCardPayload(vc: Record<string, unknown>): HttpReplyPayload | null {
   if (vc.error) return null;
 
   const fit =
@@ -71,9 +69,7 @@ function buildVibeCheckCardPayload(vc: Record<string, unknown>): HttpReplyPayloa
     typeof vc.hair_and_skin === 'object' && vc.hair_and_skin !== null
       ? {
           score: Number((vc.hair_and_skin as { score?: number }).score ?? 0),
-          explanation: String(
-            (vc.hair_and_skin as { explanation?: string }).explanation ?? '',
-          ),
+          explanation: String((vc.hair_and_skin as { explanation?: string }).explanation ?? ''),
         }
       : {
           score: Number(vc.color_harmony_score ?? 0),
@@ -118,10 +114,11 @@ function buildVibeCheckCardPayload(vc: Record<string, unknown>): HttpReplyPayloa
 
 export function formatReplies(
   result: AgentResult,
-  options?: { user?: User | null },
+  options?: { user?: User | null; skipColorSavePrompt?: boolean },
 ): HttpReplyPayload[] {
   const replies: HttpReplyPayload[] = [];
   const user = options?.user;
+  const skipColorSavePrompt = Boolean(options?.skipColorSavePrompt);
 
   if (result.text?.trim()) {
     replies.push({
@@ -160,6 +157,13 @@ export function formatReplies(
   if (color) {
     const card = buildColorAnalysisCardPayload(color);
     if (card && card.reply_type === 'color_analysis_card') {
+      if (isGuestUser(user)) {
+        replies.push({
+          reply_type: 'text',
+          reply_text:
+            "Guest mode doesn’t save a color profile to your account — this read is just for now. Here's your card.",
+        });
+      }
       replies.push(card);
 
       if (isGuestUser(user)) {
@@ -172,7 +176,7 @@ export function formatReplies(
             { text: 'No, thanks', id: 'product_recommendation_no' },
           ],
         });
-      } else {
+      } else if (!skipColorSavePrompt) {
         replies.push({
           reply_type: 'quick_reply',
           reply_text: 'Do you want to save this color analysis result?',
@@ -189,11 +193,17 @@ export function formatReplies(
   if (vc) {
     const vibeCard = buildVibeCheckCardPayload(vc);
     if (vibeCard && vibeCard.reply_type === 'vibe_check_card') {
+      if (isGuestUser(user)) {
+        replies.push({
+          reply_type: 'text',
+          reply_text:
+            'Guest mode can’t save vibe checks to a profile, but you still get the full score card below.',
+        });
+      }
       replies.push(vibeCard);
       replies.push({
         reply_type: 'quick_reply',
-        reply_text:
-          'Based on that feedback, shall I recommend some products to complete the look?',
+        reply_text: 'Based on that feedback, shall I recommend some products to complete the look?',
         buttons: [
           { text: 'Yes, please!', id: 'product_recommendation_yes' },
           { text: 'No, thanks', id: 'product_recommendation_no' },

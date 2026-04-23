@@ -12,6 +12,7 @@ export * from './core/messages';
 export * from './core/runnables';
 export * from './core/structured_output_runnable';
 export * from './core/tools';
+export * from './anthropic/chat_models';
 export * from './groq/chat_models';
 export * from './openai/chat_models';
 export * from './openai/embeddings';

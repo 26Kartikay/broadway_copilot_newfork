@@ -1,39 +1,21 @@
-import { ChatGroq } from '../groq/chat_models';
-import { ChatOpenAI } from '../openai/chat_models';
+import { ChatAnthropic } from '../anthropic/chat_models';
+import { ANTHROPIC_CHAT_MODEL, ANTHROPIC_VISION_MODEL } from '../../../agent/anthropicModels';
 
-/**
- * Cached LLM instances for different use cases.
- * Uses singleton pattern to avoid recreating expensive LLM instances.
- */
-let textLLM: ChatGroq | null = null;
-let visionLLM: ChatOpenAI | null = null;
+let chatLLM: ChatAnthropic | null = null;
+let visionLLM: ChatAnthropic | null = null;
 
-/**
- * Gets or creates a cached text-only LLM instance using Groq API.
- * Uses openai/gpt-oss-20b model optimized for conversational tasks.
- *
- * @returns Cached ChatGroq instance for text processing
- */
-export function getTextLLM(): ChatGroq {
-  if (!textLLM) {
-    textLLM = new ChatGroq({
-      model: process.env.GROQ_AGENT_MODEL?.trim() || 'llama-3.3-70b-versatile',
-    });
+/** Cached Sonnet instance for main chat + tool calling. */
+export function getChatLLM(): ChatAnthropic {
+  if (!chatLLM) {
+    chatLLM = new ChatAnthropic({ model: ANTHROPIC_CHAT_MODEL, maxTokens: 1024 });
   }
-  return textLLM;
+  return chatLLM;
 }
 
-/**
- * Gets or creates a cached vision-capable LLM instance using OpenAI API.
- * Uses GPT-4o for image analysis and multimodal tasks.
- *
- * @returns Cached ChatOpenAI instance for vision processing
- */
-export function getVisionLLM(): ChatOpenAI {
+/** Cached Sonnet instance for vision tasks. */
+export function getVisionLLM(): ChatAnthropic {
   if (!visionLLM) {
-    visionLLM = new ChatOpenAI({
-      model: process.env.OPENAI_VISION_MODEL?.trim() || 'gpt-4o',
-    });
+    visionLLM = new ChatAnthropic({ model: ANTHROPIC_VISION_MODEL, maxTokens: 1024 });
   }
   return visionLLM;
 }

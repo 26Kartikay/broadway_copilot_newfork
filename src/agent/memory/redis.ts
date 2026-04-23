@@ -1,5 +1,5 @@
-import { redis } from '../../lib/redis';
 import { prisma } from '../../lib/prisma';
+import { redis } from '../../lib/redis';
 import { logger } from '../../utils/logger';
 
 const HISTORY_KEY = (userId: string) => `broadway:chat:${userId}`;
@@ -10,7 +10,7 @@ const CONTEXT_TTL = 60 * 60; // 1 hour
 
 export interface StoredMessage {
   role: 'user' | 'assistant';
-  content: any; // support string or Anthropic content blocks
+  content: unknown; // string or multimodal content blocks
   timestamp: number;
 }
 
@@ -86,22 +86,15 @@ export function normalizeUserContext(raw: unknown): UserContext {
   }
   return {
     name: typeof c.name === 'string' ? c.name : String(c.name ?? ''),
-    colorSeason:
-      c.colorSeason == null || c.colorSeason === ''
-        ? null
-        : String(c.colorSeason),
+    colorSeason: c.colorSeason == null || c.colorSeason === '' ? null : String(c.colorSeason),
     colorPalette,
     preferences: coerceStringArray(c.preferences),
     gender: c.gender == null || c.gender === '' ? null : String(c.gender),
     ageGroup: c.ageGroup == null || c.ageGroup === '' ? null : String(c.ageGroup),
     fitPreference:
-      c.fitPreference == null || c.fitPreference === ''
-        ? null
-        : String(c.fitPreference),
+      c.fitPreference == null || c.fitPreference === '' ? null : String(c.fitPreference),
     lastVibeCheck:
-      c.lastVibeCheck == null || c.lastVibeCheck === ''
-        ? null
-        : String(c.lastVibeCheck),
+      c.lastVibeCheck == null || c.lastVibeCheck === '' ? null : String(c.lastVibeCheck),
   };
 }
 
@@ -118,12 +111,12 @@ export async function getHistory(userId: string): Promise<StoredMessage[]> {
 
 export async function appendToHistory(
   userId: string,
-  userMsg: any,
-  assistantMsg: any
+  userMsg: unknown,
+  assistantMsg: unknown,
 ): Promise<void> {
   try {
     const history = await getHistory(userId);
-    
+
     const newHistory = [
       ...history,
       {
@@ -139,7 +132,7 @@ export async function appendToHistory(
     ].slice(-MAX_MESSAGES);
 
     await redis.set(HISTORY_KEY(userId), JSON.stringify(newHistory), {
-      EX: HISTORY_TTL
+      EX: HISTORY_TTL,
     });
   } catch (err) {
     logger.error({ err, userId }, 'Failed to append to history in Redis');
@@ -160,17 +153,17 @@ export async function getUserContext(userId: string): Promise<UserContext> {
       include: {
         colorAnalyses: {
           orderBy: { createdAt: 'desc' },
-          take: 1
+          take: 1,
         },
         memories: {
           orderBy: { createdAt: 'desc' },
-          take: 10
+          take: 10,
         },
         vibeChecks: {
           orderBy: { createdAt: 'desc' },
-          take: 1
-        }
-      }
+          take: 1,
+        },
+      },
     });
 
     if (!user) {
@@ -209,7 +202,7 @@ export async function getUserContext(userId: string): Promise<UserContext> {
 
     // 3. Cache in Redis
     await redis.set(CONTEXT_KEY(userId), JSON.stringify(context), {
-      EX: CONTEXT_TTL
+      EX: CONTEXT_TTL,
     });
 
     return context;
@@ -232,5 +225,93 @@ export async function clearHistory(userId: string): Promise<void> {
     await redis.del(HISTORY_KEY(userId));
   } catch (err) {
     logger.error({ err, userId }, 'Failed to clear history');
+  }
+}
+
+/** Structured chat flows (color / vibe) pending state for HTTP clients. */
+export type HttpPendingFlow =
+  | { type: 'NONE' }
+  | { type: 'COLOR_ANALYSIS_IMAGE' }
+  | { type: 'TONALITY_SELECTION' }
+  | { type: 'VIBE_CHECK_IMAGE'; tonality: string };
+
+const HTTP_PENDING_KEY = (userId: string) => `broadway:http_pending:${userId}`;
+const COLOR_ANALYSIS_STAGE_KEY = (userId: string) => `broadway:color_analysis_stage:${userId}`;
+const HTTP_FLOW_TTL_SEC = 60 * 60 * 24;
+
+export async function getHttpPendingFlow(userId: string): Promise<HttpPendingFlow> {
+  try {
+    const raw = await redis.get(HTTP_PENDING_KEY(userId));
+    if (!raw) return { type: 'NONE' };
+    const parsed = JSON.parse(raw.toString()) as HttpPendingFlow;
+    return parsed?.type ? parsed : { type: 'NONE' };
+  } catch (err) {
+    logger.error({ err, userId }, 'getHttpPendingFlow failed');
+    return { type: 'NONE' };
+  }
+}
+
+export async function setHttpPendingFlow(userId: string, state: HttpPendingFlow): Promise<void> {
+  try {
+    if (state.type === 'NONE') {
+      await redis.del(HTTP_PENDING_KEY(userId));
+      return;
+    }
+    await redis.set(HTTP_PENDING_KEY(userId), JSON.stringify(state), {
+      EX: HTTP_FLOW_TTL_SEC,
+    });
+  } catch (err) {
+    logger.error({ err, userId }, 'setHttpPendingFlow failed');
+  }
+}
+
+export async function clearHttpPendingFlow(userId: string): Promise<void> {
+  await setHttpPendingFlow(userId, { type: 'NONE' });
+}
+
+export type StagedColorAnalysisSave = {
+  skin_tone: string;
+  eye_color: string;
+  hair_color: string;
+  undertone: string;
+  compliment: string;
+  palette_name: string;
+  palette_description: string;
+  colors_suited: string[];
+  colors_to_wear: unknown;
+  colors_to_avoid: unknown;
+};
+
+export async function getStagedColorAnalysis(
+  userId: string,
+): Promise<StagedColorAnalysisSave | null> {
+  try {
+    const raw = await redis.get(COLOR_ANALYSIS_STAGE_KEY(userId));
+    if (!raw) return null;
+    return JSON.parse(raw.toString()) as StagedColorAnalysisSave;
+  } catch (err) {
+    logger.error({ err, userId }, 'getStagedColorAnalysis failed');
+    return null;
+  }
+}
+
+export async function setStagedColorAnalysis(
+  userId: string,
+  payload: StagedColorAnalysisSave,
+): Promise<void> {
+  try {
+    await redis.set(COLOR_ANALYSIS_STAGE_KEY(userId), JSON.stringify(payload), {
+      EX: HTTP_FLOW_TTL_SEC,
+    });
+  } catch (err) {
+    logger.error({ err, userId }, 'setStagedColorAnalysis failed');
+  }
+}
+
+export async function clearStagedColorAnalysis(userId: string): Promise<void> {
+  try {
+    await redis.del(COLOR_ANALYSIS_STAGE_KEY(userId));
+  } catch (err) {
+    logger.error({ err, userId }, 'clearStagedColorAnalysis failed');
   }
 }

@@ -27,6 +27,8 @@ export type HttpReplyPayload =
   | { reply_type: 'quick_reply'; reply_text: string; buttons: QuickReplyButton[] }
   | { reply_type: 'list_picker'; reply_text: string; buttons: QuickReplyButton[] }
   | { reply_type: 'image'; media_url: string; reply_text?: string }
+  | { reply_type: 'color_analysis_image_upload_request'; reply_text: string }
+  | { reply_type: 'vibe_check_image_upload_request'; reply_text: string }
   | {
       reply_type: 'product_card';
       products: Array<{

@@ -36,9 +36,7 @@ export function registerProcessGuards(): void {
       logger.warn(
         {
           err:
-            err instanceof Error
-              ? { message: err.message, name: err.name, stack: err.stack }
-              : err,
+            err instanceof Error ? { message: err.message, name: err.name, stack: err.stack } : err,
         },
         'Uncaught exception (recoverable transport/Redis); not exiting',
       );

@@ -11,7 +11,9 @@ async function countFilesRecursive(dir: string): Promise<number> {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch (err: unknown) {
     const code =
-      err && typeof err === 'object' && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
+      err && typeof err === 'object' && 'code' in err
+        ? (err as NodeJS.ErrnoException).code
+        : undefined;
     if (code === 'ENOENT') {
       return 0;
     }
@@ -50,7 +52,9 @@ export async function clearUploadsDirectory(): Promise<number> {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch (err: unknown) {
       const code =
-        err && typeof err === 'object' && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
+        err && typeof err === 'object' && 'code' in err
+          ? (err as NodeJS.ErrnoException).code
+          : undefined;
       if (code === 'ENOENT') {
         return;
       }

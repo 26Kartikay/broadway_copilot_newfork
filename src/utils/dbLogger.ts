@@ -41,15 +41,16 @@ export async function persistLog(params: LogParams): Promise<void> {
         data.context = { ...(data.context as object), originalUserId: params.userId };
       }
     }
-    
+
     if (params.appUserId !== undefined) data.appUserId = params.appUserId;
     if (params.whatsappId !== undefined) data.whatsappId = params.whatsappId;
-    if (params.profileNameSnapshot !== undefined) data.profileNameSnapshot = params.profileNameSnapshot;
+    if (params.profileNameSnapshot !== undefined)
+      data.profileNameSnapshot = params.profileNameSnapshot;
     if (params.conversationId !== undefined) data.conversationId = params.conversationId;
     if (params.graphRunId !== undefined) data.graphRunId = params.graphRunId;
     if (params.traceId !== undefined) data.traceId = params.traceId;
 
-    void prisma.serviceLog.create({ data }).catch(err => {
+    void prisma.serviceLog.create({ data }).catch((err) => {
       // If DB logging fails, fallback to standard pino logger
       logger.error({ err, originalLog: params }, 'Failed to persist log to database');
     });
@@ -61,12 +62,18 @@ export async function persistLog(params: LogParams): Promise<void> {
 /**
  * Wrapper for persistLog that automatically sets common fields from a request context if available.
  */
-export function dbLog(severity: Severity, service: string, message: string, context?: any, metadata?: Partial<LogParams>) {
+export function dbLog(
+  severity: Severity,
+  service: string,
+  message: string,
+  context?: any,
+  metadata?: Partial<LogParams>,
+) {
   return persistLog({
     severity,
     service,
     message,
     context,
-    ...metadata
+    ...metadata,
   });
 }

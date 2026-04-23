@@ -63,7 +63,10 @@ export const rateLimiter = async (req: Request, _res: Response, next: NextFuncti
           lastMessageAt: Date.now(),
         });
         await redis.expire(key, USER_STATE_TTL_SECONDS);
-        logger.debug({ userId, tokensRemaining: tokenRemaining - 1 }, 'Rate limiter: token consumed');
+        logger.debug(
+          { userId, tokensRemaining: tokenRemaining - 1 },
+          'Rate limiter: token consumed',
+        );
         return 'consumed';
       },
       'degraded_allow',

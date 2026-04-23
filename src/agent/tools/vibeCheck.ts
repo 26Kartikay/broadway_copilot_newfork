@@ -1,10 +1,10 @@
-import type OpenAI from 'openai';
+import { Tonality } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
-import { openaiVisionUserCompletion } from '../openaiVision';
+import { isGuestUser } from '../../utils/user';
+import { anthropicVisionCompletion } from '../anthropicVision';
 
-/** Same JSON shape as legacy vibeCheck node (vision LLM structured output). */
 const VIBE_CHECK_PROMPT = `
 Analyze this outfit as a Broadway fashion stylist.
 
@@ -29,6 +29,7 @@ export interface VibeCheckInput {
   mimeType?: string;
   description?: string;
   sourceImageUrl?: string;
+  tonality?: string;
 }
 
 function clampScore(n: unknown): number {
@@ -37,28 +38,31 @@ function clampScore(n: unknown): number {
   return Math.max(MIN_SCORE, Math.min(10, v));
 }
 
+function parseTonality(raw: string | undefined): Tonality | null {
+  if (!raw?.trim()) return null;
+  const v = raw.trim() as Tonality;
+  if (v === 'savage' || v === 'friendly' || v === 'hype_bff') return v;
+  return null;
+}
+
 export async function vibeCheck(input: VibeCheckInput) {
-  const { userId, imageBase64, mimeType, description, sourceImageUrl } = input;
+  const { userId, imageBase64, mimeType, description, sourceImageUrl, tonality: tonalityRaw } = input;
+  const tonality = parseTonality(tonalityRaw);
 
   try {
     let result: Record<string, unknown>;
 
     if (imageBase64 && mimeType) {
-      const content: OpenAI.Chat.ChatCompletionContentPart[] = [
-        {
-          type: 'image_url',
-          image_url: { url: `data:${mimeType};base64,${imageBase64}` },
-        },
-        { type: 'text', text: VIBE_CHECK_PROMPT },
-      ];
-      const text = await openaiVisionUserCompletion({ content, max_tokens: 1024 });
+      const text = await anthropicVisionCompletion({
+        prompt: VIBE_CHECK_PROMPT,
+        imageBase64,
+        mimeType,
+        maxTokens: 1024,
+      });
       result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     } else {
-      const textPrompt = `Analyze this outfit description: ${description ?? ''}. ${VIBE_CHECK_PROMPT}`;
-      const text = await openaiVisionUserCompletion({
-        content: [{ type: 'text', text: textPrompt }],
-        max_tokens: 1024,
-      });
+      const prompt = `Analyze this outfit description: ${description ?? ''}. ${VIBE_CHECK_PROMPT}`;
+      const text = await anthropicVisionCompletion({ prompt, maxTokens: 1024 });
       result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     }
 
@@ -67,40 +71,20 @@ export async function vibeCheck(input: VibeCheckInput) {
     let accRaw = result.accessories as { score?: number; explanation?: string } | undefined;
 
     if (!fitRaw && result.fit_silhouette_score != null) {
-      fitRaw = {
-        score: Number(result.fit_silhouette_score),
-        explanation: String(result.fit_silhouette_explanation ?? ''),
-      };
+      fitRaw = { score: Number(result.fit_silhouette_score), explanation: String(result.fit_silhouette_explanation ?? '') };
     }
     if (!hairRaw && result.color_harmony_score != null) {
-      hairRaw = {
-        score: Number(result.color_harmony_score),
-        explanation: String(result.color_harmony_explanation ?? ''),
-      };
+      hairRaw = { score: Number(result.color_harmony_score), explanation: String(result.color_harmony_explanation ?? '') };
     }
     if (!accRaw && result.styling_details_score != null) {
-      accRaw = {
-        score: Number(result.styling_details_score),
-        explanation: String(result.styling_details_explanation ?? ''),
-      };
+      accRaw = { score: Number(result.styling_details_score), explanation: String(result.styling_details_explanation ?? '') };
     }
 
-    const clampedFit = {
-      score: clampScore(fitRaw?.score),
-      explanation: String(fitRaw?.explanation ?? ''),
-    };
-    const clampedHairAndSkin = {
-      score: clampScore(hairRaw?.score),
-      explanation: String(hairRaw?.explanation ?? ''),
-    };
-    const clampedAccessories = {
-      score: clampScore(accRaw?.score),
-      explanation: String(accRaw?.explanation ?? ''),
-    };
+    const clampedFit = { score: clampScore(fitRaw?.score), explanation: String(fitRaw?.explanation ?? '') };
+    const clampedHairAndSkin = { score: clampScore(hairRaw?.score), explanation: String(hairRaw?.explanation ?? '') };
+    const clampedAccessories = { score: clampScore(accRaw?.score), explanation: String(accRaw?.explanation ?? '') };
 
-    const vibeCheckResult =
-      (clampedFit.score + clampedHairAndSkin.score + clampedAccessories.score) / 3;
-
+    const vibeCheckResult = (clampedFit.score + clampedHairAndSkin.score + clampedAccessories.score) / 3;
     const recommendations = Array.isArray(result.recommendations)
       ? (result.recommendations as unknown[]).map((x) => String(x))
       : [];
@@ -110,8 +94,8 @@ export async function vibeCheck(input: VibeCheckInput) {
       userImageUrl = normalizeHttpUrlReference(sourceImageUrl.trim()) || null;
     }
 
-    const userExists = await prisma.user.findUnique({ where: { id: userId } });
-    if (userExists) {
+    const userRow = await prisma.user.findUnique({ where: { id: userId } });
+    if (userRow && !isGuestUser(userRow)) {
       await prisma.vibeCheck.create({
         data: {
           userId,
@@ -127,13 +111,10 @@ export async function vibeCheck(input: VibeCheckInput) {
           overall_score: vibeCheckResult,
           recommendations,
           prompt: String(result.prompt ?? description ?? 'image_upload'),
+          ...(tonality ? { tonality } : {}),
         },
       });
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { lastVibeCheckAt: new Date() },
-      });
+      await prisma.user.update({ where: { id: userId }, data: { lastVibeCheckAt: new Date() } });
     }
 
     return {

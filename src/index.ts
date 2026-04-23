@@ -12,11 +12,11 @@ import path from 'path';
 import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
 import { connectPrisma } from './lib/prisma';
-import { getOrCreateUserAndConversation } from './utils/context';
 import { connectRedis, getRedisHealthSnapshot } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { requestLogger } from './middleware/requestLogger';
 import { clearUploadsDirectory } from './utils/clearUploads';
+import { getOrCreateUserAndConversation } from './utils/context';
 import { dbLog } from './utils/dbLogger';
 import { logger } from './utils/logger';
 import { ensureDir, staticUploadsMount } from './utils/paths';
@@ -169,8 +169,7 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       { userId: user.id, appUserId: user.appUserId, messageId: sid },
       'Received chat message',
     );
-    const traceId =
-      typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined;
+    const traceId = typeof res.locals.requestId === 'string' ? res.locals.requestId : undefined;
     void dbLog(
       'INFO',
       'api',

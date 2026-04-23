@@ -1,10 +1,7 @@
 import OpenAI from 'openai';
+import { getPaletteData, resolveSeasonalPalette } from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import {
-  getPaletteData,
-  resolveSeasonalPalette,
-} from '../../data/seasonalPalettes';
 
 export interface SearchCatalogInput {
   query?: string;
@@ -142,9 +139,7 @@ interface VectorRow {
 }
 
 function mapRow(r: Record<string, unknown>): VectorRow | null {
-  const imageUrl = String(
-    r.imageUrl ?? r.imageurl ?? r['imageUrl'] ?? r['imageurl'] ?? '',
-  ).trim();
+  const imageUrl = String(r.imageUrl ?? r.imageurl ?? r['imageUrl'] ?? r['imageurl'] ?? '').trim();
   if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) return null;
   return {
     id: String(r.id),
@@ -193,9 +188,7 @@ function rerankScore(
     const candidateColors = row.colors.map((c) => c.toLowerCase().trim());
     if (candidateColors.includes(nc)) {
       score += 0.25;
-    } else if (
-      candidateColors.some((c) => c.includes(nc) || nc.includes(c))
-    ) {
+    } else if (candidateColors.some((c) => c.includes(nc) || nc.includes(c))) {
       score += 0.1;
     }
   }
@@ -333,8 +326,8 @@ async function searchCatalogIlike(
 ): Promise<FormattedProduct[]> {
   const query = input.query;
   const category = relaxed ? undefined : input.category;
-  const colors = relaxed ? [] : input.colors ?? [];
-  const occasions = relaxed ? [] : input.occasions ?? [];
+  const colors = relaxed ? [] : (input.colors ?? []);
+  const occasions = relaxed ? [] : (input.occasions ?? []);
   const style = relaxed ? undefined : input.style;
 
   const baseConditions: string[] = ['"isActive" = true'];
@@ -406,9 +399,9 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
 
       const hadStrictFilters = Boolean(
         input.category ||
-          input.style ||
-          (input.colors && input.colors.length > 0) ||
-          (input.occasions && input.occasions.length > 0),
+        input.style ||
+        (input.colors && input.colors.length > 0) ||
+        (input.occasions && input.occasions.length > 0),
       );
       if (products.length === 0 && hadStrictFilters) {
         // Same embedding text as `input`, but no SQL filters (avoids 0-row vector + model retry)

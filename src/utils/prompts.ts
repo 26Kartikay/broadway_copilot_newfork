@@ -35,14 +35,18 @@ export async function loadPrompt(
         });
       }
     }
-    
+
     // Replace placeholders with user data
     let personalizedPersona = personaContent;
     if (user) {
       // Use confirmed gender first, then fall back to inferred gender
       const userGender = user.confirmedGender || user.inferredGender;
-      const genderSource = user.confirmedGender ? 'confirmed' : user.inferredGender ? 'inferred' : 'none';
-      
+      const genderSource = user.confirmedGender
+        ? 'confirmed'
+        : user.inferredGender
+          ? 'inferred'
+          : 'none';
+
       // Log gender information
       logger.debug(
         {

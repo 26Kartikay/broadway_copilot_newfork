@@ -1,7 +1,5 @@
 import 'dotenv/config';
 
-import Groq from 'groq-sdk';
-import OpenAI from 'openai';
 import { ZodType } from 'zod';
 import { TraceBuffer } from '../../../agent/tracing';
 import { BaseMessage, SystemMessage } from './messages';
@@ -15,7 +13,7 @@ import type { Tool } from './tools';
  * structured output, and the core logic of running a model.
  */
 export abstract class BaseChatModel implements ModelRunner {
-  protected abstract client: OpenAI | Groq;
+  protected abstract client: unknown;
   public params: ChatModelParams;
   protected boundTools: Tool[] = [];
   protected structuredOutputSchema: ZodType | null = null;
@@ -53,6 +51,14 @@ export abstract class BaseChatModel implements ModelRunner {
     const newInstance = this._clone();
     newInstance.structuredOutputSchema = schema;
     return new StructuredOutputRunnable(newInstance, schema);
+  }
+
+  /**
+   * Used by {@link agentExecutor} to attach a JSON schema tool alongside regular tools
+   * (the schema field is otherwise only set via {@link withStructuredOutput}).
+   */
+  attachExecutorStructuredOutput(schema: ZodType): void {
+    this.structuredOutputSchema = schema;
   }
 
   /**

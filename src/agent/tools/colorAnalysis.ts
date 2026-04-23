@@ -1,22 +1,32 @@
-import type OpenAI from 'openai';
+import { formatColorCombos, shuffleArray } from '../../data/colorAnalysisHelpers';
+import {
+  getPaletteData,
+  isValidPalette,
+  resolveSeasonalPalette,
+} from '../../data/seasonalPalettes';
 import { prisma } from '../../lib/prisma';
-import { invalidateContext } from '../memory/redis';
 import { logger } from '../../utils/logger';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
-import { formatColorCombos, shuffleArray } from '../../data/colorAnalysisHelpers';
-import { getPaletteData, isValidPalette, resolveSeasonalPalette } from '../../data/seasonalPalettes';
-import { openaiVisionUserCompletion } from '../openaiVision';
+import { isGuestUser } from '../../utils/user';
+import { anthropicVisionCompletion } from '../anthropicVision';
+import { setStagedColorAnalysis } from '../memory/redis';
 
 const COLOR_ANALYSIS_VISION_PROMPT = `
 Analyze this person's coloring for seasonal color analysis.
 Identify: skin tone, undertone (warm/cool/neutral), eye color, hair color.
 
-You MUST set "palette_name" to exactly ONE of these twelve identifiers (UPPER_SNAKE_CASE, no spaces):
+STEP 0 — IMAGE QUALITY (faces only for this task)
+Set "quality_ok": true if a real human face is clearly visible with enough detail to judge undertone (slight warmth/cool from lighting is OK).
+Set "quality_ok": false ONLY for unusable inputs: no face, extreme blur, pitch black, face fully covered, or not a person. If false, set "palette_name": "" and still include "quality_issue": "one short sentence for the user".
+
+You MUST set "palette_name" to exactly ONE of these twelve identifiers (UPPER_SNAKE_CASE, no spaces) when quality_ok is true:
 LIGHT_SPRING, TRUE_SPRING, BRIGHT_SPRING, LIGHT_SUMMER, TRUE_SUMMER, SOFT_SUMMER,
 SOFT_AUTUMN, TRUE_AUTUMN, DARK_AUTUMN, TRUE_WINTER, BRIGHT_WINTER, DARK_WINTER
 
 Return JSON only in this format:
 {
+  "quality_ok": true,
+  "quality_issue": "",
   "skin_tone": "Description of skin tone",
   "eye_color": "Description of eye color",
   "hair_color": "Description of hair color",
@@ -37,7 +47,6 @@ export interface ColorAnalysisInput {
   hairColor?: string;
   eyeColor?: string;
   userId: string;
-  /** HTTP chat: user's uploaded image URL for the card thumbnail (Prisma Media may not exist yet). */
   sourceImageUrl?: string;
 }
 
@@ -48,21 +57,24 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
     let result: Record<string, unknown>;
 
     if (imageBase64 && mimeType) {
-      const content: OpenAI.Chat.ChatCompletionContentPart[] = [
-        {
-          type: 'image_url',
-          image_url: { url: `data:${mimeType};base64,${imageBase64}` },
-        },
-        { type: 'text', text: COLOR_ANALYSIS_VISION_PROMPT },
-      ];
-      const text = await openaiVisionUserCompletion({ content, max_tokens: 1024 });
-      result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
-    } else {
-      const textPrompt = `Based on these details: Skin tone: ${skinTone}, Hair: ${hairColor}, Eyes: ${eyeColor}. ${COLOR_ANALYSIS_VISION_PROMPT}`;
-      const text = await openaiVisionUserCompletion({
-        content: [{ type: 'text', text: textPrompt }],
-        max_tokens: 1024,
+      const text = await anthropicVisionCompletion({
+        prompt: COLOR_ANALYSIS_VISION_PROMPT,
+        imageBase64,
+        mimeType,
+        maxTokens: 1024,
       });
+      result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
+
+      const qOk = result.quality_ok !== false && String(result.quality_ok) !== 'false';
+      if (!qOk) {
+        return {
+          error: String(result.quality_issue || "This photo isn't quite usable for a color read."),
+          quality_reject: true,
+        };
+      }
+    } else {
+      const textPrompt = `Based on these details: Skin tone: ${skinTone}, Hair: ${hairColor}, Eyes: ${eyeColor}. No photo was supplied — set "quality_ok": true. ${COLOR_ANALYSIS_VISION_PROMPT}`;
+      const text = await anthropicVisionCompletion({ prompt: textPrompt, maxTokens: 1024 });
       result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     }
 
@@ -87,30 +99,22 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
       formatColorCombos(paletteData.twoColorCombos, paletteData.topColors),
     );
 
-    const userExists = await prisma.user.findUnique({ where: { id: userId } });
-    if (userExists) {
-      await prisma.colorAnalysis.create({
-        data: {
-          userId,
-          skin_tone: String(result.skin_tone ?? ''),
-          eye_color: String(result.eye_color ?? ''),
-          hair_color: String(result.hair_color ?? ''),
-          undertone: String(result.undertone ?? ''),
-          compliment: String(result.compliment ?? ''),
-          palette_name: canonical,
-          palette_description: paletteData.description,
-          colors_suited: (result.colors_suited as string[]) ?? [],
-          colors_to_wear: (result.colors_to_wear as string[]) ?? [],
-          colors_to_avoid: (result.colors_to_avoid as string[]) ?? [],
-        },
+    const userRow = await prisma.user.findUnique({ where: { id: userId } });
+    if (userRow && !isGuestUser(userRow)) {
+      await setStagedColorAnalysis(userId, {
+        skin_tone: String(result.skin_tone ?? ''),
+        eye_color: String(result.eye_color ?? ''),
+        hair_color: String(result.hair_color ?? ''),
+        undertone: String(result.undertone ?? ''),
+        compliment: String(result.compliment ?? ''),
+        palette_name: canonical,
+        palette_description: paletteData.description,
+        colors_suited: Array.isArray(result.colors_suited)
+          ? (result.colors_suited as unknown[]).map(String)
+          : [],
+        colors_to_wear: result.colors_to_wear ?? [],
+        colors_to_avoid: result.colors_to_avoid ?? [],
       });
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { lastColorAnalysisAt: new Date() },
-      });
-
-      await invalidateContext(userId);
     }
 
     return {
