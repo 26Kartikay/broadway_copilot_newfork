@@ -67,7 +67,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       UPLOADS_ROOT: ${UPLOADS_ROOT:-/usr/src/app/uploads}
       CHOKIDAR_USEPOLLING: "true"
@@ -93,13 +93,13 @@ services:
       dockerfile: dashboard/Dockerfile
       args:
         DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
-        REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+        REDIS_URL: redis://redis:6379
         PORT: ${DASHBOARD_PORT:-8090}
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_URL: redis://redis:6379
       PORT: ${DASHBOARD_PORT:-8090}
       ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
       NODE_ENV: ${NODE_ENV:-development}
