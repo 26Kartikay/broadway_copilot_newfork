@@ -69,11 +69,19 @@ export async function handleSaveColorAnalysis(state: GraphState): Promise<GraphS
     if (!guestUser && userResponse === 'save_color_analysis_yes' && paletteNameToSave) {
       const paletteData = getPaletteData(paletteNameToSave);
       const baseUrl = getServerUrlBase();
-      const finalPdfPath = paletteData.pdfPath;
+      const finalPdfPath = paletteData.pdfPath.replace(/^\/+/, '');
+      const mediaUrl = baseUrl ? `${baseUrl}/${finalPdfPath}` : `/${finalPdfPath}`;
+
+      if (!baseUrl) {
+        logger.warn(
+          { userId, finalPdfPath },
+          'SERVER_URL is unset; palette PDF uses root-relative URL. Set SERVER_URL for native apps (absolute PDF links).',
+        );
+      }
 
       confirmationReplies.push({
         reply_type: 'pdf',
-        media_url: `${baseUrl}/${finalPdfPath}`,
+        media_url: mediaUrl,
         reply_text: 'Here is your color palette guide.',
       });
     }

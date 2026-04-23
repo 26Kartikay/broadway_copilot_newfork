@@ -1136,6 +1136,28 @@
       }
     }
 
+    /** Absolute URL for img/iframe: accepts https URLs or root-relative paths (e.g. /palettes/x.pdf when SERVER_URL unset). */
+    function resolveMediaUrl(string) {
+      if (!string || typeof string !== 'string') return null;
+      const trimmed = string.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith('data:')) {
+        return trimmed.includes(',') ? trimmed : null;
+      }
+      try {
+        const u = new URL(trimmed);
+        if ((u.protocol === 'http:' || u.protocol === 'https:') && u.hostname.length > 0) {
+          return trimmed;
+        }
+      } catch (_) {}
+      if (trimmed.startsWith('/')) {
+        try {
+          return new URL(trimmed, window.location.origin).href;
+        } catch (_) {}
+      }
+      return null;
+    }
+
     function addMessage(content, isUser, buttons = null, imageUrl = null, products = null, colorAnalysisCard = null, pdfUrl = null, vibeCheckCard = null) {
       const container = document.getElementById('messagesContainer');
       
@@ -1148,14 +1170,14 @@
       
       let bubbleContent = content ? `<div class="message-text">${formatText(content)}</div>` : '';
       
-      // Only add image if imageUrl is a valid URL
-      if (imageUrl && isValidUrl(imageUrl)) {
-        bubbleContent += `<img src="${imageUrl}" alt="Image" onerror="this.style.display='none'">`;
+      const resolvedImg = imageUrl ? resolveMediaUrl(imageUrl) : null;
+      if (resolvedImg) {
+        bubbleContent += `<img src="${resolvedImg}" alt="Image" onerror="this.style.display='none'">`;
       }
-      
-      // Only add PDF if pdfUrl is a valid URL
-      if (pdfUrl && isValidUrl(pdfUrl)) {
-        bubbleContent += `<iframe src="${pdfUrl}" width="100%" height="500px"></iframe>`;
+
+      const resolvedPdf = pdfUrl ? resolveMediaUrl(pdfUrl) : null;
+      if (resolvedPdf) {
+        bubbleContent += `<iframe src="${resolvedPdf}" width="100%" height="500px"></iframe>`;
       }
 
       messageDiv.innerHTML = `<div class="message-bubble">${bubbleContent}</div>`;
@@ -1458,8 +1480,8 @@
         if (data.replies && data.replies.length > 0) {
           data.replies.forEach(reply => {
             const buttons = reply.buttons || null;
-            // Only use media_url if it's a valid URL and reply type is 'image'
-            const imageUrl = reply.reply_type === 'image' && isValidUrl(reply.media_url) ? reply.media_url : null;
+            const imageUrl =
+              reply.reply_type === 'image' ? resolveMediaUrl(reply.media_url) : null;
             const products = reply.reply_type === 'product_card' ? reply.products : null;
             const colorAnalysisCard = reply.reply_type === 'color_analysis_card' ? {
               palette_name: reply.palette_name || '',
@@ -1487,7 +1509,7 @@
             } else if (reply.reply_type === 'vibe_check_card') {
               addMessage('', false, null, null, null, null, null, vibeCheckCard);
             } else if (reply.reply_type === 'pdf') {
-              const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
+              const pdfUrl = resolveMediaUrl(reply.media_url);
               addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
             } else if (reply.reply_type === 'text') {
               // Handle plain text replies
@@ -1550,8 +1572,8 @@
         if (data.replies && data.replies.length > 0) {
           data.replies.forEach(reply => {
             const buttons = reply.buttons || null;
-            // Only use media_url if it's a valid URL and reply type is 'image'
-            const imageUrl = reply.reply_type === 'image' && isValidUrl(reply.media_url) ? reply.media_url : null;
+            const imageUrl =
+              reply.reply_type === 'image' ? resolveMediaUrl(reply.media_url) : null;
             const products = reply.reply_type === 'product_card' ? reply.products : null;
             const colorAnalysisCard = reply.reply_type === 'color_analysis_card' ? {
               palette_name: reply.palette_name || '',
@@ -1579,7 +1601,7 @@
             } else if (reply.reply_type === 'vibe_check_card') {
               addMessage('', false, null, null, null, null, null, vibeCheckCard);
             } else if (reply.reply_type === 'pdf') {
-              const pdfUrl = isValidUrl(reply.media_url) ? reply.media_url : null;
+              const pdfUrl = resolveMediaUrl(reply.media_url);
               addMessage(replyText, false, buttons, imageUrl, null, null, pdfUrl);
             } else if (reply.reply_type === 'text') {
               // Handle plain text replies
