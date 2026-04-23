@@ -67,7 +67,10 @@ function toAnthropicMessages(msgs: BaseMessage[]): Anthropic.Messages.MessagePar
     if (m.role === 'user') {
       const content: Anthropic.Messages.ContentBlockParam[] = m.content.map((p) =>
         p.type === 'text'
-          ? ({ type: 'text', text: p.text } satisfies Anthropic.Messages.TextBlockParam)
+          ? ({
+              type: 'text',
+              text: p.text.trim().length > 0 ? p.text : '(empty)',
+            } satisfies Anthropic.Messages.TextBlockParam)
           : imagePartToBlock(p as ImagePart),
       );
       out.push({ role: 'user', content });
@@ -90,7 +93,8 @@ function toAnthropicMessages(msgs: BaseMessage[]): Anthropic.Messages.MessagePar
           input: tc.arguments as Record<string, unknown>,
         });
       }
-      if (blocks.length === 0) blocks.push({ type: 'text', text: '' });
+      // Anthropic rejects empty text blocks; never use text: ''
+      if (blocks.length === 0) blocks.push({ type: 'text', text: '[no text]' });
       out.push({ role: 'assistant', content: blocks });
       i++;
     } else if (m.role === 'tool') {
@@ -105,7 +109,7 @@ function toAnthropicMessages(msgs: BaseMessage[]): Anthropic.Messages.MessagePar
         results.push({
           type: 'tool_result',
           tool_use_id: t.tool_call_id ?? '',
-          content: toolContent,
+          content: toolContent.trim().length > 0 ? toolContent : '{}',
           is_error: t.meta?.isError === true,
         });
         i++;

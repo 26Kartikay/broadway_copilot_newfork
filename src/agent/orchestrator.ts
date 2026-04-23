@@ -38,6 +38,10 @@ const responseSchema = z.object({
   suggested_follow_up: z.string().optional().describe('One follow-up question if relevant'),
 });
 
+/** Match current-turn fallback so Redis never stores a bare empty user line (Anthropic rejects empty text blocks). */
+const EMPTY_USER_HISTORY_PLACEHOLDER = '(empty)';
+const EMPTY_ASSISTANT_HISTORY_PLACEHOLDER = '[no text]';
+
 function extractTextFromStoredContent(content: unknown): string {
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -47,6 +51,12 @@ function extractTextFromStoredContent(content: unknown): string {
       .join(' ');
   }
   return String(content);
+}
+
+/** Non-empty text for replaying a StoredMessage into UserMessage / AssistantMessage. */
+function textForHistoryReplay(role: 'user' | 'assistant', extracted: string): string {
+  if (extracted.trim().length > 0) return extracted;
+  return role === 'user' ? EMPTY_USER_HISTORY_PLACEHOLDER : EMPTY_ASSISTANT_HISTORY_PLACEHOLDER;
 }
 
 function buildRollingContext(history: StoredMessage[]): string {
@@ -182,15 +192,16 @@ export class ChatOrchestrator {
         : toolNames;
     const tools = allAvailableTools.filter((t) => effectiveToolNames.includes(t.name));
 
-    // Step 7: Convert history to messages (last 12)
+    // Step 7: Convert history to messages (last 12) — never replay empty text (Anthropic 400)
     const conversationHistory = history.slice(-12).map((m) => {
-      const content = extractTextFromStoredContent(m.content);
+      const raw = extractTextFromStoredContent(m.content);
+      const content = textForHistoryReplay(m.role === 'user' ? 'user' : 'assistant', raw);
       return m.role === 'user' ? new UserMessage(content) : new AssistantMessage(content);
     });
 
     // Step 8: Build current user message
     const imageParts = buildImageMessageContent(userImages);
-    const textBody = messageInput.Body || messageInput.ButtonText || '(empty)';
+    const textBody = messageInput.Body || messageInput.ButtonText || EMPTY_USER_HISTORY_PLACEHOLDER;
     const currentContent: MessageContent = [...imageParts, { type: 'text', text: textBody }];
     const currentMessage = new UserMessage(currentContent);
 
@@ -213,12 +224,15 @@ export class ChatOrchestrator {
       traceBuffer,
     );
 
-    // Step 10: Persist turn to Redis history
-    await appendToHistory(
-      userId,
-      messageInput.Body || messageInput.ButtonText || '',
-      result.output.reply,
-    );
+    // Step 10: Persist turn to Redis history (never store empty user/assistant strings)
+    const persistedUserText =
+      (messageInput.Body || messageInput.ButtonText || '').trim() || EMPTY_USER_HISTORY_PLACEHOLDER;
+    const replyRaw = result.output.reply;
+    const persistedAssistant =
+      typeof replyRaw === 'string' && replyRaw.trim().length > 0
+        ? replyRaw
+        : EMPTY_ASSISTANT_HISTORY_PLACEHOLDER;
+    await appendToHistory(userId, persistedUserText, persistedAssistant);
 
     // Step 11: Map result → AgentResult
     const normalizedToolResults = result.toolResults.map((tr) => ({
