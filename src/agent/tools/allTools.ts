@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Tool } from '../../lib/ai/core/tools';
 import { MessageInput } from '../../lib/chat/types';
+import { SearchSession } from '../memory/redis';
 import { beautyAdvisor } from './beautyAdvisor';
 import { searchCatalog } from './catalog';
 import { analyzeColorSeason } from './colorAnalysis';
@@ -12,14 +13,18 @@ import { vibeCheck } from './vibeCheck';
 function cleanArgs(args: any): any {
   const result: any = {};
   for (const key in args) {
-    if (args[key] !== undefined) {
-      result[key] = args[key];
-    }
+    if (args[key] !== undefined) result[key] = args[key];
   }
   return result;
 }
 
-export function getTools(userId: string, userImages: any[], messageInput: MessageInput): Tool[] {
+export function getTools(
+  userId: string,
+  userImages: any[],
+  messageInput: MessageInput,
+  searchSession?: SearchSession,
+  gender?: string,
+): Tool[] {
   const sourceImageUrl = messageInput.MediaUrl0;
 
   return [
@@ -41,7 +46,41 @@ export function getTools(userId: string, userImages: any[], messageInput: Messag
         colorSeason: z.string().optional().describe("User's color season for filtering colors"),
         limit: z.number().optional().describe('Number of products to return (max 12)'),
       }),
-      func: (args) => searchCatalog(cleanArgs(args)),
+      func: async (args) => {
+        const cleaned = cleanArgs(args);
+
+        // ── Hybrid recommendation context injection ──────────────────────────
+        if (searchSession) {
+          // Inject palette from post-service context ONLY if:
+          //   • a post-service color season exists
+          //   • palette has NOT been normalized (no dislike)
+          //   • LLM didn't already specify a colorSeason
+          if (
+            searchSession.postServiceColorSeason &&
+            !searchSession.paletteNormalized &&
+            !cleaned.colorSeason
+          ) {
+            cleaned.colorSeason = searchSession.postServiceColorSeason;
+          }
+
+          // If palette was normalized after dislike, strip colorSeason even if LLM passed one
+          if (searchSession.paletteNormalized) {
+            delete cleaned.colorSeason;
+          }
+
+          // Always exclude already-seen products (dedup across "show more" calls)
+          if (searchSession.lastProductIds.length > 0) {
+            cleaned.excludeProductIds = searchSession.lastProductIds;
+          }
+        }
+
+        // Inject gender for hard SQL filtering — only if LLM didn't explicitly set one
+        if (gender && !cleaned.gender) {
+          cleaned.gender = gender;
+        }
+
+        return searchCatalog(cleaned);
+      },
     }),
     new Tool({
       name: 'analyze_color_season',
@@ -75,7 +114,7 @@ export function getTools(userId: string, userImages: any[], messageInput: Messag
     new Tool({
       name: 'recall_user_preferences',
       description:
-        'Recall what you know about this user - their color season, style preferences, past interactions.',
+        'Recall what you know about this user — their color season, style preferences, past interactions.',
       schema: z.object({
         context: z.string().optional().describe('Optional context to search for specific memories'),
       }),

@@ -214,6 +214,22 @@ async function runVibeCheckOnMedia(
   return { replies, pendingOut: null };
 }
 
+/** Explicit escape words — user clearly wants to exit the current flow. */
+function isExplicitEscape(text: string): boolean {
+  return /\b(never mind|nevermind|forget it|cancel|go back|stop|skip|not now|changed my mind|actually no|exit|quit|not interested|no thanks|take me back|let me out|abort|never mind)\b/i.test(
+    text,
+  );
+}
+
+/** Strong redirect — user is clearly asking for a different service while in an image-upload state. */
+function isStrongRedirect(text: string): boolean {
+  if (!text.trim()) return false;
+  return (
+    /\b(show me|find me|search|looking for|recommend|suggest|shop|browse|want to buy|help me find)\b/i.test(text) ||
+    /\b(dress|shirt|top|jeans|pants|shoes|bag|jacket|skirt|blazer|outfit|style me|beauty|skincare|makeup)\b/i.test(text)
+  );
+}
+
 export async function tryHandleHttpChatFlows(
   prismaUserId: string,
   input: MessageInput,
@@ -229,6 +245,26 @@ export async function tryHandleHttpChatFlows(
   const pending = await getHttpPendingFlow(prismaUserId);
 
   try {
+    // ── Flow escape ────────────────────────────────────────────────────────────
+    // If user is in any pending state and clearly wants out, clear the flow and
+    // let the orchestrator handle their message normally.
+    if (pending.type !== 'NONE' && !bp) {
+      const shouldEscape =
+        isExplicitEscape(utterance) ||
+        // Image-upload states are also escapable on a strong redirect intent
+        ((pending.type === 'COLOR_ANALYSIS_IMAGE' || pending.type === 'VIBE_CHECK_IMAGE') &&
+          nMedia === 0 &&
+          isStrongRedirect(utterance));
+
+      if (shouldEscape) {
+        await clearHttpPendingFlow(prismaUserId);
+        logger.info({ prismaUserId, pendingType: pending.type, utterance: utterance.slice(0, 60) }, 'User escaped pending flow');
+        // Return handled: false so the orchestrator processes the message
+        return { handled: false };
+      }
+    }
+    // ── /Flow escape ───────────────────────────────────────────────────────────
+
     // --- Save color analysis (registered only meaningful) ---
     if (bp === 'save_color_analysis_yes') {
       const staged = await getStagedColorAnalysis(prismaUserId);

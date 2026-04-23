@@ -10,8 +10,10 @@ export interface SearchCatalogInput {
   occasions?: string[];
   style?: string;
   colorSeason?: string;
+  gender?: string;             // 'male' | 'female' — soft signal used in reranking
   priceRange?: { min: number; max: number };
   limit?: number;
+  excludeProductIds?: string[]; // Never return these (already shown this session)
 }
 
 export interface FormattedProduct {
@@ -166,6 +168,7 @@ function rerankScore(
     category: string | null;
     occasion: string | null;
     style: string | null;
+    gender: string | null;
   },
 ): number {
   let score = row.similarity;
@@ -210,11 +213,26 @@ function rerankScore(
     if (row.style.toLowerCase().includes(intent.style.toLowerCase())) score += 0.12;
   }
 
+  // Gender soft signal — boost matching, mild penalty for mismatch
+  if (intent.gender && aud.gender) {
+    const rg = aud.gender.toLowerCase();
+    const ig = intent.gender.toLowerCase();
+    if (rg === 'unisex') score += 0.05;
+    else if (rg === ig) score += 0.2;
+    else score -= 0.1;
+  }
+
   const cat = row.category.toLowerCase();
   if (cat.includes('clothing') || cat.includes('fashion')) score += 0.05;
   if (cat.includes('footwear')) score += 0.05;
 
   return score;
+}
+
+function shouldApplyGenderFilter(category?: string): boolean {
+  if (!category) return true;
+  const c = category.toUpperCase();
+  return c.includes('CLOTHING') || c.includes('FASHION') || c.includes('FOOTWEAR');
 }
 
 async function searchCatalogVector(
@@ -256,6 +274,18 @@ async function searchCatalogVector(
     clauses.push(`"occasions" && $${p++}::text[]`);
     params.push(fi.occasions);
   }
+  const excludeIds = input.excludeProductIds?.filter(Boolean) ?? [];
+  if (excludeIds.length > 0) {
+    clauses.push(`id != ALL($${p++}::text[])`);
+    params.push(excludeIds);
+  }
+  const genderToFilter = input.gender?.toLowerCase().trim();
+  if (genderToFilter && shouldApplyGenderFilter(fi.category)) {
+    clauses.push(
+      `("componentTags" IS NULL OR "componentTags"->>'gender' IS NULL OR LOWER("componentTags"->>'gender') = 'unisex' OR LOWER("componentTags"->>'gender') = $${p++})`,
+    );
+    params.push(genderToFilter);
+  }
 
   const vectorParam = p;
   params.push(vectorJson);
@@ -280,6 +310,7 @@ async function searchCatalogVector(
     category: input.category?.trim() ?? null,
     occasion: input.occasions?.[0]?.trim() ?? null,
     style: input.style?.trim() ?? null,
+    gender: input.gender?.toLowerCase().trim() ?? null,
   };
 
   const candidates: VectorRow[] = [];
@@ -353,6 +384,18 @@ async function searchCatalogIlike(
   if (query?.trim()) {
     baseConditions.push(`"searchDoc" ILIKE $${paramIndex++}`);
     params.push(`%${query.trim()}%`);
+  }
+  const ilikeExcludeIds = input.excludeProductIds?.filter(Boolean) ?? [];
+  if (ilikeExcludeIds.length > 0) {
+    baseConditions.push(`id != ALL($${paramIndex++}::text[])`);
+    params.push(ilikeExcludeIds);
+  }
+  const ilikeGender = input.gender?.toLowerCase().trim();
+  if (ilikeGender && shouldApplyGenderFilter(category)) {
+    baseConditions.push(
+      `("componentTags" IS NULL OR "componentTags"->>'gender' IS NULL OR LOWER("componentTags"->>'gender') = 'unisex' OR LOWER("componentTags"->>'gender') = $${paramIndex++})`,
+    );
+    params.push(ilikeGender);
   }
 
   const sql = `

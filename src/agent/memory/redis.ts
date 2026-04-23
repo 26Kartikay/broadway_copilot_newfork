@@ -315,3 +315,79 @@ export async function clearStagedColorAnalysis(userId: string): Promise<void> {
     logger.error({ err, userId }, 'clearStagedColorAnalysis failed');
   }
 }
+
+// ─── Search session: hybrid product recommendation context ───────────────────
+
+export interface SearchSession {
+  /** All product IDs surfaced this session — never repeat these on "show more". */
+  lastProductIds: string[];
+  /** Color season injected after a color analysis — emphasize in next product search. */
+  postServiceColorSeason: string | null;
+  /** Flipped true when user expresses dislike — stops palette emphasis. */
+  paletteNormalized: boolean;
+}
+
+const SEARCH_SESSION_KEY = (userId: string) => `broadway:search_session:${userId}`;
+const SEARCH_SESSION_TTL = 60 * 60 * 2; // 2 hours
+const MAX_SESSION_PRODUCT_IDS = 36; // ~3 pages, then auto-reset
+
+function emptySearchSession(): SearchSession {
+  return { lastProductIds: [], postServiceColorSeason: null, paletteNormalized: false };
+}
+
+export async function getSearchSession(userId: string): Promise<SearchSession> {
+  try {
+    const raw = await redis.get(SEARCH_SESSION_KEY(userId));
+    if (!raw) return emptySearchSession();
+    return JSON.parse(raw.toString()) as SearchSession;
+  } catch (err) {
+    logger.error({ err, userId }, 'getSearchSession failed');
+    return emptySearchSession();
+  }
+}
+
+async function saveSearchSession(userId: string, session: SearchSession): Promise<void> {
+  try {
+    await redis.set(SEARCH_SESSION_KEY(userId), JSON.stringify(session), {
+      EX: SEARCH_SESSION_TTL,
+    });
+  } catch (err) {
+    logger.error({ err, userId }, 'saveSearchSession failed');
+  }
+}
+
+/** Called after a product search — accumulate IDs, reset if cap exceeded. */
+export async function recordShownProducts(userId: string, productIds: string[]): Promise<void> {
+  if (!productIds.length) return;
+  const session = await getSearchSession(userId);
+  const combined = [...new Set([...session.lastProductIds, ...productIds])];
+  // Auto-reset after cap: user has seen enough, start fresh next page
+  session.lastProductIds = combined.length > MAX_SESSION_PRODUCT_IDS ? productIds : combined;
+  await saveSearchSession(userId, session);
+}
+
+/** Called after color analysis succeeds — next product search should use this season. */
+export async function setPostServiceColorSeason(userId: string, season: string): Promise<void> {
+  const session = await getSearchSession(userId);
+  session.postServiceColorSeason = season;
+  session.paletteNormalized = false;
+  await saveSearchSession(userId, session);
+}
+
+/** Called when user expresses dislike — stop emphasizing palette, start fresh product list. */
+export async function normalizeAndRefreshSearch(userId: string): Promise<void> {
+  const session = await getSearchSession(userId);
+  session.paletteNormalized = true;
+  // Clear seen IDs so user gets a genuinely fresh set
+  session.lastProductIds = [];
+  await saveSearchSession(userId, session);
+}
+
+/** Full reset — e.g. on main menu or explicit "start over". */
+export async function resetSearchSession(userId: string): Promise<void> {
+  try {
+    await redis.del(SEARCH_SESSION_KEY(userId));
+  } catch (err) {
+    logger.error({ err, userId }, 'resetSearchSession failed');
+  }
+}
