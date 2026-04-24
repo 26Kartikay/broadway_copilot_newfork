@@ -5,8 +5,8 @@ import { logger } from '../../utils/logger';
 const HISTORY_KEY = (userId: string) => `broadway:chat:${userId}`;
 const CONTEXT_KEY = (userId: string) => `broadway:ctx:${userId}`;
 const MAX_MESSAGES = 30;
-const HISTORY_TTL = 60 * 60 * 24 * 7; // 7 days
-const CONTEXT_TTL = 60 * 60; // 1 hour
+const HISTORY_TTL = 60 * 30 ; // 30 mins
+const CONTEXT_TTL = 60 * 30; // 1 hour
 
 export interface StoredMessage {
   role: 'user' | 'assistant';
