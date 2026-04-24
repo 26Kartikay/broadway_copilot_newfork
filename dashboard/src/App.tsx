@@ -1,7 +1,7 @@
 import { Activity, LayoutDashboard, LogOut, Search, Settings, Trash2, Users } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useSearchParams } from 'react-router-dom';
-import { api, ServiceLog, User } from './api.ts';
+import { api, ApiRequestLog, ServiceLog, User } from './api.ts';
 
 const Dashboard = () => {
   const [health, setHealth] = useState<any>(null);
@@ -44,27 +44,55 @@ const Dashboard = () => {
 };
 
 const LogsPage = () => {
-  const [logs, setLogs] = useState<ServiceLog[]>([]);
+  const [logSource, setLogSource] = useState<'service' | 'api'>('api');
+  const [serviceLogs, setServiceLogs] = useState<ServiceLog[]>([]);
+  const [apiLogs, setApiLogs] = useState<ApiRequestLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [severity, setSeverity] = useState<string>('ALL');
   const [userFilter, setUserFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [serviceNameFilter, setServiceNameFilter] = useState('');
+  const [endpointFilter, setEndpointFilter] = useState('');
+  const [httpStatusFilter, setHttpStatusFilter] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true);
-      api
-        .getLogs({
-          severity: severity === 'ALL' ? undefined : severity,
-          userId: userFilter.trim() || undefined,
-          search: search.trim() || undefined,
-          limit: '100',
-        })
-        .then(setLogs)
-        .finally(() => setLoading(false));
+      const common = {
+        severity: severity === 'ALL' ? undefined : severity,
+        userId: userFilter.trim() || undefined,
+        search: search.trim() || undefined,
+        limit: '100',
+      };
+      if (logSource === 'service') {
+        void api
+          .getLogs({
+            ...common,
+            service: serviceNameFilter.trim() || undefined,
+          })
+          .then(setServiceLogs)
+          .finally(() => setLoading(false));
+      } else {
+        void api
+          .getApiRequestLogs({
+            ...common,
+            endpoint: endpointFilter.trim() || undefined,
+            httpStatus: httpStatusFilter.trim() || undefined,
+          })
+          .then(setApiLogs)
+          .finally(() => setLoading(false));
+      }
     }, 300);
     return () => clearTimeout(t);
-  }, [severity, userFilter, search]);
+  }, [
+    logSource,
+    severity,
+    userFilter,
+    search,
+    serviceNameFilter,
+    endpointFilter,
+    httpStatusFilter,
+  ]);
 
   const severityColor = (sev: string) => {
     switch (sev) {
@@ -76,7 +104,7 @@ const LogsPage = () => {
     }
   };
 
-  const userCell = (log: ServiceLog) => {
+  const userCellService = (log: ServiceLog) => {
     const label =
       log.user?.profileName ||
       log.profileNameSnapshot ||
@@ -96,19 +124,55 @@ const LogsPage = () => {
     );
   };
 
+  const userCellApi = (log: ApiRequestLog) => {
+    const label =
+      log.user?.profileName || log.userName || (log.userId ? `${log.userId.slice(0, 8)}…` : null);
+    const searchParam = log.userId || log.user?.appUserId || log.user?.whatsappId || '';
+    if (!label) return <span className="text-muted">—</span>;
+    return (
+      <NavLink
+        to={searchParam ? `/users?search=${encodeURIComponent(searchParam)}` : '/users'}
+        className="underline font-mono text-xs"
+        style={{ color: 'var(--color-primary)' }}
+        title={log.userId || log.user?.appUserId || ''}
+      >
+        {label}
+      </NavLink>
+    );
+  };
+
+  const exportPayload = logSource === 'service' ? serviceLogs : apiLogs;
+  const exportName = logSource === 'service' ? 'service-logs' : 'api-request-logs';
+
   return (
     <div className="p-6">
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex justify-between items-center flex-wrap gap-4">
-          <h1 className="text-2xl font-bold">Service Logs</h1>
-          <div className="flex gap-2 flex-wrap">
+          <h1 className="text-2xl font-bold">Logs</h1>
+          <div className="flex gap-2 flex-wrap items-center">
+            <div className="flex rounded border border-color-border overflow-hidden">
+              <button
+                type="button"
+                className={`px-3 py-2 text-sm ${logSource === 'service' ? 'bg-primary text-white' : 'bg-surface'}`}
+                onClick={() => setLogSource('service')}
+              >
+                Service logs
+              </button>
+              <button
+                type="button"
+                className={`px-3 py-2 text-sm ${logSource === 'api' ? 'bg-primary text-white' : 'bg-surface'}`}
+                onClick={() => setLogSource('api')}
+              >
+                API / HTTP logs
+              </button>
+            </div>
             <select
               className="input"
               style={{ width: 'auto' }}
               value={severity}
               onChange={(e) => setSeverity(e.target.value)}
             >
-              <option value="ALL">All Severities</option>
+              <option value="ALL">All severities</option>
               <option value="DEBUG">DEBUG</option>
               <option value="INFO">INFO</option>
               <option value="WARNING">WARNING</option>
@@ -119,10 +183,10 @@ const LogsPage = () => {
               type="button"
               className="btn btn-secondary"
               onClick={() => {
-                const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+                const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
-                a.download = `service-logs-${new Date().toISOString().slice(0, 10)}.json`;
+                a.download = `${exportName}-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
                 URL.revokeObjectURL(a.href);
               }}
@@ -138,7 +202,11 @@ const LogsPage = () => {
               type="text"
               className="input"
               style={{ border: 'none', padding: '0.25rem', flex: 1 }}
-              placeholder="Search message, trace id, app user id, phone, name…"
+              placeholder={
+                logSource === 'service'
+                  ? 'Search message, trace id, app user id, phone, name…'
+                  : 'Search endpoint, intent, inference text, error, request id…'
+              }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -147,44 +215,126 @@ const LogsPage = () => {
             type="text"
             className="input"
             style={{ maxWidth: '280px' }}
-            placeholder="Match user (internal id, app id, or WA id)"
+            placeholder="User: internal id, app id, or WA id"
             value={userFilter}
             onChange={(e) => setUserFilter(e.target.value)}
           />
+          {logSource === 'service' ? (
+            <input
+              type="text"
+              className="input"
+              style={{ maxWidth: '200px' }}
+              placeholder="Service name (e.g. api, agent)"
+              value={serviceNameFilter}
+              onChange={(e) => setServiceNameFilter(e.target.value)}
+            />
+          ) : (
+            <>
+              <input
+                type="text"
+                className="input"
+                style={{ maxWidth: '220px' }}
+                placeholder="Endpoint contains (e.g. /api/chat)"
+                value={endpointFilter}
+                onChange={(e) => setEndpointFilter(e.target.value)}
+              />
+              <input
+                type="text"
+                className="input"
+                style={{ maxWidth: '100px' }}
+                placeholder="HTTP 200"
+                value={httpStatusFilter}
+                onChange={(e) => setHttpStatusFilter(e.target.value)}
+              />
+            </>
+          )}
         </div>
       </div>
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Severity</th>
-              <th>Service</th>
-              <th>Message</th>
-              <th>User</th>
-              <th>Trace ID</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center' }}>Loading...</td></tr>
-            ) : Array.isArray(logs) && logs.length > 0 ? logs.map(log => (
-              <tr key={log.id} className="text-sm">
-                <td className="text-muted">{new Date(log.createdAt).toLocaleString()}</td>
-                <td><span className={`badge ${severityColor(log.severity)}`}>{log.severity}</span></td>
-                <td><span className="text-muted">{log.service}</span></td>
-                <td style={{ maxWidth: '400px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={log.message}>
-                  {log.message}
-                </td>
-                <td>{userCell(log)}</td>
-                <td className="text-muted text-xs">{log.traceId || '-'}</td>
+      {logSource === 'service' ? (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Severity</th>
+                <th>Service</th>
+                <th>Message</th>
+                <th>User</th>
+                <th>Trace ID</th>
               </tr>
-            )) : (
-              <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No logs found.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={6} style={{ textAlign: 'center' }}>Loading...</td></tr>
+              ) : serviceLogs.length > 0 ? serviceLogs.map((log) => (
+                <tr key={log.id} className="text-sm">
+                  <td className="text-muted">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td><span className={`badge ${severityColor(log.severity)}`}>{log.severity}</span></td>
+                  <td><span className="text-muted">{log.service}</span></td>
+                  <td style={{ maxWidth: '400px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={log.message}>
+                    {log.message}
+                  </td>
+                  <td>{userCellService(log)}</td>
+                  <td className="text-muted text-xs">{log.traceId || '—'}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No service logs found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Severity</th>
+                <th>Endpoint</th>
+                <th>Status</th>
+                <th>Latency</th>
+                <th>User</th>
+                <th>Intent</th>
+                <th>Inference (intent v2)</th>
+                <th>Error</th>
+                <th>Request ID</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={10} style={{ textAlign: 'center' }}>Loading...</td></tr>
+              ) : apiLogs.length > 0 ? apiLogs.map((log) => (
+                <tr key={log.id} className="text-sm">
+                  <td className="text-muted whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td>
+                  <td><span className={`badge ${severityColor(log.severity)}`}>{log.severity}</span></td>
+                  <td className="font-mono text-xs" title={log.endpoint}>{log.endpoint}</td>
+                  <td>{log.httpStatus}</td>
+                  <td>{log.latencyMs} ms</td>
+                  <td>{userCellApi(log)}</td>
+                  <td className="text-xs">{log.intent || '—'}</td>
+                  <td
+                    className="text-xs max-w-[220px]"
+                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    title={log.intentV2 || ''}
+                  >
+                    {log.intentV2 || '—'}
+                  </td>
+                  <td
+                    className="text-xs text-error max-w-[180px]"
+                    style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    title={log.error || ''}
+                  >
+                    {log.error || '—'}
+                  </td>
+                  <td className="text-muted text-xs font-mono">{log.requestId || '—'}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No API request logs found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

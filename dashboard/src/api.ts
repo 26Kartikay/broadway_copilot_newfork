@@ -42,6 +42,37 @@ export type LogQuery = {
   offset?: string;
 };
 
+export interface ApiRequestLog {
+  id: string;
+  createdAt: string;
+  requestId: string | null;
+  severity: ServiceLog['severity'];
+  endpoint: string;
+  httpStatus: number;
+  latencyMs: number;
+  userId: string | null;
+  userName: string | null;
+  intent: string | null;
+  intentV2: string | null;
+  error: string | null;
+  user?: {
+    id: string;
+    profileName: string;
+    appUserId: string;
+    whatsappId: string;
+  } | null;
+}
+
+export type ApiRequestLogQuery = {
+  severity?: string;
+  userId?: string;
+  endpoint?: string;
+  httpStatus?: string;
+  search?: string;
+  limit?: string;
+  offset?: string;
+};
+
 export type AdminConfig = {
   chatApiUrl: string;
   nodeEnv: string;
@@ -69,6 +100,21 @@ export const api = {
       return Array.isArray(data) ? data : [];
     } catch (e) {
       console.error('Fetch logs error:', e);
+      return [];
+    }
+  },
+  getApiRequestLogs: async (filters: ApiRequestLogQuery): Promise<ApiRequestLog[]> => {
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== '') params.set(k, v);
+      });
+      const q = params.toString();
+      const res = await fetch(`${API_BASE}/api-request-logs${q ? `?${q}` : ''}`);
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.error('Fetch API request logs error:', e);
       return [];
     }
   },

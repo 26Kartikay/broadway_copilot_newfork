@@ -20,6 +20,8 @@ export function getToolsForIntent(intent: Intent, isFollowUp?: boolean): string[
       return ['this_or_that'];
     case 'memory':
       return ['recall_user_preferences', 'save_user_preference'];
+    case 'brand_info':
+      return ['lookup_brands', 'search_catalog'];
     case 'chitchat':
       return [];
     default:

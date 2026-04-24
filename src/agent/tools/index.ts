@@ -1,6 +1,7 @@
 import type { MessageInput } from '../../lib/chat/types';
 import { logger } from '../../utils/logger';
 import { beautyAdvisor } from './beautyAdvisor';
+import { runLookupBrandsTool } from './brandsLookup';
 import { searchCatalog } from './catalog';
 import { analyzeColorSeason } from './colorAnalysis';
 import { recallUserPreferences, saveUserPreference } from './memory';
@@ -9,6 +10,23 @@ import { thisOrThat } from './thisOrThat';
 import { vibeCheck } from './vibeCheck';
 
 export const ANTHROPIC_TOOLS: any[] = [
+  {
+    name: 'lookup_brands',
+    description:
+      "Look up Broadway partner brands: name, description, and classification (merchandising labels only, e.g. trending, top_seller). Not for confidential business data.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Brand name or phrase to match' },
+        highlight: {
+          type: 'string',
+          enum: ['trending', 'top_sellers', 'all'],
+          description: 'Filter by merchandising highlight',
+        },
+        limit: { type: 'number', description: 'Max rows (default 8)' },
+      },
+    },
+  },
   {
     name: 'search_catalog',
     description:
@@ -160,6 +178,8 @@ export async function executeTool(
   const sourceImageUrl = messageInput?.MediaUrl0;
   try {
     switch (name) {
+      case 'lookup_brands':
+        return { toolName: name, ...runLookupBrandsTool(input) };
       case 'search_catalog':
         return { toolName: name, ...(await searchCatalog(input)) };
       case 'analyze_color_season':

@@ -3,6 +3,7 @@ import { Tool } from '../../lib/ai/core/tools';
 import { MessageInput } from '../../lib/chat/types';
 import { SearchSession } from '../memory/redis';
 import { beautyAdvisor } from './beautyAdvisor';
+import { runLookupBrandsTool } from './brandsLookup';
 import { searchCatalog } from './catalog';
 import { analyzeColorSeason } from './colorAnalysis';
 import { recallUserPreferences, saveUserPreference } from './memory';
@@ -28,6 +29,25 @@ export function getTools(
   const sourceImageUrl = messageInput.MediaUrl0;
 
   return [
+    new Tool({
+      name: 'lookup_brands',
+      description:
+        "Look up Broadway partner brands: name, description, and classification (e.g. top_seller, trending, new). Call when the user asks about brands on Broadway, what's trending, top sellers, or a specific brand. For buying SKUs use search_catalog.",
+      schema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe('Brand name or free-text question to match against catalog entries'),
+        highlight: z
+          .enum(['trending', 'top_sellers', 'all'])
+          .optional()
+          .describe(
+            'trending = classification includes trending; top_sellers = classification includes top_seller; all = no classification filter',
+          ),
+        limit: z.number().optional().describe('Max brands to return (default 8, max 24)'),
+      }),
+      func: async (args) => runLookupBrandsTool(cleanArgs(args)),
+    }),
     new Tool({
       name: 'search_catalog',
       description:

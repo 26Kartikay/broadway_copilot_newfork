@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 
+import { persistApiRequestLog, severityForHttpStatus } from '../utils/apiRequestLog';
 import { logger } from '../utils/logger';
 
 function getGcpProjectId(): string | undefined {
@@ -95,10 +96,21 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
       ...(responseSize !== undefined ? { responseSize } : null),
     };
 
+    const intentV2 =
+      typeof res.locals.intentV2 === 'string' && res.locals.intentV2.trim().length > 0
+        ? res.locals.intentV2
+        : undefined;
+    const intentLog =
+      typeof res.locals.intent === 'string' && res.locals.intent.trim().length > 0
+        ? res.locals.intent.trim()
+        : undefined;
+
     const payload = {
       requestId,
       httpRequest,
       latencyMs: Math.round(latencyMs),
+      ...(intentLog !== undefined ? { intent: intentLog } : {}),
+      ...(intentV2 !== undefined ? { intentV2 } : {}),
       ...getGcpTraceFields(req),
     };
 
@@ -109,6 +121,44 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
       logger.warn(payload, msg);
     } else {
       logger.info(payload, msg);
+    }
+
+    const pathOnly = (req.originalUrl || req.url).split('?')[0] ?? '';
+    if (pathOnly.startsWith('/api')) {
+      const endpoint = `${req.method} ${pathOnly}`;
+      const intentV2Str =
+        typeof res.locals.intentV2 === 'string' && res.locals.intentV2.trim().length > 0
+          ? res.locals.intentV2
+          : null;
+      const intentStr =
+        typeof res.locals.intent === 'string' && res.locals.intent.trim().length > 0
+          ? res.locals.intent.trim()
+          : null;
+      const uid =
+        typeof res.locals.requestLogUserId === 'string' && res.locals.requestLogUserId.length > 0
+          ? res.locals.requestLogUserId
+          : null;
+      const uname =
+        typeof res.locals.requestLogUserName === 'string' && res.locals.requestLogUserName.length > 0
+          ? res.locals.requestLogUserName
+          : null;
+      const errStr =
+        typeof res.locals.requestLogError === 'string' && res.locals.requestLogError.length > 0
+          ? res.locals.requestLogError
+          : null;
+
+      persistApiRequestLog({
+        requestId,
+        severity: severityForHttpStatus(res.statusCode),
+        endpoint,
+        httpStatus: res.statusCode,
+        latencyMs: Math.round(latencyMs),
+        userId: uid,
+        userName: uname,
+        intent: intentStr,
+        intentV2: intentV2Str,
+        error: errStr,
+      });
     }
   });
 

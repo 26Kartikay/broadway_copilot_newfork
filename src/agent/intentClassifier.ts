@@ -10,6 +10,7 @@ export type Intent =
   | 'beauty'
   | 'this_or_that'
   | 'memory'
+  | 'brand_info'
   | 'chitchat';
 
 export interface SearchMeta {
@@ -33,6 +34,8 @@ export interface IntentResult {
     colors?: string[];
     category?: string;
     budget_signal?: string;
+    /** Brand name or topic the user is asking about (for brand_info / logging) */
+    brand_hint?: string;
   };
   isFollowUp: boolean;
   searchMeta: SearchMeta;
@@ -56,10 +59,13 @@ Intents:
 - beauty: User asks about skincare, makeup, haircare, or beauty products
 - this_or_that: User wants to compare two items and pick one
 - memory: User explicitly wants to save/recall preferences ONLY
+- brand_info: User asks about Broadway brands, brand stories, which brands are trending/popular/top, or "what/who is brand X" without asking to buy a specific SKU right now
 - chitchat: Pure casual chat with NO shopping/fashion signal
 
 RULES:
 - Any clothing item, accessory, or occasion mentioned → product_search (NOT chitchat)
+- If the user wants to BUY or FIND a product by name (e.g. "Nike sneakers", "show me dresses from X") → product_search, NOT brand_info
+- If the user only wants brand background, reputation on Broadway, trending brands list, top sellers among brands → brand_info
 - isFollowUp: true when continuing a prior shopping/styling thread
 
 searchMeta fields:
@@ -82,7 +88,8 @@ Return JSON only — no markdown:
     "style": "minimal",
     "colors": ["red"],
     "category": "CLOTHING_FASHION",
-    "budget_signal": "under 2000"
+    "budget_signal": "under 2000",
+    "brand_hint": null
   },
   "isFollowUp": false,
   "searchMeta": {
@@ -92,12 +99,12 @@ Return JSON only — no markdown:
     "recipientGender": null,
     "isEscapeSignal": false
   },
-  "rollingContextSummary": "one sentence summary of last few turns or empty string"
+  "rollingContextSummary": "Required: 1–2 short sentences in plain English describing what the user is asking or doing this turn — your understanding only. Do not include intent enum names, the word 'follow-up', or JSON-style labels."
 }`;
 
 const VALID_INTENTS: Intent[] = [
   'product_search', 'color_analysis', 'outfit', 'vibe_check',
-  'beauty', 'this_or_that', 'memory', 'chitchat',
+  'beauty', 'this_or_that', 'memory', 'brand_info', 'chitchat',
 ];
 
 // ─── Regex fallback ───────────────────────────────────────────────────────────
@@ -116,6 +123,10 @@ const FOR_OTHERS_PATTERNS = /\b(for (my )?(mom|dad|sister|brother|wife|husband|f
 const FEMALE_PATTERNS = /\b(mom|mother|sister|wife|girlfriend|her|aunty|aunt|daughter)\b/i;
 const MALE_PATTERNS = /\b(dad|father|brother|husband|boyfriend|him|uncle|son)\b/i;
 const ESCAPE_PATTERNS = /\b(never mind|nevermind|forget it|cancel|go back|stop|skip|not now|changed my mind|actually no|exit|quit|not interested|no thanks|take me back|let me out|abort)\b/i;
+
+/** Coarse brand-info signals (Haiku still authoritative when available). */
+const BRAND_INFO_PATTERNS =
+  /\b(what brands|which brands|brands?\s+(on\s+)?broadway|brands?\s+(do|does)\s+you|trending\s+brands?|popular\s+brands?|top\s*-?\s*sell(?:er|ing)?\s+brands?|best\s+brands?|brand\s+to\s+(try|know|shop)|tell\s+me\s+about\s+.{2,60}\s+brand|about\s+the\s+brand|brand\s+story|who\s+makes\s+)/i;
 
 function rollingContextSuggestsShopping(ctx: string): boolean {
   const t = ctx.toLowerCase();
@@ -143,6 +154,7 @@ function regexClassify(message: string, hasImages: boolean, rollingContext?: str
   if (hasImages && /rate|vibe|how do i look/.test(text)) intent = 'vibe_check';
   else if (hasImages && /analyze|color season|undertone/.test(text)) intent = 'color_analysis';
   else if (hasImages && /which one|pick one|compare/.test(text)) intent = 'this_or_that';
+  else if (BRAND_INFO_PATTERNS.test(message)) intent = 'brand_info';
   else if (/skincare|makeup|beauty/.test(text)) intent = 'beauty';
   else if (/wear|outfit|style me/.test(text)) intent = 'outfit';
   else if (/search|show me|find|looking for|recommend|suggest|shop|buy|purchase|gift|browse|catalog|help me (pick|find)|ideas for|options for|\b(picks?|pieces?|items?)\b/.test(text)) intent = 'product_search';
@@ -235,6 +247,7 @@ export async function classifyIntent(
     if (Array.isArray(e.colors) && e.colors.length) entities.colors = e.colors.map(String);
     if (typeof e.category === 'string' && e.category) entities.category = e.category;
     if (typeof e.budget_signal === 'string' && e.budget_signal) entities.budget_signal = e.budget_signal;
+    if (typeof e.brand_hint === 'string' && e.brand_hint.trim()) entities.brand_hint = e.brand_hint.trim();
 
     const sm = parsed.searchMeta ?? {};
     const searchMeta: SearchMeta = {
@@ -257,5 +270,72 @@ export async function classifyIntent(
   } catch (err) {
     logger.warn({ err, message: message.slice(0, 80) }, 'Haiku intent classification failed, using regex fallback');
     return regexClassify(message, hasImages, rollingContext);
+  }
+}
+
+/**
+ * Plain-text for `intentv2`: only what was inferred about the user's ask (Haiku summary when present).
+ */
+export function formatIntentV2PlainText(result: IntentResult): string {
+  const summary = result.rollingContextSummary?.trim();
+  if (summary) return summary;
+  return buildInferenceFallback(result);
+}
+
+function buildInferenceFallback(result: IntentResult): string {
+  const { intent, entities, isFollowUp, searchMeta } = result;
+  const bits: string[] = [];
+
+  const goal = describeGoalInPlainLanguage(intent);
+  bits.push(goal);
+
+  if (isFollowUp) bits.push('This message continues an earlier thread.');
+
+  const detailParts: string[] = [];
+  if (entities.occasion) detailParts.push(`${entities.occasion} occasion`);
+  if (entities.style) detailParts.push(`${entities.style} style`);
+  if (entities.colors?.length) detailParts.push(`colors ${entities.colors.join(', ')}`);
+  if (entities.category) detailParts.push(`category ${entities.category}`);
+  if (entities.budget_signal) detailParts.push(`budget ${entities.budget_signal}`);
+  if (entities.brand_hint) detailParts.push(`brand angle: ${entities.brand_hint}`);
+  if (detailParts.length) bits.push(`They mentioned ${detailParts.join(', ')}.`);
+
+  const sm = searchMeta;
+  if (sm.isDislikeMore) bits.push('They want different suggestions than what was shown before.');
+  if (sm.isNeutralMore) bits.push('They want more options in a similar direction.');
+  if (!sm.isForSelf) {
+    bits.push(
+      sm.recipientGender
+        ? `They are shopping for someone else (likely ${sm.recipientGender}).`
+        : 'They are shopping for someone else or for a gift.',
+    );
+  }
+  if (sm.isEscapeSignal) bits.push('They want to stop or leave the current flow.');
+
+  return bits.join(' ');
+}
+
+function describeGoalInPlainLanguage(intent: Intent): string {
+  switch (intent) {
+    case 'product_search':
+      return 'They want to find, browse, or get recommendations for products.';
+    case 'brand_info':
+      return 'They want to know about brands on Broadway, what is trending, or brand background.';
+    case 'color_analysis':
+      return 'They want color season, undertone, or palette analysis.';
+    case 'outfit':
+      return 'They want outfit ideas or a full styled look.';
+    case 'vibe_check':
+      return 'They want feedback on how an outfit or look works on them.';
+    case 'beauty':
+      return 'They are asking about skincare, makeup, or haircare.';
+    case 'this_or_that':
+      return 'They want help choosing between two options.';
+    case 'memory':
+      return 'They want to save or recall preferences.';
+    case 'chitchat':
+      return 'They are chatting without a specific shopping or styling task.';
+    default:
+      return 'They have a fashion or shopping-related message.';
   }
 }

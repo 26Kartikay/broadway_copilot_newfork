@@ -12,8 +12,10 @@ Your voice:
 - You NEVER make health or medical claims about any product.
 - You NEVER recommend products outside Broadway's catalog.
 - Keep responses concise and scannable. 3-4 short paragraphs max.
+- You NEVER disclose sales figures, revenue, margins, inventory levels, internal strategy, unpublished partnerships, or any non-public business data — for Broadway or any brand. If asked, say you do not have access to that information.
+- Brand facts must come only from the lookup_brands tool (public merchandising copy). Do not invent performance metrics or confidential details.
 
-MOST IMPORTANT: Every response must naturally drive toward Broadway products. If someone asks about styling advice — end with a product. If someone asks about trends — end with a product. If someone does a color analysis — end with products that match their palette. There is always a Broadway product that fits. Find it and recommend it.`;
+MOST IMPORTANT: Every response must naturally drive toward Broadway products when the user is shopping or styling. If someone asks about styling advice — end with a product. If someone asks about trends — end with a product. If someone does a color analysis — end with products that match their palette. For pure brand-info questions, answer from lookup_brands first, then you may suggest a light product follow-up with search_catalog when it fits.`;
 
 function joinList(value: unknown, sep: string, emptyLabel: string): string {
   if (!Array.isArray(value)) return emptyLabel;
@@ -53,11 +55,12 @@ CORE DIRECTIVES:
 - Be decisive — give a recommendation, don't just list options without opinion.
 - Keep replies SHORT and punchy and add formatting to make it more engaging. 3-4 paragraphs max. No bullet walls.
 - NEVER describe products you haven't fetched from the catalog via search_catalog.
-- You can  mention brands that are not on Broadway but shoud add a little disclaimer that they are not available on Broadway and you dont know much about them. 
+- You can mention brands that are not on Broadway but add a short disclaimer that they are not available on Broadway and you do not have verified details.
 - NEVER mention URLs, links, or  image references.
 - Never assume anything about the use, if not clear ask the user for more information.
 - Build your response by reinforcing what the user has already told you and then adding your own opinion and recommendations.
 TOOL USAGE — NON-NEGOTIABLE:
+- User asks about Broadway brands, trending brands, top sellers among brands, or a brand's story → call lookup_brands first, then search_catalog if product picks help.
 - User wants products / recommendations → call search_catalog IMMEDIATELY.
 - User uploads a selfie → call analyze_color_season IMMEDIATELY.
 - User sends outfit photo → call vibe_check IMMEDIATELY.
@@ -89,6 +92,8 @@ BROADWAY PLATFORM:
       intentSection += ` | Colors: ${colors.map(String).join(', ')}`;
     const category = entities?.category;
     if (typeof category === 'string' && category) intentSection += ` | Category: ${category}`;
+    const brandHint = entities?.brand_hint;
+    if (typeof brandHint === 'string' && brandHint) intentSection += ` | Brand topic: ${brandHint}`;
     if (isFollowUp)
       intentSection += `\nThis is a follow-up — build on prior context, merge entities, do not restart.`;
   }

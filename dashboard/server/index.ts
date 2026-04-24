@@ -120,6 +120,70 @@ app.get('/admin/logs', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/admin/api-request-logs', authMiddleware, async (req, res) => {
+  const severity = (req.query.severity as string | undefined)?.trim();
+  const userId = (req.query.userId as string | undefined)?.trim();
+  const endpoint = (req.query.endpoint as string | undefined)?.trim();
+  const search = (req.query.search as string | undefined)?.trim();
+  const httpStatusRaw = (req.query.httpStatus as string | undefined)?.trim();
+
+  const limit = (req.query.limit as string) || '100';
+  const offset = (req.query.offset as string) || '0';
+
+  try {
+    const parts: Prisma.ApiRequestLogWhereInput[] = [];
+
+    if (severity && severity !== 'ALL') {
+      parts.push({ severity: severity as Severity });
+    }
+    if (userId) {
+      parts.push({
+        OR: [
+          { userId },
+          { userName: { contains: userId, mode: 'insensitive' } },
+          { user: { appUserId: userId } },
+          { user: { whatsappId: userId } },
+        ],
+      });
+    }
+    if (endpoint) {
+      parts.push({ endpoint: { contains: endpoint, mode: 'insensitive' } });
+    }
+    if (httpStatusRaw && /^\d{3}$/.test(httpStatusRaw)) {
+      parts.push({ httpStatus: parseInt(httpStatusRaw, 10) });
+    }
+    if (search) {
+      parts.push({
+        OR: [
+          { intent: { contains: search, mode: 'insensitive' } },
+          { intentV2: { contains: search, mode: 'insensitive' } },
+          { endpoint: { contains: search, mode: 'insensitive' } },
+          { error: { contains: search, mode: 'insensitive' } },
+          { requestId: { contains: search, mode: 'insensitive' } },
+          { userName: { contains: search, mode: 'insensitive' } },
+          { userId: { contains: search } },
+        ],
+      });
+    }
+
+    const where: Prisma.ApiRequestLogWhereInput = parts.length ? { AND: parts } : {};
+
+    const logs = await prisma.apiRequestLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit, 10),
+      skip: parseInt(offset, 10),
+      include: {
+        user: { select: { id: true, profileName: true, appUserId: true, whatsappId: true } },
+      },
+    });
+    res.json(logs);
+  } catch (error) {
+    console.error('ERROR in GET /admin/api-request-logs:', error);
+    res.status(500).json({ error: 'Failed to fetch API request logs', message: (error as any).message });
+  }
+});
+
 app.get('/admin/users', authMiddleware, async (req, res) => {
   const search = req.query.search as string | undefined;
   const limit = (req.query.limit as string) || '20';

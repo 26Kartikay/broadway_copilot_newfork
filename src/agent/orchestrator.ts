@@ -7,7 +7,7 @@ import { MessageInput } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { AGENT_MAX_COMPLETION_TOKENS, ANTHROPIC_CHAT_MODEL } from './anthropicModels';
-import { classifyIntent } from './intentClassifier';
+import { classifyIntent, formatIntentV2PlainText } from './intentClassifier';
 import {
   appendToHistory,
   getHistory,
@@ -30,6 +30,10 @@ export interface AgentResult {
   products: any[];
   colorAnalysis: any | null;
   vibeCheck: any | null;
+  /** Classifier intent slug (e.g. product_search, brand_info). */
+  intent?: string;
+  /** Classifier inference (plain text); surfaced on HTTP request completion logs. */
+  intentV2?: string;
 }
 
 const responseSchema = z.object({
@@ -145,22 +149,28 @@ export class ChatOrchestrator {
     // Step 2: Rolling context for intent classifier
     const rollingContext = buildRollingContext(history);
 
-    // Step 3: Classify intent via Haiku — PAUSED (intent classification disabled)
-    // const { intent, entities, isFollowUp, searchMeta } = await classifyIntent(
-    //   messageInput.Body || messageInput.ButtonText || '',
-    //   hasImages,
-    //   rollingContext,
-    // );
     const hasImages = parseInt(messageInput.NumMedia || '0', 10) > 0;
-    const intent = 'product_search' as const;
-    const entities = {} as Record<string, unknown>;
-    const isFollowUp = false;
-    const searchMeta = {
-      isDislikeMore: false,
-      isNeutralMore: false,
-      isForSelf: true,
-      recipientGender: undefined as string | undefined,
-    };
+
+    // Step 3: Classify intent (Haiku) — used for prompt shaping, routing context, and intentv2 logs
+    const {
+      intent,
+      entities,
+      isFollowUp,
+      searchMeta,
+      rollingContextSummary,
+    } = await classifyIntent(
+      messageInput.Body || messageInput.ButtonText || '',
+      hasImages,
+      rollingContext,
+    );
+
+    const intentV2Plain = formatIntentV2PlainText({
+      intent,
+      entities,
+      isFollowUp,
+      searchMeta,
+      rollingContextSummary,
+    });
 
     const { isDislikeMore, isNeutralMore, isForSelf, recipientGender } = searchMeta;
 
@@ -196,6 +206,7 @@ export class ChatOrchestrator {
     // Intent-based tool filtering paused — give Claude all main chat tools
     const CHAT_TOOL_NAMES = [
       'search_catalog',
+      'lookup_brands',
       'get_outfit_suggestion',
       'beauty_advisor',
       'this_or_that',
@@ -224,7 +235,16 @@ export class ChatOrchestrator {
     });
 
     logger.info(
-      { userId, intent, isFollowUp, isDislikeMore, isNeutralMore, isForSelf, toolCount: tools.length },
+      {
+        userId,
+        intent,
+        intentV2: intentV2Plain,
+        isFollowUp,
+        isDislikeMore,
+        isNeutralMore,
+        isForSelf,
+        toolCount: tools.length,
+      },
       'Orchestrator: running agentExecutor',
     );
 
@@ -261,6 +281,8 @@ export class ChatOrchestrator {
       colorAnalysis:
         normalizedToolResults.find((t) => t.toolName === 'analyze_color_season') || null,
       vibeCheck: normalizedToolResults.find((t) => t.toolName === 'vibe_check') || null,
+      intent,
+      intentV2: intentV2Plain,
     };
 
     // Step 12: Update search session (non-blocking)
@@ -269,9 +291,13 @@ export class ChatOrchestrator {
     );
 
     // Step 13: Persist to Prisma (non-blocking)
-    this.saveMessagesToPrisma(userId, messageInput, agentResult.text, agentResult.toolResults).catch(
-      (err) => logger.error({ err, userId }, 'Failed to save messages to Prisma in orchestrator'),
-    );
+    this.saveMessagesToPrisma(
+      userId,
+      messageInput,
+      agentResult.text,
+      agentResult.toolResults,
+      intentV2Plain,
+    ).catch((err) => logger.error({ err, userId }, 'Failed to save messages to Prisma in orchestrator'));
 
     return agentResult;
   }
@@ -298,6 +324,7 @@ export class ChatOrchestrator {
     input: MessageInput,
     replyText: string,
     toolResults: any[],
+    intentV2Plain: string,
   ) {
     try {
       let conversation = await prisma.conversation.findFirst({
@@ -319,6 +346,7 @@ export class ChatOrchestrator {
             role: 'USER',
             content: [input.Body || input.ButtonText || ''] as any,
             buttonPayload: input.ButtonPayload ?? null,
+            intentV2: intentV2Plain,
           },
         });
         await prisma.message.create({

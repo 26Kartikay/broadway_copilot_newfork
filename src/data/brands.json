@@ -1,0 +1,162 @@
+[
+  {
+    "name": "Mokobara",
+    "description": "Design-forward travel gear built for modern journeys, combining durability, clean aesthetics, and smart functionality.",
+    "classification": ["top_seller", "travel", "modern"]
+  },
+  {
+    "name": "COMET",
+    "description": "Bold, homegrown sneaker brand known for statement designs, comfort tech, and expressive streetwear energy.",
+    "classification": ["top_seller", "footwear", "streetwear"]
+  },
+  {
+    "name": "Kingdom of White",
+    "description": "Minimalist fashion brand specializing in timeless white apparel crafted from premium natural fabrics.",
+    "classification": ["top_seller", "minimal", "apparel"]
+  },
+  {
+    "name": "sorta",
+    "description": "Contemporary lifestyle label blending oversized silhouettes, gender-fluid design, and global streetwear aesthetics.",
+    "classification": ["high_performer", "streetwear", "lifestyle"]
+  },
+  {
+    "name": "RWDY",
+    "description": "Culture-driven streetwear brand merging avant-garde design with Indian craftsmanship and bold identity.",
+    "classification": ["high_performer", "streetwear", "premium"]
+  },
+  {
+    "name": "Beauty of Joseon",
+    "description": "K-beauty brand inspired by traditional Korean skincare rituals, delivering gentle, effective formulations.",
+    "classification": ["high_performer", "skincare", "k_beauty"]
+  },
+  {
+    "name": "Chapter 2",
+    "description": "Modern footwear brand focused on comfort, versatility, and everyday wear with a minimalist design approach.",
+    "classification": ["mid_tier", "footwear", "modern"]
+  },
+  {
+    "name": "Dymatize",
+    "description": "Performance-driven sports nutrition brand known for high-quality protein and scientifically backed formulas.",
+    "classification": ["mid_tier", "fitness", "nutrition"]
+  },
+  {
+    "name": "PurplFrog",
+    "description": "Art-led streetwear brand from Kolkata blending bold graphics with expressive, identity-driven fashion.",
+    "classification": ["mid_tier", "streetwear", "artistic"]
+  },
+  {
+    "name": "NUUK",
+    "description": "Design-first home appliance brand creating functional, stylish products for modern Indian homes.",
+    "classification": ["mid_tier", "home", "modern"]
+  },
+  {
+    "name": "Celimax",
+    "description": "Korean skincare brand focused on transparency, clinical ingredients, and personalized routines.",
+    "classification": ["mid_tier", "skincare", "k_beauty"]
+  },
+  {
+    "name": "COSMIX",
+    "description": "Holistic wellness brand offering plant-based nutrition blends rooted in Ayurveda and herbal science.",
+    "classification": ["mid_tier", "wellness", "nutrition"]
+  },
+  {
+    "name": "Biodance",
+    "description": "Science-led Korean skincare brand combining advanced actives with gentle, skin-friendly formulations.",
+    "classification": ["mid_tier", "skincare", "k_beauty"]
+  },
+  {
+    "name": "ISOPURE",
+    "description": "Clean sports nutrition brand known for ultra-pure whey protein with zero-carb, high-performance formulas.",
+    "classification": ["mid_tier", "fitness", "nutrition"]
+  },
+  {
+    "name": "Gully Labs",
+    "description": "India-inspired sneaker brand blending cultural storytelling with contemporary streetwear design.",
+    "classification": ["mid_tier", "footwear", "streetwear"]
+  },
+  {
+    "name": "Winston",
+    "description": "Modern grooming brand offering simple, effective skincare solutions tailored for men.",
+    "classification": ["mid_tier", "grooming", "men"]
+  },
+  {
+    "name": "Theater",
+    "description": "Design-led fashion brand known for expressive, premium accessories and statement pieces.",
+    "classification": ["mid_tier", "fashion", "premium"]
+  },
+  {
+    "name": "Cosrx",
+    "description": "Globally loved K-beauty brand delivering effective, minimal skincare backed by science and simplicity.",
+    "classification": ["mid_tier", "skincare", "k_beauty"]
+  },
+  {
+    "name": "52 Sundaze",
+    "description": "Easygoing lifestyle brand focused on everyday comfort, relaxed fits, and effortless style.",
+    "classification": ["mid_tier", "lifestyle", "casual"]
+  },
+  {
+    "name": "Cava",
+    "description": "Youth-driven fashion brand blending streetwear aesthetics with bold, everyday essentials.",
+    "classification": ["mid_tier", "fashion", "streetwear"]
+  },
+  {
+    "name": "Contemponari",
+    "description": "Modern womenswear brand offering elegant, versatile pieces designed for everyday sophistication.",
+    "classification": ["mid_tier", "womenswear", "modern"]
+  },
+  {
+    "name": "Moxie Beauty",
+    "description": "Clean haircare brand designed for Indian hair, focusing on performance, simplicity, and real results.",
+    "classification": ["mid_tier", "beauty", "haircare"]
+  },
+  {
+    "name": "Protouch",
+    "description": "Tech-enabled personal care brand delivering professional-grade grooming solutions at home.",
+    "classification": ["emerging", "grooming", "tech"]
+  },
+  {
+    "name": "Hamptons",
+    "description": "Premium grooming brand offering refined, minimal products tailored for modern lifestyles.",
+    "classification": ["emerging", "grooming", "premium"]
+  },
+  {
+    "name": "Minimalist",
+    "description": "Ingredient-focused skincare brand delivering transparent, science-backed formulations.",
+    "classification": ["emerging", "skincare", "science"]
+  },
+  {
+    "name": "SUPERYOU",
+    "description": "Next-gen nutrition brand creating clean, accessible protein products for everyday wellness.",
+    "classification": ["emerging", "fitness", "nutrition"]
+  },
+  {
+    "name": "Reginald Men",
+    "description": "Premium men’s grooming brand focused on effortless skincare and refined daily essentials.",
+    "classification": ["emerging", "grooming", "men"]
+  },
+  {
+    "name": "Dr. Althea",
+    "description": "Korean skincare brand blending dermatological science with gentle, skin-soothing formulations.",
+    "classification": ["emerging", "skincare", "k_beauty"]
+  },
+  {
+    "name": "Axis-Y",
+    "description": "Climate-inspired K-beauty brand delivering targeted skincare solutions for changing environments.",
+    "classification": ["emerging", "skincare", "k_beauty"]
+  },
+  {
+    "name": "Torriden",
+    "description": "Hydration-focused Korean skincare brand known for clean, minimalist, and effective formulas.",
+    "classification": ["emerging", "skincare", "k_beauty"]
+  },
+  {
+    "name": "Kaine",
+    "description": "Vegan Korean skincare brand focused on gentle, eco-conscious formulations for sensitive skin.",
+    "classification": ["emerging", "skincare", "clean_beauty"]
+  },
+  {
+    "name": "PrimalGray",
+    "description": "Contemporary fashion brand offering refined, seasonless pieces with a focus on craftsmanship and longevity.",
+    "classification": ["emerging", "fashion", "premium"]
+  }
+]

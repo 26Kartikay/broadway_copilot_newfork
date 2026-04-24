@@ -28,7 +28,12 @@ export async function runAgentForHttp(
   prismaUserId: string,
   messageId: string,
   messageInput: MessageInput,
-): Promise<{ replies: HttpReplyPayload[]; pending: string | null }> {
+): Promise<{
+  replies: HttpReplyPayload[];
+  pending: string | null;
+  intent?: string;
+  intentV2?: string;
+}> {
   try {
     const user = await prisma.user.findUnique({ where: { id: prismaUserId } });
 
@@ -77,7 +82,14 @@ export async function runAgentForHttp(
       user ? { userId: prismaUserId } : {},
     );
 
-    return { replies, pending: null };
+    return {
+      replies,
+      pending: null,
+      ...(result.intent !== undefined && result.intent !== '' ? { intent: result.intent } : {}),
+      ...(result.intentV2 !== undefined && result.intentV2 !== ''
+        ? { intentV2: result.intentV2 }
+        : {}),
+    };
   } catch (err: unknown) {
     logger.error({ err, userId: prismaUserId, messageId }, 'Agent run failed');
 

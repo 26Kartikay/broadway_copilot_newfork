@@ -39,5 +39,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
 
   const httpError = logError(err, context);
 
+  res.locals.requestLogError = httpError.message;
+
   res.status(httpError.statusCode).json(createErrorResponse(httpError));
 }

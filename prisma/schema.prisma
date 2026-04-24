@@ -141,8 +141,9 @@ model User {
   vibeChecks    VibeCheck[]
   colorAnalyses ColorAnalysis[]
   tasks         Task[]
-  graphRuns     GraphRun[]
-  logs          ServiceLog[]
+  graphRuns        GraphRun[]
+  logs             ServiceLog[]
+  apiRequestLogs   ApiRequestLog[]
 
   @@index([createdAt])
   @@index([appUserId])
@@ -173,6 +174,8 @@ model Message {
 
   role            MessageRole
   intent          String?
+  /// Plain-text summary of what the intent classifier inferred from this user message.
+  intentV2        String?     @db.Text @map("intentv2")
   buttonPayload   String?
   pending         PendingType? @default(NONE)
 
@@ -561,6 +564,36 @@ model ServiceLog {
   @@index([service, createdAt(sort: Desc)])
   @@index([appUserId])
   @@index([whatsappId])
+}
+
+/// HTTP API access row: endpoint, latency, classifier intent + inference, optional user and error.
+model ApiRequestLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  requestId String?
+  severity  Severity @default(INFO)
+
+  /// e.g. "POST /api/chat"
+  endpoint   String
+  httpStatus Int
+  latencyMs  Int
+
+  userId   String?
+  userName String? @db.Text
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Classifier intent slug (e.g. product_search, brand_info).
+  intent    String?
+  /// Plain-language classifier inference (rolling summary / fallback).
+  intentV2  String? @db.Text
+
+  error String? @db.Text
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([endpoint, createdAt(sort: Desc)])
+  @@index([severity, createdAt(sort: Desc)])
 }
 
 model AdminAuditLog {

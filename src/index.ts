@@ -136,6 +136,9 @@ app.get('/health', async (_req: Request, res: Response) => {
  * }
  */
 app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) => {
+  let requestLogUserId: string | undefined;
+  let requestLogUserName: string | undefined;
+
   try {
     const chatRequest = req.body as ChatRequest;
     const { userId, messageId } = chatRequest;
@@ -165,6 +168,11 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       String(userId),
     );
 
+    requestLogUserId = user.id;
+    requestLogUserName = (user.profileName?.trim() || user.appUserId) ?? undefined;
+    res.locals.requestLogUserId = requestLogUserId;
+    res.locals.requestLogUserName = requestLogUserName;
+
     logger.info(
       { userId: user.id, appUserId: user.appUserId, messageId: sid },
       'Received chat message',
@@ -184,7 +192,13 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       },
     );
 
-    const { replies, pending } = await runAgentForHttp(user.id, sid, messageInput);
+    const { replies, pending, intentV2, intent } = await runAgentForHttp(user.id, sid, messageInput);
+    if (intent !== undefined && intent.length > 0) {
+      res.locals.intent = intent;
+    }
+    if (intentV2 !== undefined && intentV2.length > 0) {
+      res.locals.intentV2 = intentV2;
+    }
 
     // Response without metadata
     const response = {
@@ -194,6 +208,13 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
 
     return res.status(200).json(response);
   } catch (err: unknown) {
+    if (requestLogUserId !== undefined) {
+      res.locals.requestLogUserId = requestLogUserId;
+    }
+    if (requestLogUserName !== undefined) {
+      res.locals.requestLogUserName = requestLogUserName;
+    }
+    res.locals.requestLogError = err instanceof Error ? err.message : String(err);
     return next(err);
   }
 });
