@@ -20,12 +20,6 @@ import { AgentResult } from './orchestrator';
 import { analyzeColorSeason } from './tools/colorAnalysis';
 import { vibeCheck } from './tools/vibeCheck';
 
-const TONALITY_BUTTON_TO_ENUM: Record<string, string> = {
-  tonality_savage: 'savage',
-  tonality_friendly: 'friendly',
-  tonality_hype_bff: 'hype_bff',
-};
-
 function numMediaOf(input: MessageInput): number {
   return Math.min(10, parseInt(input.NumMedia || '0', 10) || 0);
 }
@@ -74,8 +68,13 @@ function wantsNewVibeCheck(text: string, buttonPayload?: string): boolean {
   return /\b(vibe check|rate my outfit|outfit check|how('?s| is) my outfit)\b/.test(t);
 }
 
-function resolveTonalityFromPayload(buttonPayload: string): string | null {
-  return TONALITY_BUTTON_TO_ENUM[buttonPayload] ?? null;
+function wantsPreviousVibeCheckResult(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    /\b(what was|show me|get|fetch|see)\b.{0,20}\b(my|the)\b.{0,20}\b(vibe check|vibe score)\b/.test(t) ||
+    /\bmy (last|previous|past) vibe (check|score|result)\b/.test(t) ||
+    /\bvibe check result\b/.test(t)
+  );
 }
 
 async function userHasSavedColorAnalysis(userId: string): Promise<boolean> {
@@ -132,7 +131,7 @@ async function appendFlowHistory(
     .filter(Boolean)
     .join('\n')
     .trim();
-  await appendToHistory(prismaUserId, [{ type: 'text', text: userLine }], assistantLine || '…');
+  await appendToHistory(prismaUserId, [{ type: 'text', text: userLine }], assistantLine || '...');
 }
 
 async function runColorAnalysisOnMedia(
@@ -246,12 +245,9 @@ export async function tryHandleHttpChatFlows(
 
   try {
     // ── Flow escape ────────────────────────────────────────────────────────────
-    // If user is in any pending state and clearly wants out, clear the flow and
-    // let the orchestrator handle their message normally.
     if (pending.type !== 'NONE' && !bp) {
       const shouldEscape =
         isExplicitEscape(utterance) ||
-        // Image-upload states are also escapable on a strong redirect intent
         ((pending.type === 'COLOR_ANALYSIS_IMAGE' || pending.type === 'VIBE_CHECK_IMAGE') &&
           nMedia === 0 &&
           isStrongRedirect(utterance));
@@ -259,19 +255,18 @@ export async function tryHandleHttpChatFlows(
       if (shouldEscape) {
         await clearHttpPendingFlow(prismaUserId);
         logger.info({ prismaUserId, pendingType: pending.type, utterance: utterance.slice(0, 60) }, 'User escaped pending flow');
-        // Return handled: false so the orchestrator processes the message
         return { handled: false };
       }
     }
     // ── /Flow escape ───────────────────────────────────────────────────────────
 
-    // --- Save color analysis (registered only meaningful) ---
+    // --- Save color analysis ---
     if (bp === 'save_color_analysis_yes') {
       const staged = await getStagedColorAnalysis(prismaUserId);
       if (!staged) {
         const replies = formatReplies(
           {
-            text: 'There’s nothing queued to save — run a fresh color read first.',
+            text: "Nothing queued to save — run a fresh color read first.",
             toolResults: [],
             products: [],
             colorAnalysis: null,
@@ -305,7 +300,7 @@ export async function tryHandleHttpChatFlows(
       await clearStagedColorAnalysis(prismaUserId);
       const replies = formatReplies(
         {
-          text: 'Saved — I’ll remember this palette for your recommendations.',
+          text: "Saved — I will remember this palette for your recommendations.",
           toolResults: [],
           products: [],
           colorAnalysis: null,
@@ -321,7 +316,7 @@ export async function tryHandleHttpChatFlows(
       await clearStagedColorAnalysis(prismaUserId);
       const replies = formatReplies(
         {
-          text: 'No worries — I won’t save that run to your profile.',
+          text: "No worries — I won't save that run to your profile.",
           toolResults: [],
           products: [],
           colorAnalysis: null,
@@ -342,7 +337,7 @@ export async function tryHandleHttpChatFlows(
       if (guest) {
         const replies = formatReplies(
           {
-            text: 'Saved palettes live on your Broadway profile. Sign in with a full account and run color analysis once, then you can fetch it anytime.',
+            text: "Saved palettes live on your Broadway profile. Sign in with a full account and run color analysis once, then you can fetch it anytime.",
             toolResults: [],
             products: [],
             colorAnalysis: null,
@@ -361,7 +356,7 @@ export async function tryHandleHttpChatFlows(
       if (!row?.palette_name) {
         const replies = formatReplies(
           {
-            text: 'You don’t have a saved palette yet. Tap Color analysis to do a read, or upload a clear selfie.',
+            text: "You don't have a saved palette yet. Try a color analysis — just upload a clear selfie.",
             toolResults: [],
             products: [],
             colorAnalysis: null,
@@ -376,7 +371,7 @@ export async function tryHandleHttpChatFlows(
       if (!canonical || !isValidPalette(canonical)) {
         const replies = formatReplies(
           {
-            text: 'Your saved palette record looks incomplete — try a fresh analysis.',
+            text: "Your saved palette record looks incomplete — try a fresh analysis.",
             toolResults: [],
             products: [],
             colorAnalysis: null,
@@ -403,49 +398,76 @@ export async function tryHandleHttpChatFlows(
       const replies = await buildRepliesFromColorTool(
         colorPayload,
         user,
-        'Here’s the palette I have on file for you.',
+        "Here is the palette I have on file for you.",
         { skipColorSavePrompt: true },
       );
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }
 
-    // --- Vibe check entry ---
-    if (bp === 'vibe_check' || (wantsNewVibeCheck(utterance, bp) && !bp && nMedia === 0)) {
-      await clearHttpPendingFlow(prismaUserId);
-      await setHttpPendingFlow(prismaUserId, { type: 'TONALITY_SELECTION' });
-      const replies: HttpReplyPayload[] = [
-        {
-          reply_type: 'text',
-          reply_text: 'Love it — before I roast-or-toast your fit, how should I talk to you?',
-        },
-        {
-          reply_type: 'quick_reply',
-          reply_text: 'Pick your stylist energy:',
-          buttons: [
-            { text: 'Savage honest', id: 'tonality_savage' },
-            { text: 'Friendly stylist', id: 'tonality_friendly' },
-            { text: 'Hype BFF', id: 'tonality_hype_bff' },
-          ],
-        },
-      ];
+    // --- Fetch previous vibe check result ---
+    if (wantsPreviousVibeCheckResult(utterance) && !bp && nMedia === 0) {
+      if (guest) {
+        const replies = formatReplies(
+          {
+            text: "Saved vibe checks live on your Broadway profile. Sign in with a full account to access your history.",
+            toolResults: [],
+            products: [],
+            colorAnalysis: null,
+            vibeCheck: null,
+          },
+          { user },
+        );
+        await appendFlowHistory(prismaUserId, input, replies);
+        return { handled: true, replies, pending: null };
+      }
+      const vcRow = await prisma.vibeCheck.findFirst({
+        where: { userId: prismaUserId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!vcRow) {
+        const replies = formatReplies(
+          {
+            text: "You haven't done a vibe check yet. Just say \"vibe check\" and I'll rate your fit!",
+            toolResults: [],
+            products: [],
+            colorAnalysis: null,
+            vibeCheck: null,
+          },
+          { user },
+        );
+        await appendFlowHistory(prismaUserId, input, replies);
+        return { handled: true, replies, pending: null };
+      }
+      const vcPayload = {
+        comment: vcRow.comment,
+        fit_silhouette_score: vcRow.fit_silhouette_score,
+        fit_silhouette_explanation: vcRow.fit_silhouette_explanation,
+        color_harmony_score: vcRow.color_harmony_score,
+        color_harmony_explanation: vcRow.color_harmony_explanation,
+        styling_details_score: vcRow.styling_details_score,
+        styling_details_explanation: vcRow.styling_details_explanation,
+        vibe_check_result: vcRow.overall_score,
+        recommendations: vcRow.recommendations,
+        user_image_url: null,
+      };
+      const replies = await buildRepliesFromVibeTool(vcPayload, user, "Here is your last vibe check result:");
       await appendFlowHistory(prismaUserId, input, replies);
-      return { handled: true, replies, pending: 'TONALITY_SELECTION' };
+      return { handled: true, replies, pending: null };
     }
 
-    // --- Tonality picked → request outfit image ---
-    if (bp && resolveTonalityFromPayload(bp)) {
-      const tone = resolveTonalityFromPayload(bp)!;
-      await setHttpPendingFlow(prismaUserId, { type: 'VIBE_CHECK_IMAGE', tonality: tone });
+    // --- Vibe check entry — skip tonality selection, default to friendly ---
+    if (bp === 'vibe_check' || (wantsNewVibeCheck(utterance, bp) && !bp && nMedia === 0)) {
+      await clearHttpPendingFlow(prismaUserId);
+      await setHttpPendingFlow(prismaUserId, { type: 'VIBE_CHECK_IMAGE', tonality: 'friendly' });
       const replies: HttpReplyPayload[] = [
         {
           reply_type: 'text',
-          reply_text:
-            'Perfect. Send a full outfit photo (mirror pic or full-body works). I’ll score fit, color harmony, and details.',
+          reply_text: "Send a full outfit photo (mirror pic or full-body works) and I will score your fit, color harmony, and details.",
         },
         {
           reply_type: 'vibe_check_image_upload_request',
-          reply_text: 'Upload your outfit photo when you’re ready.',
+          reply_text: "Upload your outfit photo when you are ready.",
         },
       ];
       await appendFlowHistory(prismaUserId, input, replies);
@@ -463,29 +485,18 @@ export async function tryHandleHttpChatFlows(
       const replies: HttpReplyPayload[] = [
         {
           reply_type: 'text',
-          reply_text: 'I’m still waiting on that outfit photo — send an image to keep going.',
+          reply_text: "Still waiting on that outfit photo — send an image to keep going.",
         },
         {
           reply_type: 'vibe_check_image_upload_request',
-          reply_text: 'Tap attach and upload your outfit.',
+          reply_text: "Tap attach and upload your outfit.",
         },
       ];
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: 'VIBE_CHECK_IMAGE' };
     }
 
-    if (pending.type === 'TONALITY_SELECTION' && nMedia > 0 && !bp) {
-      const replies: HttpReplyPayload[] = [
-        {
-          reply_type: 'text',
-          reply_text: 'Pick a tonality button first — then you can drop your outfit pic.',
-        },
-      ];
-      await appendFlowHistory(prismaUserId, input, replies);
-      return { handled: true, replies, pending: 'TONALITY_SELECTION' };
-    }
-
-    // --- Color analysis service entry (button always = new run) ---
+    // --- Color analysis service entry ---
     if (
       bp === 'color_analysis' ||
       (wantsNewColorAnalysis(utterance, bp) && !bp?.startsWith('tonality_'))
@@ -502,25 +513,13 @@ export async function tryHandleHttpChatFlows(
       const replies: HttpReplyPayload[] = [
         {
           reply_type: 'text',
-          reply_text:
-            'For the most accurate read, send a clear, front-facing selfie in natural-ish light. I’ll flag it if the photo isn’t usable.',
+          reply_text: "For the most accurate read, send a clear, front-facing selfie in natural light. I will flag it if the photo is not usable.",
         },
         {
           reply_type: 'color_analysis_image_upload_request',
-          reply_text: 'Upload a face photo to continue with color analysis.',
+          reply_text: "Upload a face photo to continue with color analysis.",
         },
       ];
-      const buttons: { text: string; id: string }[] = [];
-      if (!guest && (await userHasSavedColorAnalysis(prismaUserId))) {
-        buttons.push({ text: 'Fetch my saved palette', id: 'color_analysis_fetch_saved' });
-      }
-      if (buttons.length) {
-        replies.push({
-          reply_type: 'quick_reply',
-          reply_text: 'Already have a saved read on file?',
-          buttons,
-        });
-      }
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: 'COLOR_ANALYSIS_IMAGE' };
     }
@@ -536,12 +535,11 @@ export async function tryHandleHttpChatFlows(
       const replies: HttpReplyPayload[] = [
         {
           reply_type: 'text',
-          reply_text:
-            'I’m ready when you are — upload a clear face photo so I can map your seasonal palette.',
+          reply_text: "Ready when you are — upload a clear face photo so I can map your seasonal palette.",
         },
         {
           reply_type: 'color_analysis_image_upload_request',
-          reply_text: 'Waiting on your selfie for color analysis.',
+          reply_text: "Waiting on your selfie for color analysis.",
         },
       ];
       await appendFlowHistory(prismaUserId, input, replies);

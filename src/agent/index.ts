@@ -100,14 +100,6 @@ export async function runAgentForHttp(
         reply_type: 'text',
         reply_text: "I'm having a moment — try again in a sec! 💛",
       },
-      {
-        reply_type: 'quick_reply',
-        reply_text: 'Try one of these:',
-        buttons: [
-          { id: 'main_menu', text: 'Main menu' },
-          { id: 'style_studio', text: 'Style Studio' },
-        ],
-      },
     ];
 
     return { replies: errReplies, pending: null };

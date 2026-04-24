@@ -145,13 +145,22 @@ export class ChatOrchestrator {
     // Step 2: Rolling context for intent classifier
     const rollingContext = buildRollingContext(history);
 
-    // Step 3: Classify intent via Haiku (async)
+    // Step 3: Classify intent via Haiku — PAUSED (intent classification disabled)
+    // const { intent, entities, isFollowUp, searchMeta } = await classifyIntent(
+    //   messageInput.Body || messageInput.ButtonText || '',
+    //   hasImages,
+    //   rollingContext,
+    // );
     const hasImages = parseInt(messageInput.NumMedia || '0', 10) > 0;
-    const { intent, entities, isFollowUp, searchMeta } = await classifyIntent(
-      messageInput.Body || messageInput.ButtonText || '',
-      hasImages,
-      rollingContext,
-    );
+    const intent = 'product_search' as const;
+    const entities = {} as Record<string, unknown>;
+    const isFollowUp = false;
+    const searchMeta = {
+      isDislikeMore: false,
+      isNeutralMore: false,
+      isForSelf: true,
+      recipientGender: undefined as string | undefined,
+    };
 
     const { isDislikeMore, isNeutralMore, isForSelf, recipientGender } = searchMeta;
 
@@ -184,13 +193,16 @@ export class ChatOrchestrator {
     const systemPrompt = buildSystemPrompt(userContext, intent, entities, isFollowUp) + sessionContext;
 
     const allAvailableTools = getTools(userId, userImages, messageInput, activeSession, genderForSearch);
-    const toolNames = getToolsForIntent(intent, isFollowUp);
-    // Always include search_catalog for chitchat if there's any session context (post-service follow-up)
-    const effectiveToolNames =
-      intent === 'chitchat' && (activeSession.postServiceColorSeason || isNeutralMore || isDislikeMore)
-        ? [...toolNames, 'search_catalog']
-        : toolNames;
-    const tools = allAvailableTools.filter((t) => effectiveToolNames.includes(t.name));
+    // Intent-based tool filtering paused — give Claude all main chat tools
+    const CHAT_TOOL_NAMES = [
+      'search_catalog',
+      'get_outfit_suggestion',
+      'beauty_advisor',
+      'this_or_that',
+      'recall_user_preferences',
+      'save_user_preference',
+    ];
+    const tools = allAvailableTools.filter((t) => CHAT_TOOL_NAMES.includes(t.name));
 
     // Step 7: Convert history to messages (last 12) — never replay empty text (Anthropic 400)
     const conversationHistory = history.slice(-12).map((m) => {

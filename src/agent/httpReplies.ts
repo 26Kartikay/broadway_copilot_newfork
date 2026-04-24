@@ -1,25 +1,9 @@
 import type { MessageInput, QuickReplyButton } from '../lib/chat/types';
 import { WELCOME_IMAGE_URL } from '../utils/constants';
 
-const GREETING_REGEX = /\b(hi|hello|hey|heya|yo|sup)\b/i;
-const MENU_REGEX = /\b(help|menu|options?|what can you do\??)\b/i;
-
-/**
- * Same triggers as legacy routeGeneral + handleGeneral: show welcome image + list picker.
- */
 export function isMainMenuTrigger(input: MessageInput): boolean {
   const bp = input.ButtonPayload;
-  if (bp === 'main_menu' || bp === 'refresh_conversation_starters') {
-    return true;
-  }
-  const body = (input.Body || input.ButtonText || '').trim();
-  if (!body) {
-    return false;
-  }
-  if (bp) {
-    return false;
-  }
-  return GREETING_REGEX.test(body) || MENU_REGEX.test(body);
+  return bp === 'main_menu' || bp === 'refresh_conversation_starters';
 }
 
 export type HttpReplyPayload =

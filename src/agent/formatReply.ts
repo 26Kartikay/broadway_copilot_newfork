@@ -10,9 +10,6 @@ import { isGuestUser } from '../utils/user';
 import type { HttpReplyPayload } from './httpReplies';
 import { AgentResult } from './orchestrator';
 
-function hasInteractiveReplies(replies: HttpReplyPayload[]): boolean {
-  return replies.some((r) => r.reply_type === 'quick_reply' || r.reply_type === 'list_picker');
-}
 
 export function buildColorAnalysisCardPayload(
   color: Record<string, unknown>,
@@ -141,16 +138,6 @@ export function formatReplies(
       })),
       reply_text: 'Here are some pieces I found for you:',
     });
-
-    replies.push({
-      reply_type: 'quick_reply',
-      reply_text: 'What would you like to do next?',
-      buttons: [
-        { id: 'show_more', text: 'Show me more' },
-        { id: 'outfit_ideas', text: 'Outfit ideas' },
-        { id: 'main_menu', text: 'Main menu' },
-      ],
-    });
   }
 
   const color = result.colorAnalysis as Record<string, unknown> | null;
@@ -166,26 +153,6 @@ export function formatReplies(
       }
       replies.push(card);
 
-      if (isGuestUser(user)) {
-        const paletteLabel = card.palette_name;
-        replies.push({
-          reply_type: 'quick_reply',
-          reply_text: `Now that we know you're a ${paletteLabel}, would you like to see some products from your palette?`,
-          buttons: [
-            { text: 'Yes, please!', id: 'product_recommendation_yes' },
-            { text: 'No, thanks', id: 'product_recommendation_no' },
-          ],
-        });
-      } else if (!skipColorSavePrompt) {
-        replies.push({
-          reply_type: 'quick_reply',
-          reply_text: 'Do you want to save this color analysis result?',
-          buttons: [
-            { text: 'Yes', id: 'save_color_analysis_yes' },
-            { text: 'No', id: 'save_color_analysis_no' },
-          ],
-        });
-      }
     }
   }
 
@@ -201,34 +168,13 @@ export function formatReplies(
         });
       }
       replies.push(vibeCard);
-      replies.push({
-        reply_type: 'quick_reply',
-        reply_text: 'Based on that feedback, shall I recommend some products to complete the look?',
-        buttons: [
-          { text: 'Yes, please!', id: 'product_recommendation_yes' },
-          { text: 'No, thanks', id: 'product_recommendation_no' },
-        ],
-      });
     }
   }
 
   if (replies.length === 0) {
     replies.push({
       reply_type: 'text',
-      reply_text:
-        "I'm here when you're ready — tell me what you're shopping for or tap a shortcut below.",
-    });
-  }
-
-  if (!hasInteractiveReplies(replies)) {
-    replies.push({
-      reply_type: 'quick_reply',
-      reply_text: 'Pick a shortcut or keep typing ✨',
-      buttons: [
-        { id: 'main_menu', text: 'Main menu' },
-        { id: 'style_studio', text: 'Style Studio' },
-        { id: 'skin_lab', text: 'Skin Lab' },
-      ],
+      reply_text: "I'm here when you're ready — tell me what you're shopping for.",
     });
   }
 
