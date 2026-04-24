@@ -35,7 +35,7 @@ export interface AgentResult {
 const responseSchema = z.object({
   reply: z.string().describe('The conversational response to the user'),
   used_tools: z.array(z.string()).optional().describe('Tool names used'),
-  suggested_follow_up: z.string().optional().describe('One follow-up question if relevant'),
+  suggested_follow_up: z.string().nullable().optional().describe('One follow-up question if relevant'),
 });
 
 /** Match current-turn fallback so Redis never stores a bare empty user line (Anthropic rejects empty text blocks). */
