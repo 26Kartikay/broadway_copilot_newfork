@@ -1,3 +1,4 @@
+import type { MessageInput } from '../../lib/chat/types';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { logger } from '../../utils/logger';
@@ -251,7 +252,105 @@ export type HttpPendingFlow =
 
 const HTTP_PENDING_KEY = (userId: string) => `broadway:http_pending:${userId}`;
 const COLOR_ANALYSIS_STAGE_KEY = (userId: string) => `broadway:color_analysis_stage:${userId}`;
+const GUEST_REC_MSG_STASH_KEY = (userId: string) => `broadway:guest_rec_msg_stash:${userId}`;
+const GUEST_REC_GENDER_OPTOUT_KEY = (userId: string) => `broadway:guest_rec_gender_optout:${userId}`;
 const HTTP_FLOW_TTL_SEC = 60 * 60 * 24;
+const GUEST_REC_STASH_TTL_SEC = 60 * 60 * 6;
+const GUEST_REC_OPTOUT_TTL_SEC = 60 * 60 * 24 * 14;
+
+/** Flatten MessageInput to JSON-safe strings for Redis stash + replay. */
+export function messageInputToStashRecord(input: MessageInput): Record<string, string> {
+  const rec: Record<string, string> = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (typeof v === 'string' && v.length > 0) rec[k] = v;
+  }
+  return rec;
+}
+
+/** Rebuild MessageInput after a guest gender gate; assigns a fresh message id for logging. */
+export function stashRecordToMessageInput(rec: Record<string, string>, newMessageSid: string): MessageInput {
+  const m: MessageInput = {
+    MessageSid: newMessageSid,
+    SmsSid: newMessageSid,
+    SmsMessageSid: newMessageSid,
+    AccountSid: rec.AccountSid ?? 'APP',
+    From: rec.From ?? 'app:server',
+    To: rec.To ?? 'app:server',
+    Body: rec.Body ?? '',
+    NumMedia: rec.NumMedia ?? '0',
+    NumSegments: rec.NumSegments ?? '1',
+    SmsStatus: rec.SmsStatus ?? 'received',
+    ApiVersion: rec.ApiVersion ?? '2010-04-01',
+  };
+  for (const [k, v] of Object.entries(rec)) {
+    if (k === 'MessageSid' || k === 'SmsSid' || k === 'SmsMessageSid') continue;
+    if (typeof v === 'string' && v.length > 0) {
+      m[k] = v;
+    }
+  }
+  m.MessageSid = newMessageSid;
+  m.SmsSid = newMessageSid;
+  m.SmsMessageSid = newMessageSid;
+  return m;
+}
+
+export async function getGuestRecMessageStash(userId: string): Promise<Record<string, string> | null> {
+  try {
+    const raw = await redis.get(GUEST_REC_MSG_STASH_KEY(userId));
+    if (!raw) return null;
+    return JSON.parse(raw.toString()) as Record<string, string>;
+  } catch (err) {
+    logger.error({ err, userId }, 'getGuestRecMessageStash failed');
+    return null;
+  }
+}
+
+export async function setGuestRecMessageStash(
+  userId: string,
+  payload: Record<string, string>,
+): Promise<void> {
+  try {
+    await redis.set(GUEST_REC_MSG_STASH_KEY(userId), JSON.stringify(payload), {
+      EX: GUEST_REC_STASH_TTL_SEC,
+    });
+  } catch (err) {
+    logger.error({ err, userId }, 'setGuestRecMessageStash failed');
+  }
+}
+
+export async function clearGuestRecMessageStash(userId: string): Promise<void> {
+  try {
+    await redis.del(GUEST_REC_MSG_STASH_KEY(userId));
+  } catch (err) {
+    logger.error({ err, userId }, 'clearGuestRecMessageStash failed');
+  }
+}
+
+export async function getGuestRecGenderOptOut(userId: string): Promise<boolean> {
+  try {
+    const raw = await redis.get(GUEST_REC_GENDER_OPTOUT_KEY(userId));
+    return raw != null && raw.toString().length > 0;
+  } catch (err) {
+    logger.error({ err, userId }, 'getGuestRecGenderOptOut failed');
+    return false;
+  }
+}
+
+export async function setGuestRecGenderOptOut(userId: string): Promise<void> {
+  try {
+    await redis.set(GUEST_REC_GENDER_OPTOUT_KEY(userId), '1', { EX: GUEST_REC_OPTOUT_TTL_SEC });
+  } catch (err) {
+    logger.error({ err, userId }, 'setGuestRecGenderOptOut failed');
+  }
+}
+
+export async function clearGuestRecGenderOptOut(userId: string): Promise<void> {
+  try {
+    await redis.del(GUEST_REC_GENDER_OPTOUT_KEY(userId));
+  } catch (err) {
+    logger.error({ err, userId }, 'clearGuestRecGenderOptOut failed');
+  }
+}
 
 export async function getHttpPendingFlow(userId: string): Promise<HttpPendingFlow> {
   try {

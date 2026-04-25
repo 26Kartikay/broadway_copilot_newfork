@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { dbLog } from '../utils/dbLogger';
 import { logger } from '../utils/logger';
 import { formatReplies } from './formatReply';
+import { tryGuestRecProductGenderGate } from './guestRecProductGenderGate';
 import { tryHandleHttpChatFlows } from './httpChatFlows';
 import { buildMainMenuReplies, isMainMenuTrigger, type HttpReplyPayload } from './httpReplies';
 import { clearHttpPendingFlow } from './memory/redis';
@@ -65,6 +66,44 @@ export async function runAgentForHttp(
         user ? { userId: prismaUserId } : {},
       );
       return { replies: flow.replies, pending: flow.pending };
+    }
+
+    const guestRecGate = await tryGuestRecProductGenderGate(prismaUserId, messageInput, user);
+    if (guestRecGate.kind === 'prompt') {
+      dbLog(
+        Severity.INFO,
+        'agent',
+        'Guest product-rec gender gate (prompt)',
+        { userId: prismaUserId, messageId, replyCount: guestRecGate.replies.length },
+        user ? { userId: prismaUserId } : {},
+      );
+      return { replies: guestRecGate.replies, pending: 'GUEST_REC_GENDER' };
+    }
+
+    if (guestRecGate.kind === 'replay') {
+      const refreshedUser = await prisma.user.findUnique({ where: { id: prismaUserId } });
+      const result = await orchestrator.handleTurn(prismaUserId, guestRecGate.messageInput);
+      const replies = formatReplies(result, { user: refreshedUser ?? user });
+      dbLog(
+        Severity.INFO,
+        'agent',
+        'Guest product-rec gender gate (replay)',
+        {
+          userId: prismaUserId,
+          messageId,
+          toolsUsed: result.toolResults.map((t) => t.toolName),
+          replyCount: replies.length,
+        },
+        user ? { userId: prismaUserId } : {},
+      );
+      return {
+        replies,
+        pending: null,
+        ...(result.intent !== undefined && result.intent !== '' ? { intent: result.intent } : {}),
+        ...(result.intentV2 !== undefined && result.intentV2 !== ''
+          ? { intentV2: result.intentV2 }
+          : {}),
+      };
     }
 
     const result = await orchestrator.handleTurn(prismaUserId, messageInput);

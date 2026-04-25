@@ -83,7 +83,7 @@ function getPalettePdfUrl(paletteName: string): string | null {
   return `${baseUrl}/${pdfPath}`;
 }
 
-function buildColorRecommendationPrompt(paletteName?: string): HttpReplyPayload {
+function buildColorRecommendationPrompt(): HttpReplyPayload {
   return {
     reply_type: 'text',
     reply_text:
@@ -217,16 +217,16 @@ async function runColorAnalysisOnMedia(
         reply_text: 'Here is your color palette guide PDF.',
       });
     }
-    replies.push(buildColorRecommendationPrompt(paletteName));
+    replies.push(buildColorRecommendationPrompt());
     if (needsGuestGenderPrompt(user)) {
       replies.push({
         reply_type: 'quick_reply',
         reply_text:
-          'Before we continue, what is your gender? This helps me tune recommendations better for you.',
+          'Just so I can pull the right picks — who are we styling today? 🛍',
         buttons: [
-          { text: 'Male', id: 'guest_gender_male' },
-          { text: 'Female', id: 'guest_gender_female' },
-          { text: 'Other', id: 'guest_gender_other' },
+          { text: "Me (Women's)", id: 'guest_gender_female' },
+          { text: "Me (Men's)", id: 'guest_gender_male' },
+          { text: 'Someone else', id: 'guest_gender_skip' },
           { text: 'Skip', id: 'guest_gender_skip' },
         ],
       });
@@ -331,7 +331,7 @@ export async function tryHandleHttpChatFlows(
       }
       const replies = formatReplies(
         {
-          text: 'Perfect, thanks. I will personalize recommendations better from here.',
+          text: "Got it — all picks from here will be styled just for you.",
           toolResults: [],
           products: [],
           colorAnalysis: null,
@@ -346,7 +346,7 @@ export async function tryHandleHttpChatFlows(
     if (bp === 'guest_gender_skip') {
       const replies = formatReplies(
         {
-          text: 'No stress - I will keep suggestions neutral unless you tell me otherwise.',
+          text: "No worries! Just tell me a bit about who you're shopping for and I'll pull the right picks.",
           toolResults: [],
           products: [],
           colorAnalysis: null,
@@ -414,7 +414,7 @@ export async function tryHandleHttpChatFlows(
           reply_text: 'Here is your color palette guide PDF.',
         });
       }
-      replies.push(buildColorRecommendationPrompt(staged.palette_name));
+      replies.push(buildColorRecommendationPrompt());
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }
@@ -440,7 +440,7 @@ export async function tryHandleHttpChatFlows(
           reply_text: 'Here is your color palette guide PDF.',
         });
       }
-      replies.push(buildColorRecommendationPrompt(staged?.palette_name));
+      replies.push(buildColorRecommendationPrompt());
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }
