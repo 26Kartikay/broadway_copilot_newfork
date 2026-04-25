@@ -438,6 +438,11 @@ export interface SearchSession {
   postServiceColorSeason: string | null;
   /** Flipped true when user expresses dislike — stops palette emphasis. */
   paletteNormalized: boolean;
+  /**
+   * Guest chose "prefer not to say" on shopping-aisle prompt — skip single-gender SQL filter
+   * and bias embeddings toward a mens + womens mix.
+   */
+  guestCatalogGenderMix?: boolean;
 }
 
 const SEARCH_SESSION_KEY = (userId: string) => `broadway:search_session:${userId}`;
@@ -503,4 +508,18 @@ export async function resetSearchSession(userId: string): Promise<void> {
   } catch (err) {
     logger.error({ err, userId }, 'resetSearchSession failed');
   }
+}
+
+export async function setGuestCatalogGenderMix(userId: string, on: boolean): Promise<void> {
+  const session = await getSearchSession(userId);
+  if (on) session.guestCatalogGenderMix = true;
+  else delete session.guestCatalogGenderMix;
+  await saveSearchSession(userId, session);
+}
+
+export async function clearGuestCatalogGenderMix(userId: string): Promise<void> {
+  const session = await getSearchSession(userId);
+  if (!session.guestCatalogGenderMix) return;
+  delete session.guestCatalogGenderMix;
+  await saveSearchSession(userId, session);
 }

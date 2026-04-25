@@ -11,6 +11,8 @@ export interface SearchCatalogInput {
   style?: string;
   colorSeason?: string;
   gender?: string;             // 'male' | 'female' — soft signal used in reranking
+  /** Guest chose not to pick one aisle — omit single-gender SQL filter and diversify embedding text. */
+  genderMix?: boolean;
   priceRange?: { min: number; max: number };
   limit?: number;
   excludeProductIds?: string[]; // Never return these (already shown this session)
@@ -119,6 +121,11 @@ function buildEmbeddingText(input: SearchCatalogInput): string {
   }
   if (input.style) {
     parts.push(`${input.style} style`);
+  }
+  if (input.genderMix) {
+    parts.push(
+      'Curate a balanced mix of menswear and womenswear (and unisex where relevant); avoid skewing to one gender.',
+    );
   }
   parts.push('with features like comfort, quality, style, design');
   return parts.join(' ');
@@ -279,7 +286,7 @@ async function searchCatalogVector(
     clauses.push(`id != ALL($${p++}::text[])`);
     params.push(excludeIds);
   }
-  const genderToFilter = input.gender?.toLowerCase().trim();
+  const genderToFilter = input.genderMix ? '' : (input.gender?.toLowerCase().trim() ?? '');
   if (genderToFilter && shouldApplyGenderFilter(fi.category)) {
     clauses.push(
       `("componentTags" IS NULL OR "componentTags"->>'gender' IS NULL OR LOWER("componentTags"->>'gender') = 'unisex' OR LOWER("componentTags"->>'gender') = $${p++})`,
@@ -310,7 +317,7 @@ async function searchCatalogVector(
     category: input.category?.trim() ?? null,
     occasion: input.occasions?.[0]?.trim() ?? null,
     style: input.style?.trim() ?? null,
-    gender: input.gender?.toLowerCase().trim() ?? null,
+    gender: input.genderMix ? null : (input.gender?.toLowerCase().trim() ?? null),
   };
 
   const candidates: VectorRow[] = [];
@@ -390,7 +397,7 @@ async function searchCatalogIlike(
     baseConditions.push(`id != ALL($${paramIndex++}::text[])`);
     params.push(ilikeExcludeIds);
   }
-  const ilikeGender = input.gender?.toLowerCase().trim();
+  const ilikeGender = input.genderMix ? '' : (input.gender?.toLowerCase().trim() ?? '');
   if (ilikeGender && shouldApplyGenderFilter(category)) {
     baseConditions.push(
       `("componentTags" IS NULL OR "componentTags"->>'gender' IS NULL OR LOWER("componentTags"->>'gender') = 'unisex' OR LOWER("componentTags"->>'gender') = $${paramIndex++})`,

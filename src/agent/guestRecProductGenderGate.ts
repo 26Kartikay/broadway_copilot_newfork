@@ -10,6 +10,7 @@ import { isGuestUser } from '../utils/user';
 import type { HttpReplyPayload } from './httpReplies';
 import { classifyIntent } from './intentClassifier';
 import {
+  clearGuestCatalogGenderMix,
   clearGuestRecGenderOptOut,
   clearGuestRecMessageStash,
   getGuestRecGenderOptOut,
@@ -18,6 +19,7 @@ import {
   getHttpPendingFlow,
   invalidateContext,
   messageInputToStashRecord,
+  setGuestCatalogGenderMix,
   setGuestRecGenderOptOut,
   setGuestRecMessageStash,
   stashRecordToMessageInput,
@@ -182,6 +184,7 @@ export async function tryGuestRecProductGenderGate(
 
     if (bp === 'guest_rec_gender_prefer_not') {
       await setGuestRecGenderOptOut(prismaUserId);
+      await setGuestCatalogGenderMix(prismaUserId, true);
     } else if (user) {
       const gender: Gender = bp === 'guest_rec_gender_male' ? 'MALE' : 'FEMALE';
       await prisma.user.update({
@@ -189,6 +192,7 @@ export async function tryGuestRecProductGenderGate(
         data: { confirmedGender: gender },
       });
       await clearGuestRecGenderOptOut(prismaUserId);
+      await clearGuestCatalogGenderMix(prismaUserId);
       await invalidateContext(prismaUserId);
     }
 

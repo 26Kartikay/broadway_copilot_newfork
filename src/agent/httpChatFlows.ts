@@ -10,6 +10,7 @@ import { formatReplies } from './formatReply';
 import type { HttpReplyPayload } from './httpReplies';
 import {
   appendToHistory,
+  clearGuestCatalogGenderMix,
   clearHttpPendingFlow,
   clearStagedColorAnalysis,
   getHttpPendingFlow,
@@ -327,6 +328,7 @@ export async function tryHandleHttpChatFlows(
           where: { id: prismaUserId },
           data: { confirmedGender: gender },
         });
+        await clearGuestCatalogGenderMix(prismaUserId);
         await invalidateContext(prismaUserId);
       }
       const replies = formatReplies(

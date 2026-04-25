@@ -117,8 +117,12 @@ function buildSearchSessionContext(
     lines.push(`RECIPIENT: User is shopping for someone else (${recipientGender}). Frame recommendations for that person, not the user themselves.`);
   } else if (!isForSelf) {
     lines.push('RECIPIENT: User is shopping as a gift / for someone else. Keep recommendations gender-neutral unless they specify.');
-  } else if (isForSelf && userGender) {
+  } else if (isForSelf && userGender && !session.guestCatalogGenderMix) {
     lines.push(`RECIPIENT: Shopping for themselves (${userGender}). Filter and recommend accordingly.`);
+  } else if (isForSelf && session.guestCatalogGenderMix) {
+    lines.push(
+      'GUEST SHOPPING: User preferred not to specify one gender aisle — show a balanced mix of menswear and womenswear (and unisex where it fits). Avoid lopsided picks.',
+    );
   }
 
   return lines.length ? `\nSESSION:\n${lines.join('\n')}` : '';
@@ -183,9 +187,11 @@ export class ChatOrchestrator {
     }
 
     // Step 5: Build search context — override gender if shopping for others
-    const genderForSearch = isForSelf
+    const genderForSearchRaw = isForSelf
       ? (userContext.gender ?? undefined)
       : (recipientGender ?? undefined);
+    const genderForSearch =
+      isForSelf && searchSession.guestCatalogGenderMix ? undefined : genderForSearchRaw;
 
     // Patch the session's postServiceColorSeason with runtime dislike flag
     const activeSession: SearchSession = { ...searchSession };

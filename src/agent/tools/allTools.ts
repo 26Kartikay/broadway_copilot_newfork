@@ -92,6 +92,10 @@ export function getTools(
           if (searchSession.lastProductIds.length > 0) {
             cleaned.excludeProductIds = searchSession.lastProductIds;
           }
+
+          if (searchSession.guestCatalogGenderMix) {
+            cleaned.genderMix = true;
+          }
         }
 
         // Inject gender for hard SQL filtering — only if LLM didn't explicitly set one
