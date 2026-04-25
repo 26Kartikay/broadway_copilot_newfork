@@ -142,7 +142,20 @@ input, select, textarea {
 .main-content {
   overflow-y: auto;
   background-color: var(--color-background);
+  display: flex;
+  flex-direction: column;
 }
+
+/* Analytics page needs a full-height flex child so its internal scroll works */
+.main-content > .analytics-fill {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
 
 .top-bar {
   height: 64px;

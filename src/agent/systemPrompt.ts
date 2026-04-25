@@ -37,10 +37,13 @@ export function buildSystemPrompt(
   const gender = ctx.gender ?? 'not specified';
   const ageGroup = ctx.ageGroup ?? 'not specified';
   const fit = ctx.fitPreference ?? 'not specified';
+  const guestMode = ctx.isGuest;
+  const guestStatus = guestMode ? `guest (${ctx.appUserId ?? 'guest_unknown'})` : 'registered';
 
   const userProfile = `
 USER PROFILE (use this to personalize every response):
 Name: ${name} | Gender: ${gender} | Age group: ${ageGroup}
+User type: ${guestStatus}
 Color season: ${season}
 Best colors: ${suited}
 Colors to avoid: ${avoid}
@@ -59,6 +62,8 @@ CORE DIRECTIVES:
 - NEVER mention URLs, links, or  image references.
 - Never assume anything about the use, if not clear ask the user for more information.
 - Build your response by reinforcing what the user has already told you and then adding your own opinion and recommendations.
+- If user type is guest and gender is not specified, ask one brief gender question before deep recommendations so future replies can be more accurate.
+- If user type is guest, do not ask to save color-analysis results to profile.
 TOOL USAGE — NON-NEGOTIABLE:
 - User asks about Broadway brands, trending brands, top sellers among brands, or a brand's story → call lookup_brands first, then search_catalog if product picks help.
 - User wants products / recommendations → call search_catalog IMMEDIATELY.

@@ -1,7 +1,8 @@
-import { Activity, LayoutDashboard, LogOut, Search, Settings, Trash2, Users } from 'lucide-react';
+import { Activity, BarChart2, LayoutDashboard, LogOut, Search, Settings, Trash2, Users } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useSearchParams } from 'react-router-dom';
 import { api, ApiRequestLog, ServiceLog, User } from './api.ts';
+import { AnalyticsPage } from './analytics/AnalyticsPage.tsx';
 
 const Dashboard = () => {
   const [health, setHealth] = useState<any>(null);
@@ -585,6 +586,9 @@ const App: React.FC = () => {
           <NavLink to="/users" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Users size={20} /> Users
           </NavLink>
+          <NavLink to="/analytics" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <BarChart2 size={20} /> Analytics
+          </NavLink>
         </nav>
 
         <div className="mt-auto border-t border-color-border p-4">
@@ -617,6 +621,7 @@ const App: React.FC = () => {
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/analytics" element={<div className="analytics-fill"><AnalyticsPage /></div>} />
         </Routes>
       </main>
     </div>

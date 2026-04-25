@@ -8,6 +8,7 @@ import Papa from 'papaparse';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { normalizeCsvHeader, parseBulkUserRow, upsertBulkUser } from './bulkUsers.js';
 
 dotenv.config();
@@ -335,6 +336,18 @@ app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
+// Analytics API proxy — forwards /analytics-api/* → FastAPI app (see analysis_agent).
+// Path rewrite: browser /analytics-api/schema → upstream GET {ANALYTICS_API_URL}/api/schema
+const analyticsApiUrl = process.env.ANALYTICS_API_URL || 'http://localhost:8000';
+app.use(
+  '/analytics-api',
+  createProxyMiddleware({
+    target: analyticsApiUrl,
+    changeOrigin: true,
+    pathRewrite: { '^/analytics-api': '/api' },
+  }),
+);
 
 // Serve Frontend
 const staticPath = path.join(__dirname, '../dist');

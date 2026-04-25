@@ -24,12 +24,15 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       SERVER_URL: ${SERVER_URL:-}
       CHAT_API_URL: ${CHAT_API_URL:-}
+      ANALYTICS_API_URL: http://analytics-api:8000
     ports:
       - "${DASHBOARD_PORT:-8090}:${DASHBOARD_PORT:-8090}"
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_started
+      analytics-api:
         condition: service_started
     networks:
       - broadway-dashboard-dev
@@ -57,6 +60,23 @@ services:
       retries: 5
     networks:
       - broadway-dashboard-dev
+
+  analytics-api:
+    build:
+      context: ../analysis_agent
+      dockerfile: Dockerfile.api
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DB_CONNECTION_STRING: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-broadway}?schema=public}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ACCESSIBLE_TABLES: ${ANALYTICS_ACCESSIBLE_TABLES:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - broadway-dashboard-dev
+    restart: unless-stopped
 
   redis:
     image: redis:8

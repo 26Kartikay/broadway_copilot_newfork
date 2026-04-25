@@ -658,7 +658,8 @@ export const SEASONAL_PALETTES: Record<SeasonalPalette, PaletteData> = {
       'Midnight, Plum & White',
       'Navy, Pine & Magenta',
     ],
-    pdfPath: 'palettes/DARK_WINTER.pdf',
+    // File currently shipped as DRAK_WINTER.pdf in /public/palettes.
+    pdfPath: 'palettes/DRAK_WINTER.pdf',
   },
 };
 

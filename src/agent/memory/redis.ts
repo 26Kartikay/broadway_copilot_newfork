@@ -28,6 +28,8 @@ export function stripHeavyMediaFromContent(content: unknown): unknown {
 
 export interface UserContext {
   name: string;
+  appUserId: string | null;
+  isGuest: boolean;
   colorSeason: string | null;
   colorPalette: {
     suited: string[];
@@ -64,6 +66,8 @@ export function normalizeUserContext(raw: unknown): UserContext {
   if (!raw || typeof raw !== 'object') {
     return {
       name: '',
+      appUserId: null,
+      isGuest: true,
       colorSeason: null,
       colorPalette: null,
       preferences: [],
@@ -84,8 +88,14 @@ export function normalizeUserContext(raw: unknown): UserContext {
       toAvoid: coerceStringArray(p.toAvoid),
     };
   }
+  const appUserId = c.appUserId == null || c.appUserId === '' ? null : String(c.appUserId);
+  const inferredGuest =
+    appUserId?.startsWith('guest_') || appUserId?.startsWith('TEMP_') || String(c.name ?? '').toLowerCase() === 'guest';
+
   return {
     name: typeof c.name === 'string' ? c.name : String(c.name ?? ''),
+    appUserId,
+    isGuest: c.isGuest == null ? Boolean(inferredGuest) : Boolean(c.isGuest),
     colorSeason: c.colorSeason == null || c.colorSeason === '' ? null : String(c.colorSeason),
     colorPalette,
     preferences: coerceStringArray(c.preferences),
@@ -170,6 +180,8 @@ export async function getUserContext(userId: string): Promise<UserContext> {
       logger.info({ userId }, 'User not found in DB, returning empty guest context');
       return normalizeUserContext({
         name: 'Guest',
+        appUserId: null,
+        isGuest: true,
         colorSeason: null,
         colorPalette: null,
         preferences: [],
@@ -185,6 +197,8 @@ export async function getUserContext(userId: string): Promise<UserContext> {
 
     const context = normalizeUserContext({
       name: user.profileName || '',
+      appUserId: user.appUserId || null,
+      isGuest: Boolean(user.isGuest),
       colorSeason: latestColorAnalysis?.palette_name || null,
       colorPalette: latestColorAnalysis
         ? {

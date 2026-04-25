@@ -1,9 +1,10 @@
-import type { Prisma, User } from '@prisma/client';
+import type { Gender, Prisma, User } from '@prisma/client';
 import { formatColorCombos, shuffleArray } from '../data/colorAnalysisHelpers';
 import { getPaletteData, isValidPalette, resolveSeasonalPalette } from '../data/seasonalPalettes';
 import type { MessageInput } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { getServerUrlBase } from '../utils/serverUrl';
 import { isGuestUser } from '../utils/user';
 import { formatReplies } from './formatReply';
 import type { HttpReplyPayload } from './httpReplies';
@@ -66,6 +67,28 @@ function wantsNewVibeCheck(text: string, buttonPayload?: string): boolean {
   if (buttonPayload === 'vibe_check') return true;
   const t = text.toLowerCase();
   return /\b(vibe check|rate my outfit|outfit check|how('?s| is) my outfit)\b/.test(t);
+}
+
+function needsGuestGenderPrompt(user: User | null): boolean {
+  if (!isGuestUser(user)) return false;
+  return !user?.confirmedGender && !user?.inferredGender;
+}
+
+function getPalettePdfUrl(paletteName: string): string | null {
+  const canonical = resolveSeasonalPalette(paletteName);
+  if (!canonical || !isValidPalette(canonical)) return null;
+  const pdfPath = getPaletteData(canonical).pdfPath.replace(/^\//, '');
+  const baseUrl =
+    getServerUrlBase() || `http://localhost:${Number.parseInt(process.env.PORT || '8080', 10)}`;
+  return `${baseUrl}/${pdfPath}`;
+}
+
+function buildColorRecommendationPrompt(paletteName?: string): HttpReplyPayload {
+  return {
+    reply_type: 'text',
+    reply_text:
+      'Do you want me to pull some recommendations for you based on your skin palette?',
+  };
 }
 
 function wantsPreviousVibeCheckResult(text: string): boolean {
@@ -173,7 +196,42 @@ async function runColorAnalysisOnMedia(
 
   await clearHttpPendingFlow(prismaUserId);
   const intro = String(raw.compliment ?? '').trim();
-  const replies = await buildRepliesFromColorTool(raw, user, intro);
+  const replies: HttpReplyPayload[] = await buildRepliesFromColorTool(raw, user, intro);
+  const paletteName = String(raw.palette_name ?? raw.season ?? '');
+
+  if (!isGuestUser(user)) {
+    replies.push({
+      reply_type: 'quick_reply',
+      reply_text: 'Do you want to save this color analysis result?',
+      buttons: [
+        { text: 'Yes', id: 'save_color_analysis_yes' },
+        { text: 'No', id: 'save_color_analysis_no' },
+      ],
+    });
+  } else if (paletteName) {
+    const pdfUrl = getPalettePdfUrl(paletteName);
+    if (pdfUrl) {
+      replies.push({
+        reply_type: 'pdf',
+        media_url: pdfUrl,
+        reply_text: 'Here is your color palette guide PDF.',
+      });
+    }
+    replies.push(buildColorRecommendationPrompt(paletteName));
+    if (needsGuestGenderPrompt(user)) {
+      replies.push({
+        reply_type: 'quick_reply',
+        reply_text:
+          'Before we continue, what is your gender? This helps me tune recommendations better for you.',
+        buttons: [
+          { text: 'Male', id: 'guest_gender_male' },
+          { text: 'Female', id: 'guest_gender_female' },
+          { text: 'Other', id: 'guest_gender_other' },
+          { text: 'Skip', id: 'guest_gender_skip' },
+        ],
+      });
+    }
+  }
   return { replies, pendingOut: null };
 }
 
@@ -260,6 +318,46 @@ export async function tryHandleHttpChatFlows(
     }
     // ── /Flow escape ───────────────────────────────────────────────────────────
 
+    // --- Guest gender capture ---
+    if (bp === 'guest_gender_male' || bp === 'guest_gender_female' || bp === 'guest_gender_other') {
+      if (guest) {
+        const gender: Gender =
+          bp === 'guest_gender_male' ? 'MALE' : bp === 'guest_gender_female' ? 'FEMALE' : 'OTHER';
+        await prisma.user.update({
+          where: { id: prismaUserId },
+          data: { confirmedGender: gender },
+        });
+        await invalidateContext(prismaUserId);
+      }
+      const replies = formatReplies(
+        {
+          text: 'Perfect, thanks. I will personalize recommendations better from here.',
+          toolResults: [],
+          products: [],
+          colorAnalysis: null,
+          vibeCheck: null,
+        },
+        { user },
+      );
+      await appendFlowHistory(prismaUserId, input, replies);
+      return { handled: true, replies, pending: null };
+    }
+
+    if (bp === 'guest_gender_skip') {
+      const replies = formatReplies(
+        {
+          text: 'No stress - I will keep suggestions neutral unless you tell me otherwise.',
+          toolResults: [],
+          products: [],
+          colorAnalysis: null,
+          vibeCheck: null,
+        },
+        { user },
+      );
+      await appendFlowHistory(prismaUserId, input, replies);
+      return { handled: true, replies, pending: null };
+    }
+
     // --- Save color analysis ---
     if (bp === 'save_color_analysis_yes') {
       const staged = await getStagedColorAnalysis(prismaUserId);
@@ -297,8 +395,9 @@ export async function tryHandleHttpChatFlows(
         data: { lastColorAnalysisAt: new Date() },
       });
       await invalidateContext(prismaUserId);
+      const pdfUrl = getPalettePdfUrl(staged.palette_name);
       await clearStagedColorAnalysis(prismaUserId);
-      const replies = formatReplies(
+      const replies: HttpReplyPayload[] = formatReplies(
         {
           text: "Saved — I will remember this palette for your recommendations.",
           toolResults: [],
@@ -308,13 +407,23 @@ export async function tryHandleHttpChatFlows(
         },
         { user },
       );
+      if (pdfUrl) {
+        replies.push({
+          reply_type: 'pdf',
+          media_url: pdfUrl,
+          reply_text: 'Here is your color palette guide PDF.',
+        });
+      }
+      replies.push(buildColorRecommendationPrompt(staged.palette_name));
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }
 
     if (bp === 'save_color_analysis_no') {
+      const staged = await getStagedColorAnalysis(prismaUserId);
+      const pdfUrl = staged?.palette_name ? getPalettePdfUrl(staged.palette_name) : null;
       await clearStagedColorAnalysis(prismaUserId);
-      const replies = formatReplies(
+      const replies: HttpReplyPayload[] = formatReplies(
         {
           text: "No worries — I won't save that run to your profile.",
           toolResults: [],
@@ -324,6 +433,14 @@ export async function tryHandleHttpChatFlows(
         },
         { user },
       );
+      if (pdfUrl) {
+        replies.push({
+          reply_type: 'pdf',
+          media_url: pdfUrl,
+          reply_text: 'Here is your color palette guide PDF.',
+        });
+      }
+      replies.push(buildColorRecommendationPrompt(staged?.palette_name));
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }

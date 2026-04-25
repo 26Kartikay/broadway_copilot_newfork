@@ -41,16 +41,22 @@ export async function getOrCreateUserAndConversation(
 ): Promise<{ user: User; conversation: Conversation }> {
   const isProduction = process.env.NODE_ENV === 'production';
   const trimmedProfile = profileName?.trim() ?? '';
+  const anonymous = !trimmedProfile;
+  const rawAppUserId = String(appUserId || '').trim() || whatsappId;
+  const guestTaggedAppUserId = rawAppUserId.startsWith('guest_')
+    ? rawAppUserId
+    : `guest_${rawAppUserId}`;
 
-  let user = await prisma.user.findUnique({
-    where: { appUserId },
+  let user = await prisma.user.findFirst({
+    where: {
+      OR: [{ appUserId: rawAppUserId }, { appUserId: guestTaggedAppUserId }],
+    },
   });
 
   if (!user) {
-    const anonymous = !trimmedProfile;
     user = await prisma.user.create({
       data: {
-        appUserId,
+        appUserId: anonymous ? guestTaggedAppUserId : rawAppUserId,
         whatsappId,
         profileName: anonymous ? 'Guest' : trimmedProfile,
         details: anonymous ? 'Unknown' : '',
@@ -59,9 +65,11 @@ export async function getOrCreateUserAndConversation(
     });
   } else if (!isProduction) {
     user = await prisma.user.update({
-      where: { appUserId },
+      where: { id: user.id },
       data: {
         whatsappId,
+        isGuest: anonymous,
+        ...(anonymous ? { appUserId: guestTaggedAppUserId, profileName: 'Guest' } : {}),
         ...(trimmedProfile && { profileName: trimmedProfile }),
       },
     });
