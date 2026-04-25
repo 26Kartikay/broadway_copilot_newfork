@@ -91,6 +91,49 @@ services:
     networks:
       - broadway-network
 
+  guest-cleanup-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
+      # Default: run hourly. Override in .env if needed.
+      GUEST_CLEANUP_CRON: ${GUEST_CLEANUP_CRON:-0 * * * *}
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        set -Eeuo pipefail
+        : "${DATABASE_URL:?DATABASE_URL is required for guest cleanup cron}"
+        CRON_EXPR="${GUEST_CLEANUP_CRON:-0 * * * *}"
+
+        printf 'export DATABASE_URL=%q\n' "$${DATABASE_URL}" > /etc/guest-cleanup.env
+        cat > /usr/local/bin/run-guest-cleanup.sh <<'EOF'
+        #!/bin/bash
+        set -Eeuo pipefail
+        source /etc/guest-cleanup.env
+        psql "$${DATABASE_URL}" -c 'DELETE FROM "User" WHERE "isGuest" = true;'
+        EOF
+        chmod +x /usr/local/bin/run-guest-cleanup.sh
+
+        cat > /etc/cron.d/guest-user-cleanup <<EOF
+        SHELL=/bin/bash
+        PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+        $${CRON_EXPR} root /usr/local/bin/run-guest-cleanup.sh >> /var/log/guest-user-cleanup.log 2>&1
+        EOF
+        chmod 0644 /etc/cron.d/guest-user-cleanup
+        crontab /etc/cron.d/guest-user-cleanup
+        touch /var/log/guest-user-cleanup.log
+        exec cron -f
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - broadway-network
+
   dashboard:
     build:
       context: .

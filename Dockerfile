@@ -22,7 +22,9 @@ RUN npm run build
 FROM node:22 AS production
 
 # Install native runtime dependencies needed by canvas (no build tools here)
+# plus cron + psql client for guest-user cleanup jobs.
 RUN apt-get update && apt-get install -y \
+    cron postgresql-client \
     libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
     && rm -rf /var/lib/apt/lists/*
 
