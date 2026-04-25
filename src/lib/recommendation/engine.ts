@@ -1,0 +1,235 @@
+import { logger } from '../../utils/logger';
+import { detectRecipient } from './recipientDetector';
+import { extractIntent } from './intentExtractor';
+import { runFilteredSearch } from './productFilter';
+import { computeScore } from './scorer';
+import type {
+  ExtractedIntent,
+  RecommendationEngineInput,
+  RecommendationResult,
+  RecommendedProduct,
+} from './types';
+
+const DEFAULT_LIMIT = 5;
+const MAX_LIMIT = 5;
+const SCORE_THRESHOLD = 0.65;
+const FALLBACK_THRESHOLD = 0.50;
+
+function summarizeFilters(intent: ExtractedIntent): string {
+  const parts: string[] = [];
+  if (intent.legacyCategory) parts.push(`cat=${intent.legacyCategory}`);
+  if (intent.subCategory) parts.push(`sub=${intent.subCategory}`);
+  if (intent.type) parts.push(`type=${intent.type}`);
+  if (intent.gender) parts.push(`gender=${intent.gender}`);
+  if (intent.ageGroup) parts.push(`age=${intent.ageGroup}`);
+  if (intent.colors?.length) parts.push(`colors=[${intent.colors.join(',')}]`);
+  if (intent.occasion) parts.push(`occasion=${intent.occasion}`);
+  if (intent.tags_must_include.length) parts.push(`must=[${intent.tags_must_include.join(',')}]`);
+  if (intent.tags_must_exclude.length) parts.push(`excl=[${intent.tags_must_exclude.join(',')}]`);
+  return parts.join(' | ') || 'none';
+}
+
+export async function runRecommendationEngine(
+  input: RecommendationEngineInput,
+): Promise<RecommendationResult> {
+  const limit = Math.min(input.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+  const excludeIds = input.exclude_product_ids ?? [];
+  const tStart = Date.now();
+
+  logger.info(
+    {
+      query: input.user_query,
+      userGender: input.user_profile.gender ?? null,
+      userAgeGroup: input.user_profile.ageGroup ?? null,
+      excludeCount: excludeIds.length,
+      limit,
+    },
+    '[RecEng] ═══ Starting recommendation engine ═══',
+  );
+
+  // ── Stage 0: Recipient detection ────────────────────────────────────────────
+  logger.info('[RecEng] ─── Stage 0: Recipient detection ───');
+  const recipientCtx = await detectRecipient(input.user_query, input.user_profile);
+
+  const profileUsed = recipientCtx.shopping_for === 'self';
+  const genderFilterUsed =
+    recipientCtx.shopping_for === 'self'
+      ? (input.user_profile.gender ?? null)
+      : recipientCtx.shopping_for === 'other'
+        ? (recipientCtx.recipient_gender ?? null)
+        : null;
+
+  logger.info(
+    {
+      shopping_for: recipientCtx.shopping_for,
+      recipient_gender: recipientCtx.recipient_gender,
+      recipient_age_group: recipientCtx.recipient_age_group,
+      recipient_relationship: recipientCtx.recipient_relationship,
+      gift_context: recipientCtx.gift_context,
+      confidence: recipientCtx.confidence,
+      effective_gender_filter: genderFilterUsed,
+      profile_used: profileUsed,
+    },
+    '[RecEng] Stage 0 result',
+  );
+
+  // ── Stage 1: Intent extraction ───────────────────────────────────────────────
+  logger.info('[RecEng] ─── Stage 1: Intent extraction ───');
+  const intent = await extractIntent(input.user_query, recipientCtx, input.user_profile);
+
+  logger.info(
+    {
+      filters: summarizeFilters(intent),
+      semantic_query: intent.semantic_query,
+    },
+    '[RecEng] Stage 1 result — filters extracted',
+  );
+
+  // ── Stage 2: Filtered search ─────────────────────────────────────────────────
+  logger.info(
+    {
+      query: intent.semantic_query,
+      filters: summarizeFilters(intent),
+    },
+    '[RecEng] ─── Stage 2: Filtered vector search — query: "' + intent.semantic_query + '"',
+  );
+
+  const { rows: rawRows, searchMode } = await runFilteredSearch(intent, excludeIds, limit);
+
+  logger.info(
+    { recall_count: rawRows.length, search_mode: searchMode },
+    '[RecEng] Stage 2 recall complete',
+  );
+
+  if (rawRows.length === 0) {
+    logger.info('[RecEng] Stage 2 returned 0 rows — returning empty result');
+    return buildEmptyResult(intent, recipientCtx, genderFilterUsed, profileUsed);
+  }
+
+  // ── Stage 2: Scoring ─────────────────────────────────────────────────────────
+  const scored = rawRows.map((row) => computeScore(row, intent));
+  scored.sort((a, b) => b.final_score - a.final_score);
+
+  logger.info(
+    {
+      top_results: scored.slice(0, 8).map((s) => ({
+        id: s.id,
+        name: s.name.slice(0, 50),
+        similarity: s.similarity.toFixed(3),
+        tag_bonus: s.tag_match_bonus.toFixed(2),
+        final_score: s.final_score.toFixed(3),
+      })),
+    },
+    '[RecEng] Stage 2 scoring — top results',
+  );
+
+  // Apply primary threshold
+  let finalSet = scored.filter((s) => s.final_score > SCORE_THRESHOLD).slice(0, limit);
+
+  if (finalSet.length === 0) {
+    logger.info(
+      { threshold: SCORE_THRESHOLD, best_score: scored[0]?.final_score?.toFixed(3) ?? 'n/a' },
+      '[RecEng] No results above primary threshold — trying fallback threshold',
+    );
+    const fallback = scored.filter((s) => s.final_score > FALLBACK_THRESHOLD).slice(0, 1);
+    if (fallback.length > 0) {
+      finalSet = fallback;
+      logger.info(
+        { fallback_score: fallback[0]!.final_score.toFixed(3), fallback_name: fallback[0]!.name },
+        '[RecEng] Using single fallback result',
+      );
+    } else {
+      logger.info(
+        { best_score: scored[0]?.final_score?.toFixed(3) ?? 'n/a' },
+        '[RecEng] No results above fallback threshold either — returning empty',
+      );
+      return buildEmptyResult(intent, recipientCtx, genderFilterUsed, profileUsed);
+    }
+  }
+
+  // ── Stage 3: Format output ───────────────────────────────────────────────────
+  const results: RecommendedProduct[] = finalSet.map((s) => ({
+    id: s.id,
+    name: s.name,
+    brand: s.brand,
+    type: s.generalTag,
+    subCategory: String(s.componentTags.subCategory ?? ''),
+    colors: s.colors,
+    imageUrl: s.imageUrl,
+    productLink: s.productLink,
+    relevance_score: Math.round(s.final_score * 1000) / 1000,
+    match_reason: s.match_reason,
+  }));
+
+  const result: RecommendationResult = {
+    query_understood_as: intent.semantic_query,
+    shopping_context: {
+      shopping_for: recipientCtx.shopping_for,
+      recipient: recipientCtx.recipient_relationship ?? null,
+      gender_filter_used: genderFilterUsed,
+      profile_used: profileUsed,
+    },
+    filters_applied: {
+      legacyCategory: intent.legacyCategory,
+      subCategory: intent.subCategory,
+      type: intent.type,
+      gender: intent.gender,
+      ageGroup: intent.ageGroup,
+      colors: intent.colors,
+      colorPalette: intent.colorPalette,
+      occasion: intent.occasion,
+      tags_must_include: intent.tags_must_include,
+      tags_must_exclude: intent.tags_must_exclude,
+      search_mode: searchMode,
+    },
+    results,
+    result_count: results.length,
+  };
+
+  logger.info(
+    {
+      ms: Date.now() - tStart,
+      result_count: results.length,
+      search_mode: searchMode,
+      gender_filter: genderFilterUsed,
+      profile_used: profileUsed,
+      top_result: results[0]
+        ? { name: results[0].name, score: results[0].relevance_score }
+        : null,
+    },
+    '[RecEng] ═══ Recommendation engine complete ═══',
+  );
+
+  return result;
+}
+
+function buildEmptyResult(
+  intent: ExtractedIntent,
+  recipientCtx: ReturnType<typeof detectRecipient> extends Promise<infer T> ? T : never,
+  genderFilterUsed: string | null,
+  profileUsed: boolean,
+): RecommendationResult {
+  return {
+    query_understood_as: intent.semantic_query,
+    shopping_context: {
+      shopping_for: recipientCtx.shopping_for,
+      recipient: recipientCtx.recipient_relationship ?? null,
+      gender_filter_used: genderFilterUsed,
+      profile_used: profileUsed,
+    },
+    filters_applied: {
+      legacyCategory: intent.legacyCategory,
+      subCategory: intent.subCategory,
+      type: intent.type,
+      gender: intent.gender,
+      ageGroup: intent.ageGroup,
+      colors: intent.colors,
+      colorPalette: intent.colorPalette,
+      occasion: intent.occasion,
+      tags_must_include: intent.tags_must_include,
+      tags_must_exclude: intent.tags_must_exclude,
+    },
+    results: [],
+    result_count: 0,
+  };
+}
