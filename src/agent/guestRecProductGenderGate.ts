@@ -70,8 +70,8 @@ export function looksLikeProductRecRequest(body: string, buttonPayload?: string)
  * Shopping-aisle prompt only until the guest explicitly confirms gender (quick-reply).
  * `inferredGender` alone must not skip the gate — it is often missing or wrong for catalog fit.
  */
-function guestNeedsRecGenderPrompt(user: User | null): boolean {
-  if (!isGuestUser(user)) return false;
+function guestNeedsRecGenderPrompt(user: User | null, requestProfileName?: string | null): boolean {
+  if (!isGuestUser(user, requestProfileName)) return false;
   return !user?.confirmedGender;
 }
 
@@ -155,7 +155,7 @@ export async function tryGuestRecProductGenderGate(
   const bp = input.ButtonPayload;
   const nMedia = Math.min(10, parseInt(input.NumMedia || '0', 10) || 0);
 
-  if (!isGuestUser(user)) return { kind: 'pass' };
+  if (!isGuestUser(user, input.ProfileName)) return { kind: 'pass' };
 
   const pendingFlow = await getHttpPendingFlow(prismaUserId);
   if (pendingFlow.type !== 'NONE') return { kind: 'pass' };
@@ -202,7 +202,7 @@ export async function tryGuestRecProductGenderGate(
     return { kind: 'replay', messageInput: replayInput };
   }
 
-  if (!guestNeedsRecGenderPrompt(user) || optOut) return { kind: 'pass' };
+  if (!guestNeedsRecGenderPrompt(user, input.ProfileName) || optOut) return { kind: 'pass' };
 
   // ── Stash exists: refine / cancel / unrelated ───────────────────────────────
   if (stash) {

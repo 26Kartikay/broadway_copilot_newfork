@@ -109,7 +109,7 @@ services:
         #!/bin/bash
         set -Eeuo pipefail
         source /etc/guest-cleanup.env
-        psql "$${DATABASE_URL}" -c 'DELETE FROM "User" WHERE "isGuest" = true;'
+        psql "$${DATABASE_URL}" -c "DELETE FROM \"User\" WHERE \"isGuest\" = true OR LOWER(TRIM(\"profileName\")) = 'guest';"
         EOF
         chmod +x /usr/local/bin/run-guest-cleanup.sh
 

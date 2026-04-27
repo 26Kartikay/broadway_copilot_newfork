@@ -3,7 +3,7 @@ import { Conversation, ConversationStatus, User } from '@prisma/client';
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
 import { logger } from './logger';
-import { isGuestUser } from './user';
+import { isGuestUser, profileNameIndicatesGuest } from './user';
 
 const CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 30 minutes
 
@@ -41,7 +41,7 @@ export async function getOrCreateUserAndConversation(
 ): Promise<{ user: User; conversation: Conversation }> {
   const isProduction = process.env.NODE_ENV === 'production';
   const trimmedProfile = profileName?.trim() ?? '';
-  const anonymous = !trimmedProfile;
+  const anonymous = !trimmedProfile || profileNameIndicatesGuest(trimmedProfile);
   const rawAppUserId = String(appUserId || '').trim() || whatsappId;
   const guestTaggedAppUserId = rawAppUserId.startsWith('guest_')
     ? rawAppUserId

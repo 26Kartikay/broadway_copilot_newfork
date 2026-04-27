@@ -83,7 +83,10 @@ export async function runAgentForHttp(
     if (guestRecGate.kind === 'replay') {
       const refreshedUser = await prisma.user.findUnique({ where: { id: prismaUserId } });
       const result = await orchestrator.handleTurn(prismaUserId, guestRecGate.messageInput);
-      const replies = formatReplies(result, { user: refreshedUser ?? user });
+      const replies = formatReplies(result, {
+        user: refreshedUser ?? user,
+        requestProfileName: guestRecGate.messageInput.ProfileName,
+      });
       dbLog(
         Severity.INFO,
         'agent',
@@ -107,7 +110,7 @@ export async function runAgentForHttp(
     }
 
     const result = await orchestrator.handleTurn(prismaUserId, messageInput);
-    const replies = formatReplies(result, { user });
+    const replies = formatReplies(result, { user, requestProfileName: messageInput.ProfileName });
     dbLog(
       Severity.INFO,
       'agent',

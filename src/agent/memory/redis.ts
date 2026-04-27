@@ -2,6 +2,7 @@ import type { MessageInput } from '../../lib/chat/types';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { logger } from '../../utils/logger';
+import { profileNameIndicatesGuest } from '../../utils/user';
 
 const HISTORY_KEY = (userId: string) => `broadway:chat:${userId}`;
 const CONTEXT_KEY = (userId: string) => `broadway:ctx:${userId}`;
@@ -199,7 +200,7 @@ export async function getUserContext(userId: string): Promise<UserContext> {
     const context = normalizeUserContext({
       name: user.profileName || '',
       appUserId: user.appUserId || null,
-      isGuest: Boolean(user.isGuest),
+      isGuest: Boolean(user.isGuest) || profileNameIndicatesGuest(user.profileName),
       colorSeason: latestColorAnalysis?.palette_name || null,
       colorPalette: latestColorAnalysis
         ? {

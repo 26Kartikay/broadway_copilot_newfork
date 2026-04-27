@@ -111,11 +111,17 @@ export function buildVibeCheckCardPayload(vc: Record<string, unknown>): HttpRepl
 
 export function formatReplies(
   result: AgentResult,
-  options?: { user?: User | null; skipColorSavePrompt?: boolean },
+  options?: {
+    user?: User | null;
+    skipColorSavePrompt?: boolean;
+    /** Current HTTP request display name — guest placeholder applies guest UI even if DB is stale. */
+    requestProfileName?: string | null | undefined;
+  },
 ): HttpReplyPayload[] {
   const replies: HttpReplyPayload[] = [];
   const user = options?.user;
   const skipColorSavePrompt = Boolean(options?.skipColorSavePrompt);
+  const requestProfileName = options?.requestProfileName;
 
   if (result.text?.trim()) {
     replies.push({
@@ -144,7 +150,7 @@ export function formatReplies(
   if (color) {
     const card = buildColorAnalysisCardPayload(color);
     if (card && card.reply_type === 'color_analysis_card') {
-      if (isGuestUser(user)) {
+      if (isGuestUser(user, requestProfileName)) {
         replies.push({
           reply_type: 'text',
           reply_text:
@@ -160,7 +166,7 @@ export function formatReplies(
   if (vc) {
     const vibeCard = buildVibeCheckCardPayload(vc);
     if (vibeCard && vibeCard.reply_type === 'vibe_check_card') {
-      if (isGuestUser(user)) {
+      if (isGuestUser(user, requestProfileName)) {
         replies.push({
           reply_type: 'text',
           reply_text:

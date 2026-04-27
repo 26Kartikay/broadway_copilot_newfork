@@ -70,8 +70,8 @@ function wantsNewVibeCheck(text: string, buttonPayload?: string): boolean {
   return /\b(vibe check|rate my outfit|outfit check|how('?s| is) my outfit)\b/.test(t);
 }
 
-function needsGuestGenderPrompt(user: User | null): boolean {
-  if (!isGuestUser(user)) return false;
+function needsGuestGenderPrompt(user: User | null, requestProfileName?: string | null): boolean {
+  if (!isGuestUser(user, requestProfileName)) return false;
   return !user?.confirmedGender && !user?.inferredGender;
 }
 
@@ -110,7 +110,7 @@ async function buildRepliesFromColorTool(
   color: Record<string, unknown>,
   user: User | null,
   introText?: string,
-  opts?: { skipColorSavePrompt?: boolean },
+  opts?: { skipColorSavePrompt?: boolean; requestProfileName?: string | null | undefined },
 ): Promise<HttpReplyPayload[]> {
   const agentLike: AgentResult = {
     text: introText ?? String(color.compliment ?? '').trim(),
@@ -119,8 +119,9 @@ async function buildRepliesFromColorTool(
     colorAnalysis: { toolName: 'analyze_color_season', ...color },
     vibeCheck: null,
   };
+  const base = { user, requestProfileName: opts?.requestProfileName };
   const formatOpts =
-    opts?.skipColorSavePrompt === true ? { user, skipColorSavePrompt: true as const } : { user };
+    opts?.skipColorSavePrompt === true ? { ...base, skipColorSavePrompt: true as const } : base;
   return formatReplies(agentLike, formatOpts);
 }
 
@@ -128,6 +129,7 @@ async function buildRepliesFromVibeTool(
   vc: Record<string, unknown>,
   user: User | null,
   introText?: string,
+  opts?: { requestProfileName?: string | null | undefined },
 ): Promise<HttpReplyPayload[]> {
   const agentLike: AgentResult = {
     text: introText ?? String(vc.comment ?? '').trim(),
@@ -136,7 +138,7 @@ async function buildRepliesFromVibeTool(
     colorAnalysis: null,
     vibeCheck: { toolName: 'vibe_check', ...vc },
   };
-  return formatReplies(agentLike, { user });
+  return formatReplies(agentLike, { user, requestProfileName: opts?.requestProfileName });
 }
 
 async function appendFlowHistory(
@@ -169,6 +171,8 @@ async function runColorAnalysisOnMedia(
       replies: await buildRepliesFromColorTool(
         { error: 'Missing image URL — please upload again.' },
         user,
+        undefined,
+        { requestProfileName: input.ProfileName },
       ),
       pendingOut: 'COLOR_ANALYSIS_IMAGE',
     };
@@ -187,6 +191,7 @@ async function runColorAnalysisOnMedia(
       { error: raw.error },
       user,
       typeof raw.error === 'string' ? raw.error : 'Something went wrong with that photo.',
+      { requestProfileName: input.ProfileName },
     );
     const keepPending = Boolean((raw as { quality_reject?: boolean }).quality_reject);
     return {
@@ -197,10 +202,12 @@ async function runColorAnalysisOnMedia(
 
   await clearHttpPendingFlow(prismaUserId);
   const intro = String(raw.compliment ?? '').trim();
-  const replies: HttpReplyPayload[] = await buildRepliesFromColorTool(raw, user, intro);
+  const replies: HttpReplyPayload[] = await buildRepliesFromColorTool(raw, user, intro, {
+    requestProfileName: input.ProfileName,
+  });
   const paletteName = String(raw.palette_name ?? raw.season ?? '');
 
-  if (!isGuestUser(user)) {
+  if (!isGuestUser(user, input.ProfileName)) {
     replies.push({
       reply_type: 'quick_reply',
       reply_text: 'Do you want to save this color analysis result?',
@@ -219,7 +226,7 @@ async function runColorAnalysisOnMedia(
       });
     }
     replies.push(buildColorRecommendationPrompt());
-    if (needsGuestGenderPrompt(user)) {
+    if (needsGuestGenderPrompt(user, input.ProfileName)) {
       replies.push({
         reply_type: 'quick_reply',
         reply_text:
@@ -248,6 +255,8 @@ async function runVibeCheckOnMedia(
       replies: await buildRepliesFromVibeTool(
         { error: 'Missing image URL — please upload again.' },
         user,
+        undefined,
+        { requestProfileName: input.ProfileName },
       ),
       pendingOut: 'VIBE_CHECK_IMAGE',
     };
@@ -263,12 +272,16 @@ async function runVibeCheckOnMedia(
 
   if ((raw as { error?: string }).error) {
     const msg = String((raw as { error?: string }).error);
-    const errReplies = await buildRepliesFromVibeTool({ error: msg }, user, msg);
+    const errReplies = await buildRepliesFromVibeTool({ error: msg }, user, msg, {
+      requestProfileName: input.ProfileName,
+    });
     return { replies: errReplies, pendingOut: 'VIBE_CHECK_IMAGE' };
   }
 
   await clearHttpPendingFlow(prismaUserId);
-  const replies = await buildRepliesFromVibeTool(raw, user);
+  const replies = await buildRepliesFromVibeTool(raw, user, undefined, {
+    requestProfileName: input.ProfileName,
+  });
   return { replies, pendingOut: null };
 }
 
@@ -298,7 +311,8 @@ export async function tryHandleHttpChatFlows(
   const bp = input.ButtonPayload;
   const utterance = (input.Body || input.ButtonText || '').trim();
   const nMedia = numMediaOf(input);
-  const guest = isGuestUser(user);
+  const guest = isGuestUser(user, input.ProfileName);
+  const replyOpts = { user, requestProfileName: input.ProfileName };
 
   const pending = await getHttpPendingFlow(prismaUserId);
 
@@ -339,7 +353,7 @@ export async function tryHandleHttpChatFlows(
           colorAnalysis: null,
           vibeCheck: null,
         },
-        { user },
+        replyOpts,
       );
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
@@ -354,7 +368,7 @@ export async function tryHandleHttpChatFlows(
           colorAnalysis: null,
           vibeCheck: null,
         },
-        { user },
+        replyOpts,
       );
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
@@ -372,7 +386,7 @@ export async function tryHandleHttpChatFlows(
             colorAnalysis: null,
             vibeCheck: null,
           },
-          { user },
+          replyOpts,
         );
         await appendFlowHistory(prismaUserId, input, replies);
         return { handled: true, replies, pending: null };
@@ -407,7 +421,7 @@ export async function tryHandleHttpChatFlows(
           colorAnalysis: null,
           vibeCheck: null,
         },
-        { user },
+        replyOpts,
       );
       if (pdfUrl) {
         replies.push({
@@ -433,7 +447,7 @@ export async function tryHandleHttpChatFlows(
           colorAnalysis: null,
           vibeCheck: null,
         },
-        { user },
+        replyOpts,
       );
       if (pdfUrl) {
         replies.push({
@@ -462,7 +476,7 @@ export async function tryHandleHttpChatFlows(
             colorAnalysis: null,
             vibeCheck: null,
           },
-          { user },
+          replyOpts,
         );
         await appendFlowHistory(prismaUserId, input, replies);
         return { handled: true, replies, pending: null };
@@ -481,7 +495,7 @@ export async function tryHandleHttpChatFlows(
             colorAnalysis: null,
             vibeCheck: null,
           },
-          { user },
+          replyOpts,
         );
         await appendFlowHistory(prismaUserId, input, replies);
         return { handled: true, replies, pending: null };
@@ -496,7 +510,7 @@ export async function tryHandleHttpChatFlows(
             colorAnalysis: null,
             vibeCheck: null,
           },
-          { user },
+          replyOpts,
         );
         await appendFlowHistory(prismaUserId, input, replies);
         return { handled: true, replies, pending: null };
@@ -518,7 +532,7 @@ export async function tryHandleHttpChatFlows(
         colorPayload,
         user,
         "Here is the palette I have on file for you.",
-        { skipColorSavePrompt: true },
+        { skipColorSavePrompt: true, requestProfileName: input.ProfileName },
       );
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
@@ -535,7 +549,7 @@ export async function tryHandleHttpChatFlows(
             colorAnalysis: null,
             vibeCheck: null,
           },
-          { user },
+          replyOpts,
         );
         await appendFlowHistory(prismaUserId, input, replies);
         return { handled: true, replies, pending: null };
@@ -553,7 +567,7 @@ export async function tryHandleHttpChatFlows(
             colorAnalysis: null,
             vibeCheck: null,
           },
-          { user },
+          replyOpts,
         );
         await appendFlowHistory(prismaUserId, input, replies);
         return { handled: true, replies, pending: null };
@@ -570,7 +584,12 @@ export async function tryHandleHttpChatFlows(
         recommendations: vcRow.recommendations,
         user_image_url: null,
       };
-      const replies = await buildRepliesFromVibeTool(vcPayload, user, "Here is your last vibe check result:");
+      const replies = await buildRepliesFromVibeTool(
+        vcPayload,
+        user,
+        "Here is your last vibe check result:",
+        { requestProfileName: input.ProfileName },
+      );
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }
