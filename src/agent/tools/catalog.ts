@@ -17,10 +17,12 @@ export interface SearchCatalogInput {
   priceRange?: { min: number; max: number };
   limit?: number;
   excludeProductIds?: string[]; // Never return these (already shown this session)
+  excludeHandleIds?: string[];  // Never return products with these handleIds (variant-level dedup)
 }
 
 export interface FormattedProduct {
   id: string;
+  handleId: string;
   name: string;
   brand: string;
   category: string;
@@ -35,7 +37,7 @@ export interface FormattedProduct {
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const VECTOR_RECALL_LIMIT = 500;
-const MAX_LIMIT = 12;
+const MAX_LIMIT = 40;
 
 type AudienceTags = {
   gender?: string;
@@ -134,6 +136,7 @@ function buildEmbeddingText(input: SearchCatalogInput): string {
 
 interface VectorRow {
   id: string;
+  handleId: string;
   name: string;
   brand: string;
   category: string;
@@ -153,6 +156,7 @@ function mapRow(r: Record<string, unknown>): VectorRow | null {
   if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) return null;
   return {
     id: String(r.id),
+    handleId: String(r.handleId ?? r.handleid ?? ''),
     name: String(r.name ?? ''),
     brand: String(r.brand ?? ''),
     category: String(r.category ?? ''),
@@ -287,6 +291,12 @@ async function searchCatalogVector(
     clauses.push(`id != ALL($${p++}::text[])`);
     params.push(excludeIds);
   }
+
+  const excludeHandleIds = input.excludeHandleIds?.filter(Boolean) ?? [];
+  if (excludeHandleIds.length > 0) {
+    clauses.push(`"handleId" != ALL($${p++}::text[])`);
+    params.push(excludeHandleIds);
+  }
   const genderToFilter = input.genderMix ? '' : (input.gender?.toLowerCase().trim() ?? '');
   if (genderToFilter && shouldApplyGenderFilter(fi.category)) {
     clauses.push(
@@ -299,7 +309,7 @@ async function searchCatalogVector(
   params.push(vectorJson);
 
   const sql = `
-    SELECT id, name, brand, category::text AS category, "generalTag", style, fit, colors, occasions,
+    SELECT id, "handleId", name, brand, category::text AS category, "generalTag", style, fit, colors, occasions,
            "imageUrl", "productLink", "componentTags",
            (1 - ("embedding" <=> $${vectorParam}::vector)) AS similarity
     FROM "Product"
@@ -335,12 +345,20 @@ async function searchCatalogVector(
     return [];
   }
 
-  const scored = candidates.map((c) => ({
+  const scoredAll = candidates.map((c) => ({
     ...c,
     rerankScore: rerankScore(c, intent),
   }));
 
-  scored.sort((a, b) => b.rerankScore - a.rerankScore);
+  scoredAll.sort((a, b) => b.rerankScore - a.rerankScore);
+
+  // Deduplicate by handleId — keep the highest-scored variant of each product
+  const seenHandles = new Set<string>();
+  const scored = scoredAll.filter((c) => {
+    if (!c.handleId || seenHandles.has(c.handleId)) return false;
+    seenHandles.add(c.handleId);
+    return true;
+  });
 
   const reranked =
     (await openaiRerankByQuery(
@@ -352,6 +370,7 @@ async function searchCatalogVector(
 
   return reranked.slice(0, Math.min(limit, MAX_LIMIT)).map((r) => ({
     id: r.id,
+    handleId: r.handleId,
     name: r.name,
     brand: r.brand,
     category: r.category,
@@ -406,6 +425,12 @@ async function searchCatalogIlike(
     baseConditions.push(`id != ALL($${paramIndex++}::text[])`);
     params.push(ilikeExcludeIds);
   }
+
+  const ilikeExcludeHandleIds = input.excludeHandleIds?.filter(Boolean) ?? [];
+  if (ilikeExcludeHandleIds.length > 0) {
+    baseConditions.push(`"handleId" != ALL($${paramIndex++}::text[])`);
+    params.push(ilikeExcludeHandleIds);
+  }
   const ilikeGender = input.genderMix ? '' : (input.gender?.toLowerCase().trim() ?? '');
   if (ilikeGender && shouldApplyGenderFilter(category)) {
     baseConditions.push(
@@ -415,7 +440,7 @@ async function searchCatalogIlike(
   }
 
   const sql = `
-    SELECT id, name, brand, category::text, "generalTag", style, fit, colors, occasions, "imageUrl", "productLink"
+    SELECT id, "handleId", name, brand, category::text, "generalTag", style, fit, colors, occasions, "imageUrl", "productLink"
     FROM "Product"
     WHERE ${baseConditions.join(' AND ')}
     ORDER BY "createdAt" DESC
@@ -424,19 +449,30 @@ async function searchCatalogIlike(
   params.push(Math.min(limit, MAX_LIMIT));
 
   const products = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params);
-  return products.map((p) => ({
-    id: String(p.id),
-    name: String(p.name),
-    brand: String(p.brand),
-    category: String(p.category),
-    generalTag: String(p.generalTag ?? ''),
-    style: (p.style as string | null) ?? null,
-    fit: (p.fit as string | null) ?? null,
-    colors: Array.isArray(p.colors) ? (p.colors as string[]) : [],
-    occasions: Array.isArray(p.occasions) ? (p.occasions as string[]) : [],
-    imageUrl: String(p.imageUrl ?? ''),
-    productLink: String(p.productLink ?? ''),
-  }));
+
+  // Deduplicate by handleId — keep first (most recent) per product
+  const seenHandles = new Set<string>();
+  return products
+    .filter((p) => {
+      const hid = String(p.handleId ?? p.handleid ?? '');
+      if (!hid || seenHandles.has(hid)) return false;
+      seenHandles.add(hid);
+      return true;
+    })
+    .map((p) => ({
+      id: String(p.id),
+      handleId: String(p.handleId ?? p.handleid ?? ''),
+      name: String(p.name),
+      brand: String(p.brand),
+      category: String(p.category),
+      generalTag: String(p.generalTag ?? ''),
+      style: (p.style as string | null) ?? null,
+      fit: (p.fit as string | null) ?? null,
+      colors: Array.isArray(p.colors) ? (p.colors as string[]) : [],
+      occasions: Array.isArray(p.occasions) ? (p.occasions as string[]) : [],
+      imageUrl: String(p.imageUrl ?? ''),
+      productLink: String(p.productLink ?? ''),
+    }));
 }
 
 export type SearchCatalogResult = {
@@ -446,7 +482,7 @@ export type SearchCatalogResult = {
 };
 
 export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCatalogResult> {
-  const limit = Math.min(Math.max(input.limit ?? 6, 1), MAX_LIMIT);
+  const limit = Math.min(Math.max(input.limit ?? 8, 1), MAX_LIMIT);
 
   try {
     let products: FormattedProduct[] = [];
@@ -489,6 +525,19 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
     }
 
     if (products.length > 0) {
+      const suggestedHandleIds = products.map((p) => p.handleId);
+      const uniqueHandles = new Set(suggestedHandleIds.filter(Boolean));
+      logger.info(
+        {
+          resultCount: products.length,
+          limit,
+          suggested_handle_ids: suggestedHandleIds,
+          unique_handle_id_count: uniqueHandles.size,
+          empty_handle_id_count: suggestedHandleIds.filter((h) => !h).length,
+          duplicate_handle_ids_present: suggestedHandleIds.filter(Boolean).length !== uniqueHandles.size,
+        },
+        'Catalog: suggested products (handle id audit)',
+      );
       if (resolvedViaEmbedding) {
         logger.info(
           { resultCount: products.length, model: EMBEDDING_MODEL },

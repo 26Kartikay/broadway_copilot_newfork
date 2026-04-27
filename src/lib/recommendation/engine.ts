@@ -13,8 +13,8 @@ import type {
   ScoredRow,
 } from './types';
 
-const DEFAULT_LIMIT = 5;
-const MAX_LIMIT = 5;
+const DEFAULT_LIMIT = 8;
+const MAX_LIMIT = 20;
 const SCORE_THRESHOLD = 0.65;
 const FALLBACK_THRESHOLD = 0.50;
 
@@ -79,6 +79,7 @@ export async function runRecommendationEngine(
 ): Promise<RecommendationResult> {
   const limit = Math.min(input.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
   const excludeIds = input.exclude_product_ids ?? [];
+  const excludeHandleIds = input.exclude_handle_ids ?? [];
   const tStart = Date.now();
 
   logger.info(
@@ -139,7 +140,7 @@ export async function runRecommendationEngine(
     '[RecEng] ─── Stage 2: Filtered vector search — query: "' + intent.semantic_query + '"',
   );
 
-  const { rows: rawRows, searchMode } = await runFilteredSearch(intent, excludeIds, limit);
+  const { rows: rawRows, searchMode } = await runFilteredSearch(intent, excludeIds, excludeHandleIds, limit);
 
   logger.info(
     { recall_count: rawRows.length, search_mode: searchMode },
@@ -152,8 +153,16 @@ export async function runRecommendationEngine(
   }
 
   // ── Stage 2: Scoring ─────────────────────────────────────────────────────────
-  const scored = rawRows.map((row) => computeScore(row, intent));
-  scored.sort((a, b) => b.final_score - a.final_score);
+  const scoredAll = rawRows.map((row) => computeScore(row, intent));
+  scoredAll.sort((a, b) => b.final_score - a.final_score);
+
+  // Deduplicate by handleId — keep the highest-scored variant of each product
+  const seenHandles = new Set<string>();
+  const scored = scoredAll.filter((s) => {
+    if (!s.handleId || seenHandles.has(s.handleId)) return false;
+    seenHandles.add(s.handleId);
+    return true;
+  });
 
   logger.info(
     {
@@ -213,6 +222,7 @@ export async function runRecommendationEngine(
   // ── Stage 3: Format output ───────────────────────────────────────────────────
   const results: RecommendedProduct[] = finalSet.map((s) => ({
     id: s.id,
+    handleId: s.handleId,
     name: s.name,
     brand: s.brand,
     type: s.generalTag,
@@ -249,10 +259,16 @@ export async function runRecommendationEngine(
     result_count: results.length,
   };
 
+  const suggestedHandleIds = results.map((r) => r.handleId);
+  const uniqueHandles = new Set(suggestedHandleIds.filter(Boolean));
+
   logger.info(
     {
       ms: Date.now() - tStart,
       result_count: results.length,
+      suggested_handle_ids: suggestedHandleIds,
+      unique_handle_id_count: uniqueHandles.size,
+      duplicate_handle_ids_present: suggestedHandleIds.length !== uniqueHandles.size,
       search_mode: searchMode,
       gender_filter: genderFilterUsed,
       profile_used: profileUsed,

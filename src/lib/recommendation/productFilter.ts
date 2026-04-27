@@ -34,6 +34,7 @@ function mapRow(r: Record<string, unknown>, fallbackSimilarity = 0): RawProductR
   if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) return null;
   return {
     id: String(r.id),
+    handleId: String(r.handleId ?? r.handleid ?? ''),
     name: String(r.name ?? ''),
     brand: String(r.brand ?? ''),
     generalTag: String(r.generalTag ?? r.generaltag ?? ''),
@@ -49,6 +50,7 @@ function mapRow(r: Record<string, unknown>, fallbackSimilarity = 0): RawProductR
 function buildHardFilterClauses(
   intent: ExtractedIntent,
   excludeIds: string[],
+  excludeHandleIds: string[],
   relaxed = false,
 ): { clauses: string[]; params: unknown[]; nextP: number } {
   const clauses: string[] = ['"isActive" = true', '"embedding" IS NOT NULL'];
@@ -109,11 +111,18 @@ function buildHardFilterClauses(
     params.push(intent.gender.toLowerCase());
   }
 
-  // Exclude already-shown products
+  // Exclude already-shown products by id
   const cleanExcludeIds = excludeIds.filter(Boolean);
   if (cleanExcludeIds.length > 0) {
     clauses.push(`id != ALL($${p++}::text[])`);
     params.push(cleanExcludeIds);
+  }
+
+  // Exclude already-shown products by handleId (catches variants with different ids)
+  const cleanExcludeHandleIds = excludeHandleIds.filter(Boolean);
+  if (cleanExcludeHandleIds.length > 0) {
+    clauses.push(`"handleId" != ALL($${p++}::text[])`);
+    params.push(cleanExcludeHandleIds);
   }
 
   return { clauses, params, nextP: p };
@@ -122,6 +131,7 @@ function buildHardFilterClauses(
 async function vectorSearch(
   intent: ExtractedIntent,
   excludeIds: string[],
+  excludeHandleIds: string[],
   relaxed: boolean,
 ): Promise<RawProductRow[]> {
   const tEmbed = Date.now();
@@ -133,13 +143,13 @@ async function vectorSearch(
     '[RecEng Stage2] Embedding generated',
   );
 
-  const { clauses, params, nextP } = buildHardFilterClauses(intent, excludeIds, relaxed);
+  const { clauses, params, nextP } = buildHardFilterClauses(intent, excludeIds, excludeHandleIds, relaxed);
   const vectorJson = JSON.stringify(embedding);
   const vp = nextP;
   params.push(vectorJson);
 
   const sql = `
-    SELECT id, name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags",
+    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags",
            (1 - ("embedding" <=> $${vp}::vector)) AS similarity
     FROM "Product"
     WHERE ${clauses.join(' AND ')}
@@ -165,6 +175,7 @@ async function vectorSearch(
 async function ilikeSearch(
   intent: ExtractedIntent,
   excludeIds: string[],
+  excludeHandleIds: string[],
   limit: number,
 ): Promise<RawProductRow[]> {
   const clauses: string[] = ['"isActive" = true'];
@@ -199,10 +210,16 @@ async function ilikeSearch(
     params.push(cleanExcludeIds);
   }
 
+  const cleanExcludeHandleIds = excludeHandleIds.filter(Boolean);
+  if (cleanExcludeHandleIds.length > 0) {
+    clauses.push(`"handleId" != ALL($${p++}::text[])`);
+    params.push(cleanExcludeHandleIds);
+  }
+
   params.push(Math.min(limit * 10, VECTOR_RECALL_LIMIT));
 
   const sql = `
-    SELECT id, name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags"
+    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags"
     FROM "Product"
     WHERE ${clauses.join(' AND ')}
     ORDER BY "createdAt" DESC
@@ -230,16 +247,17 @@ async function ilikeSearch(
 export async function runFilteredSearch(
   intent: ExtractedIntent,
   excludeIds: string[],
+  excludeHandleIds: string[],
   limit: number,
 ): Promise<{ rows: RawProductRow[]; searchMode: string }> {
   if (!getOpenAI()) {
     logger.warn('[RecEng Stage2] No OPENAI_API_KEY — falling back to ILIKE');
-    const rows = await ilikeSearch(intent, excludeIds, limit);
+    const rows = await ilikeSearch(intent, excludeIds, excludeHandleIds, limit);
     return { rows, searchMode: 'ilike_no_openai' };
   }
 
   // Stage 2a: strict vector search
-  let rows = await vectorSearch(intent, excludeIds, false);
+  let rows = await vectorSearch(intent, excludeIds, excludeHandleIds, false);
   if (rows.length > 0) return { rows, searchMode: 'vector_strict' };
 
   const hasStrictFilters = Boolean(
@@ -249,12 +267,12 @@ export async function runFilteredSearch(
   // Stage 2b: relaxed vector search (drop subCategory/type/tag filters)
   if (hasStrictFilters) {
     logger.info('[RecEng Stage2] Strict vector returned 0 rows — trying relaxed vector search');
-    rows = await vectorSearch(intent, excludeIds, true);
+    rows = await vectorSearch(intent, excludeIds, excludeHandleIds, true);
     if (rows.length > 0) return { rows, searchMode: 'vector_relaxed' };
   }
 
   // Stage 2c: ILIKE fallback
   logger.info('[RecEng Stage2] Vector search returned 0 rows — trying ILIKE fallback');
-  rows = await ilikeSearch(intent, excludeIds, limit);
+  rows = await ilikeSearch(intent, excludeIds, excludeHandleIds, limit);
   return { rows, searchMode: rows.length > 0 ? 'ilike_fallback' : 'empty' };
 }

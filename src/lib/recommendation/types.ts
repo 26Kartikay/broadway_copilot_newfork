@@ -40,6 +40,7 @@ export interface ExtractedIntent {
 
 export interface RawProductRow {
   id: string;
+  handleId: string;
   name: string;
   brand: string;
   generalTag: string;
@@ -60,6 +61,7 @@ export interface ScoredRow extends RawProductRow {
 
 export interface RecommendedProduct {
   id: string;
+  handleId: string;
   name: string;
   brand: string;
   type: string;
@@ -92,5 +94,6 @@ export interface RecommendationEngineInput {
   user_query: string;
   user_profile: UserProfile;
   exclude_product_ids?: string[];
+  exclude_handle_ids?: string[];
   limit?: number;
 }

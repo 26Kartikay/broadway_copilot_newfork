@@ -311,8 +311,9 @@ export class ChatOrchestrator {
   private async updateSearchSession(userId: string, result: AgentResult): Promise<void> {
     // Record new products shown so they're excluded from "show more" calls
     const shownIds = result.products.map((p: any) => String(p.id)).filter(Boolean);
+    const shownHandleIds = result.products.map((p: any) => String(p.handleId ?? '')).filter(Boolean);
     if (shownIds.length > 0) {
-      await recordShownProducts(userId, shownIds);
+      await recordShownProducts(userId, shownIds, shownHandleIds);
     }
 
     // After color analysis succeeds, set the post-service color season for the next product search

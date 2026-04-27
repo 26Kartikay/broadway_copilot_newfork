@@ -64,7 +64,7 @@ export function getTools(
         occasions: z.array(z.string()).optional().describe('filter by occasion'),
         style: z.string().optional().describe('Athleisure | Minimal | Streetwear | etc'),
         colorSeason: z.string().optional().describe("User's color season for filtering colors"),
-        limit: z.number().optional().describe('Number of products to return (max 12)'),
+        limit: z.number().optional().describe('Number of products to return (max 20)'),
       }),
       func: async (args) => {
         const cleaned = cleanArgs(args);
@@ -91,6 +91,9 @@ export function getTools(
           // Always exclude already-seen products (dedup across "show more" calls)
           if (searchSession.lastProductIds.length > 0) {
             cleaned.excludeProductIds = searchSession.lastProductIds;
+          }
+          if ((searchSession.lastHandleIds ?? []).length > 0) {
+            cleaned.excludeHandleIds = searchSession.lastHandleIds;
           }
 
           if (searchSession.guestCatalogGenderMix) {

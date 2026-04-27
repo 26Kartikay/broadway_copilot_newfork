@@ -453,6 +453,8 @@ export async function clearStagedColorAnalysis(userId: string): Promise<void> {
 export interface SearchSession {
   /** All product IDs surfaced this session — never repeat these on "show more". */
   lastProductIds: string[];
+  /** All product handleIds surfaced this session — excludes variants of already-shown products. */
+  lastHandleIds: string[];
   /** Color season injected after a color analysis — emphasize in next product search. */
   postServiceColorSeason: string | null;
   /** Flipped true when user expresses dislike — stops palette emphasis. */
@@ -469,7 +471,7 @@ const SEARCH_SESSION_TTL = 60 * 60 * 2; // 2 hours
 const MAX_SESSION_PRODUCT_IDS = 36; // ~3 pages, then auto-reset
 
 function emptySearchSession(): SearchSession {
-  return { lastProductIds: [], postServiceColorSeason: null, paletteNormalized: false };
+  return { lastProductIds: [], lastHandleIds: [], postServiceColorSeason: null, paletteNormalized: false };
 }
 
 export async function getSearchSession(userId: string): Promise<SearchSession> {
@@ -493,13 +495,27 @@ async function saveSearchSession(userId: string, session: SearchSession): Promis
   }
 }
 
-/** Called after a product search — accumulate IDs, reset if cap exceeded. */
-export async function recordShownProducts(userId: string, productIds: string[]): Promise<void> {
-  if (!productIds.length) return;
+/** Called after a product search — accumulate IDs and handleIds, reset if cap exceeded. */
+export async function recordShownProducts(
+  userId: string,
+  productIds: string[],
+  handleIds: string[] = [],
+): Promise<void> {
+  if (!productIds.length && !handleIds.length) return;
   const session = await getSearchSession(userId);
-  const combined = [...new Set([...session.lastProductIds, ...productIds])];
+
+  const combinedIds = [...new Set([...session.lastProductIds, ...productIds])];
+  const combinedHandles = [...new Set([...(session.lastHandleIds ?? []), ...handleIds])];
+
   // Auto-reset after cap: user has seen enough, start fresh next page
-  session.lastProductIds = combined.length > MAX_SESSION_PRODUCT_IDS ? productIds : combined;
+  if (combinedIds.length > MAX_SESSION_PRODUCT_IDS) {
+    session.lastProductIds = productIds;
+    session.lastHandleIds = handleIds;
+  } else {
+    session.lastProductIds = combinedIds;
+    session.lastHandleIds = combinedHandles;
+  }
+
   await saveSearchSession(userId, session);
 }
 
@@ -517,6 +533,7 @@ export async function normalizeAndRefreshSearch(userId: string): Promise<void> {
   session.paletteNormalized = true;
   // Clear seen IDs so user gets a genuinely fresh set
   session.lastProductIds = [];
+  session.lastHandleIds = [];
   await saveSearchSession(userId, session);
 }
 
