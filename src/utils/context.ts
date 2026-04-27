@@ -2,20 +2,15 @@ import { Conversation, ConversationStatus, User } from '@prisma/client';
 
 import { BaseMessage } from '../lib/ai/core/messages';
 import { prisma } from '../lib/prisma';
+import { resetChatSessionState } from '../agent/memory/redis';
 import { logger } from './logger';
-import { isGuestUser, profileNameIndicatesGuest } from './user';
-
-const CONVERSATION_TIMEOUT_MS = 10 * 60 * 1000; // 30 minutes
+import { CHAT_SESSION_INACTIVITY_MS } from './constants';
+import { profileNameIndicatesGuest } from './user';
 
 async function handleStaleConversation(
   user: User,
   conversation: Conversation,
 ): Promise<Conversation> {
-  if (isGuestUser(user)) {
-    logger.debug({ userId: user.id }, 'Not closing stale conversation for guest user.');
-    return conversation;
-  }
-
   logger.debug(
     { userId: user.id, conversationId: conversation.id },
     'Stale conversation detected, closing and creating a new one.',
@@ -85,7 +80,8 @@ export async function getOrCreateUserAndConversation(
 
   if (lastOpenConversation) {
     const timeSinceLastUpdate = Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
-    if (timeSinceLastUpdate > CONVERSATION_TIMEOUT_MS) {
+    if (timeSinceLastUpdate > CHAT_SESSION_INACTIVITY_MS) {
+      await resetChatSessionState(user.id);
       return {
         user,
         conversation: await handleStaleConversation(user, lastOpenConversation),

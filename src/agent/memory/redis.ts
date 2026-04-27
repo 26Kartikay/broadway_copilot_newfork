@@ -1,14 +1,16 @@
 import type { MessageInput } from '../../lib/chat/types';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
+import { CHAT_SESSION_TTL_SECONDS } from '../../utils/constants';
 import { logger } from '../../utils/logger';
 import { profileNameIndicatesGuest } from '../../utils/user';
 
 const HISTORY_KEY = (userId: string) => `broadway:chat:${userId}`;
 const CONTEXT_KEY = (userId: string) => `broadway:ctx:${userId}`;
 const MAX_MESSAGES = 30;
-const HISTORY_TTL = 60 * 30 ; // 30 mins
-const CONTEXT_TTL = 60 * 30; // 1 hour
+/** Aligned with `CHAT_SESSION_TTL_SECONDS` — keys expire if no writes (session extension happens on each chat request). */
+const HISTORY_TTL = CHAT_SESSION_TTL_SECONDS;
+const CONTEXT_TTL = CHAT_SESSION_TTL_SECONDS;
 
 export interface StoredMessage {
   role: 'user' | 'assistant';
@@ -242,6 +244,22 @@ export async function clearHistory(userId: string): Promise<void> {
   } catch (err) {
     logger.error({ err, userId }, 'Failed to clear history');
   }
+}
+
+/**
+ * Full in-process chat session reset (Redis). Call when the DB conversation session rolls over
+ * after `CHAT_SESSION_INACTIVITY_MS` of no requests on that conversation.
+ */
+export async function resetChatSessionState(userId: string): Promise<void> {
+  await Promise.all([
+    clearHistory(userId),
+    invalidateContext(userId),
+    resetSearchSession(userId),
+    clearHttpPendingFlow(userId),
+    clearStagedColorAnalysis(userId),
+    clearGuestRecMessageStash(userId),
+    clearGuestRecGenderOptOut(userId),
+  ]);
 }
 
 /** Structured chat flows (color / vibe) pending state for HTTP clients. */

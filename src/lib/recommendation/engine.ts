@@ -1,3 +1,4 @@
+import { openaiRerankByQuery } from '../openaiRerank';
 import { logger } from '../../utils/logger';
 import { detectRecipient } from './recipientDetector';
 import { extractIntent } from './intentExtractor';
@@ -5,15 +6,59 @@ import { runFilteredSearch } from './productFilter';
 import { computeScore } from './scorer';
 import type {
   ExtractedIntent,
+  RecipientContext,
   RecommendationEngineInput,
   RecommendationResult,
   RecommendedProduct,
+  ScoredRow,
 } from './types';
 
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 5;
 const SCORE_THRESHOLD = 0.65;
 const FALLBACK_THRESHOLD = 0.50;
+
+/** Build a structured shopping-intent string passed to the reranker for anchoring. */
+function buildRerankContext(intent: ExtractedIntent, recipientCtx: RecipientContext): string {
+  const parts: string[] = [];
+  if (intent.legacyCategory) parts.push(`Category: ${intent.legacyCategory.replace(/_/g, ' ')}`);
+  if (intent.subCategory) parts.push(`Sub-category: ${intent.subCategory}`);
+  if (intent.type) parts.push(`Type: ${intent.type}`);
+  if (intent.gender) parts.push(`Gender: ${intent.gender}`);
+  if (intent.ageGroup) parts.push(`Age group: ${intent.ageGroup}`);
+  if (intent.occasion) parts.push(`Occasion: ${intent.occasion}`);
+  if (intent.colors?.length) parts.push(`Colors wanted: ${intent.colors.join(', ')}`);
+  if (intent.colorPalette) parts.push(`Color palette: ${intent.colorPalette}`);
+  if (intent.tags_must_include.length) parts.push(`Must include tags: ${intent.tags_must_include.join(', ')}`);
+  if (intent.tags_must_exclude.length) parts.push(`Must exclude tags: ${intent.tags_must_exclude.join(', ')}`);
+  if (recipientCtx.shopping_for === 'other') {
+    parts.push(`Shopping for: ${recipientCtx.recipient_relationship ?? 'someone else'}`);
+    if (recipientCtx.recipient_gender) parts.push(`Recipient gender: ${recipientCtx.recipient_gender}`);
+    if (recipientCtx.gift_context) parts.push('This is a gift purchase');
+  }
+  return parts.join('\n');
+}
+
+/** Rich one-line product description for the reranker — semantic fields only, no numeric scores. */
+function buildProductSummary(s: ScoredRow): string {
+  const sub = String(s.componentTags.subCategory ?? '');
+  const occasion = String(s.componentTags.occasion ?? '');
+  const palette = String(s.componentTags.colorPalette ?? '');
+  const allTags = String(s.componentTags.allTags ?? '');
+  const tagSnippet = allTags.split(',').slice(0, 8).join(',');
+  return [
+    s.name,
+    s.brand,
+    s.generalTag,
+    sub ? `sub:${sub}` : '',
+    `colors:${s.colors.slice(0, 5).join('/')}`,
+    occasion ? `occasion:${occasion}` : '',
+    palette ? `palette:${palette}` : '',
+    tagSnippet ? `tags:${tagSnippet}` : '',
+  ]
+    .filter(Boolean)
+    .join(' | ');
+}
 
 function summarizeFilters(intent: ExtractedIntent): string {
   const parts: string[] = [];
@@ -123,17 +168,19 @@ export async function runRecommendationEngine(
     '[RecEng] Stage 2 scoring — top results',
   );
 
-  // Apply primary threshold
-  let finalSet = scored.filter((s) => s.final_score > SCORE_THRESHOLD).slice(0, limit);
+  // Filter by threshold BEFORE reranking so the reranker only sees quality candidates
+  let candidateSet = scored.filter((s) => s.final_score > SCORE_THRESHOLD);
+  let usedFallback = false;
 
-  if (finalSet.length === 0) {
+  if (candidateSet.length === 0) {
     logger.info(
       { threshold: SCORE_THRESHOLD, best_score: scored[0]?.final_score?.toFixed(3) ?? 'n/a' },
       '[RecEng] No results above primary threshold — trying fallback threshold',
     );
     const fallback = scored.filter((s) => s.final_score > FALLBACK_THRESHOLD).slice(0, 1);
     if (fallback.length > 0) {
-      finalSet = fallback;
+      candidateSet = fallback;
+      usedFallback = true;
       logger.info(
         { fallback_score: fallback[0]!.final_score.toFixed(3), fallback_name: fallback[0]!.name },
         '[RecEng] Using single fallback result',
@@ -146,6 +193,22 @@ export async function runRecommendationEngine(
       return buildEmptyResult(intent, recipientCtx, genderFilterUsed, profileUsed);
     }
   }
+
+  // ── Stage 2b: Rerank quality candidates ──────────────────────────────────────
+  const rerankQuery = (intent.semantic_query || input.user_query).trim();
+  const intentContext = buildRerankContext(intent, recipientCtx);
+
+  const reranked = usedFallback
+    ? candidateSet
+    : (await openaiRerankByQuery(
+        rerankQuery,
+        candidateSet,
+        buildProductSummary,
+        undefined,
+        intentContext,
+      )) ?? candidateSet;
+
+  const finalSet = reranked.slice(0, limit);
 
   // ── Stage 3: Format output ───────────────────────────────────────────────────
   const results: RecommendedProduct[] = finalSet.map((s) => ({
@@ -205,7 +268,7 @@ export async function runRecommendationEngine(
 
 function buildEmptyResult(
   intent: ExtractedIntent,
-  recipientCtx: ReturnType<typeof detectRecipient> extends Promise<infer T> ? T : never,
+  recipientCtx: RecipientContext,
   genderFilterUsed: string | null,
   profileUsed: boolean,
 ): RecommendationResult {

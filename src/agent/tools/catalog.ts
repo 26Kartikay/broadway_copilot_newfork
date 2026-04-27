@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getPaletteData, resolveSeasonalPalette } from '../../data/seasonalPalettes';
+import { openaiRerankByQuery } from '../../lib/openaiRerank';
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 
@@ -341,7 +342,15 @@ async function searchCatalogVector(
 
   scored.sort((a, b) => b.rerankScore - a.rerankScore);
 
-  return scored.slice(0, Math.min(limit, MAX_LIMIT)).map((r) => ({
+  const reranked =
+    (await openaiRerankByQuery(
+      embeddingText,
+      scored,
+      (c) =>
+        `${c.name} | ${c.brand} | ${c.generalTag} | cat:${c.category} | colors:${c.colors.slice(0, 6).join(',')}`,
+    )) ?? scored;
+
+  return reranked.slice(0, Math.min(limit, MAX_LIMIT)).map((r) => ({
     id: r.id,
     name: r.name,
     brand: r.brand,

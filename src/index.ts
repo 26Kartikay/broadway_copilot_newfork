@@ -11,7 +11,7 @@ import path from 'path';
 
 import { initializeAgent, runAgentForHttp } from './agent';
 import { ChatRequest, chatRequestToMessageInput } from './lib/chat/types';
-import { connectPrisma } from './lib/prisma';
+import { connectPrisma, prisma } from './lib/prisma';
 import { connectRedis, getRedisHealthSnapshot } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { requestLogger } from './middleware/requestLogger';
@@ -162,11 +162,16 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
 
     // Same user resolution as the agent so ServiceLog.userId is the real Prisma User.id
     // (ChatRequest.userId is the client app user id / WaId, not the internal cuid.)
-    const { user } = await getOrCreateUserAndConversation(
+    const { user, conversation } = await getOrCreateUserAndConversation(
       waId,
       messageInput.ProfileName ?? chatRequest.profileName ?? '',
       String(userId),
     );
+
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { updatedAt: new Date() },
+    });
 
     requestLogUserId = user.id;
     requestLogUserName = (user.profileName?.trim() || user.appUserId) ?? undefined;

@@ -10,6 +10,10 @@ export const WELCOME_IMAGE_URL =
 export const MESSAGE_TTL_SECONDS = 60 * 60; // 1 hour
 export const USER_STATE_TTL_SECONDS = 24 * 60 * 60; // 24 hours
 
+/** Chat session: after this much inactivity, next request starts a new conversation and clears Redis chat state. */
+export const CHAT_SESSION_TTL_SECONDS = 30 * 60;
+export const CHAT_SESSION_INACTIVITY_MS = CHAT_SESSION_TTL_SECONDS * 1000;
+
 /**
  * Rate limiting
  */
