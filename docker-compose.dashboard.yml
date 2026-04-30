@@ -1,7 +1,16 @@
-# Admin dashboard for local development: dashboard + Postgres (pgvector) + Redis (all in Docker).
+# Admin dashboard for local development: dashboard + Postgres (pgvector) + Redis + analytics-api (all in Docker).
 # Data is persisted in named volumes. Set POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB to match DATABASE_URL.
-# From repo root:
+# From repo root (broadway_copilot_newfork):
 #   docker compose -f docker-compose.dashboard.yml --env-file .env up -d --build
+#
+# Repo layout (analytics-api image is built from a sibling directory):
+#   broadway/
+#     analysis_agent/              ← required; compose build.context: ../analysis_agent
+#     broadway_copilot_newfork/    ← run compose from here
+#
+# You do NOT start the analytics agent separately when using this file — the `analytics-api`
+# service is uvicorn on port 8000. If you run the dashboard on the host (npm) instead of
+# Docker, publish 8000 (see ports below) and set ANALYTICS_API_URL=http://localhost:8000.
 #
 # Defaults: DATABASE_URL from .env or built from POSTGRES_*; Redis is fixed to redis://redis:6379 (no AUTH) for the bundled container.
 
@@ -33,7 +42,7 @@ services:
       redis:
         condition: service_started
       analytics-api:
-        condition: service_started
+        condition: service_healthy
     networks:
       - broadway-dashboard-dev
 
@@ -74,6 +83,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    ports:
+      # Host can hit http://localhost:8000/health and ANALYTICS_API_URL for a non-Docker dashboard dev server.
+      - "127.0.0.1:${ANALYTICS_API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
     networks:
       - broadway-dashboard-dev
     restart: unless-stopped

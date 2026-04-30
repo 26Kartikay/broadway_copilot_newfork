@@ -346,6 +346,9 @@ app.use(
     target: analyticsApiUrl,
     changeOrigin: true,
     pathRewrite: { '^/analytics-api': '/api' },
+    // NL→SQL can exceed default proxy timeouts; avoids 504 on slow /api/query.
+    proxyTimeout: 120_000,
+    timeout: 120_000,
   }),
 );
 

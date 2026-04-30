@@ -1,4 +1,5 @@
 import type { MessageInput } from '../../lib/chat/types';
+import type { BroadwaySessionUserProfile } from '../../lib/broadwayUserService';
 import { prisma } from '../../lib/prisma';
 import { redis } from '../../lib/redis';
 import { CHAT_SESSION_TTL_SECONDS } from '../../utils/constants';
@@ -7,10 +8,12 @@ import { profileNameIndicatesGuest } from '../../utils/user';
 
 const HISTORY_KEY = (userId: string) => `broadway:chat:${userId}`;
 const CONTEXT_KEY = (userId: string) => `broadway:ctx:${userId}`;
-const MAX_MESSAGES = 30;
+const SESSION_USER_PROFILE_KEY = (userId: string) => `broadway:session_user_profile:${userId}`;
+const MAX_MESSAGES = 10;
 /** Aligned with `CHAT_SESSION_TTL_SECONDS` — keys expire if no writes (session extension happens on each chat request). */
 const HISTORY_TTL = CHAT_SESSION_TTL_SECONDS;
 const CONTEXT_TTL = CHAT_SESSION_TTL_SECONDS;
+const SESSION_USER_PROFILE_TTL = CHAT_SESSION_TTL_SECONDS;
 
 export interface StoredMessage {
   role: 'user' | 'assistant';
@@ -18,7 +21,6 @@ export interface StoredMessage {
   timestamp: number;
 }
 
-/** Replace image blocks with a tiny placeholder so Redis history stays small (avoids resending base64 every turn). */
 export function stripHeavyMediaFromContent(content: unknown): unknown {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return content;
@@ -93,13 +95,12 @@ export function normalizeUserContext(raw: unknown): UserContext {
     };
   }
   const appUserId = c.appUserId == null || c.appUserId === '' ? null : String(c.appUserId);
-  const inferredGuest =
-    appUserId?.startsWith('guest_') || appUserId?.startsWith('TEMP_') || String(c.name ?? '').toLowerCase() === 'guest';
+  const displayName = typeof c.name === 'string' ? c.name : String(c.name ?? '');
 
   return {
-    name: typeof c.name === 'string' ? c.name : String(c.name ?? ''),
+    name: displayName,
     appUserId,
-    isGuest: c.isGuest == null ? Boolean(inferredGuest) : Boolean(c.isGuest),
+    isGuest: profileNameIndicatesGuest(displayName),
     colorSeason: c.colorSeason == null || c.colorSeason === '' ? null : String(c.colorSeason),
     colorPalette,
     preferences: coerceStringArray(c.preferences),
@@ -110,6 +111,71 @@ export function normalizeUserContext(raw: unknown): UserContext {
     lastVibeCheck:
       c.lastVibeCheck == null || c.lastVibeCheck === '' ? null : String(c.lastVibeCheck),
   };
+}
+
+function mergeSessionProfileIntoContext(
+  ctx: UserContext,
+  session: BroadwaySessionUserProfile | null,
+): UserContext {
+  if (!session) return ctx;
+  const name =
+    session.name && session.name.trim().length > 0 ? session.name.trim() : ctx.name;
+  return {
+    ...ctx,
+    name,
+    gender: session.statedGender ?? ctx.gender,
+    ageGroup: session.statedAge ?? ctx.ageGroup,
+  };
+}
+
+export async function getSessionUserProfile(
+  userId: string,
+): Promise<BroadwaySessionUserProfile | null> {
+  try {
+    const raw = await redis.get(SESSION_USER_PROFILE_KEY(userId));
+    if (!raw) return null;
+    const o = JSON.parse(raw.toString()) as BroadwaySessionUserProfile;
+    if (!o || typeof o !== 'object') return null;
+    return {
+      name: typeof o.name === 'string' ? o.name : '',
+      statedGender:
+        o.statedGender == null || o.statedGender === '' ? null : String(o.statedGender),
+      statedAge: o.statedAge == null || o.statedAge === '' ? null : String(o.statedAge),
+    };
+  } catch (err) {
+    logger.error({ err, userId }, 'getSessionUserProfile failed');
+    return null;
+  }
+}
+
+export async function setSessionUserProfile(
+  userId: string,
+  profile: BroadwaySessionUserProfile,
+): Promise<void> {
+  await redis.set(SESSION_USER_PROFILE_KEY(userId), JSON.stringify(profile), {
+    EX: SESSION_USER_PROFILE_TTL,
+  });
+}
+
+export async function clearSessionUserProfile(userId: string): Promise<void> {
+  try {
+    await redis.del(SESSION_USER_PROFILE_KEY(userId));
+  } catch (err) {
+    logger.error({ err, userId }, 'clearSessionUserProfile failed');
+  }
+}
+
+/** Refresh TTL when the user keeps chatting (aligned with chat session). */
+export async function touchSessionUserProfile(userId: string): Promise<void> {
+  try {
+    const raw = await redis.get(SESSION_USER_PROFILE_KEY(userId));
+    if (!raw) return;
+    await redis.set(SESSION_USER_PROFILE_KEY(userId), raw, {
+      EX: SESSION_USER_PROFILE_TTL,
+    });
+  } catch (err) {
+    logger.error({ err, userId }, 'touchSessionUserProfile failed');
+  }
 }
 
 export async function getHistory(userId: string): Promise<StoredMessage[]> {
@@ -155,78 +221,84 @@ export async function appendToHistory(
 
 export async function getUserContext(userId: string): Promise<UserContext> {
   try {
-    // 1. Check Redis cache
+    let context: UserContext;
+
     const cached = await redis.get(CONTEXT_KEY(userId));
     if (cached) {
-      return normalizeUserContext(JSON.parse(cached.toString()));
-    }
-
-    // 2. Fetch from Prisma
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        colorAnalyses: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
+      context = normalizeUserContext(JSON.parse(cached.toString()));
+    } else {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          colorAnalyses: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+          memories: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          },
+          vibeChecks: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
-        memories: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        vibeChecks: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    });
-
-    if (!user) {
-      logger.info({ userId }, 'User not found in DB, returning empty guest context');
-      return normalizeUserContext({
-        name: 'Guest',
-        appUserId: null,
-        isGuest: true,
-        colorSeason: null,
-        colorPalette: null,
-        preferences: [],
-        gender: null,
-        ageGroup: null,
-        fitPreference: null,
-        lastVibeCheck: null,
       });
+
+      if (!user) {
+        logger.info({ userId }, 'User not found in DB, returning empty guest context');
+        context = normalizeUserContext({
+          name: 'Guest',
+          appUserId: null,
+          isGuest: true,
+          colorSeason: null,
+          colorPalette: null,
+          preferences: [],
+          gender: null,
+          ageGroup: null,
+          fitPreference: null,
+          lastVibeCheck: null,
+        });
+      } else {
+        const latestColorAnalysis = user.colorAnalyses[0];
+        const latestVibeCheck = user.vibeChecks[0];
+
+        context = normalizeUserContext({
+          name: user.profileName || '',
+          appUserId: user.appUserId || null,
+          isGuest: profileNameIndicatesGuest(user.profileName),
+          colorSeason: latestColorAnalysis?.palette_name || null,
+          colorPalette: latestColorAnalysis
+            ? {
+                suited: latestColorAnalysis.colors_suited,
+                toWear: latestColorAnalysis.colors_to_wear,
+                toAvoid: latestColorAnalysis.colors_to_avoid,
+              }
+            : null,
+          preferences: user.memories.map((m) => m.memory),
+          gender: user.confirmedGender || user.inferredGender || null,
+          ageGroup: user.confirmedAgeGroup || user.inferredAgeGroup || null,
+          fitPreference: user.fitPreference || null,
+          lastVibeCheck: latestVibeCheck?.createdAt.toISOString() || null,
+        });
+
+        await redis.set(CONTEXT_KEY(userId), JSON.stringify(context), {
+          EX: CONTEXT_TTL,
+        });
+      }
     }
 
-    const latestColorAnalysis = user.colorAnalyses[0];
-    const latestVibeCheck = user.vibeChecks[0];
-
-    const context = normalizeUserContext({
-      name: user.profileName || '',
-      appUserId: user.appUserId || null,
-      isGuest: Boolean(user.isGuest) || profileNameIndicatesGuest(user.profileName),
-      colorSeason: latestColorAnalysis?.palette_name || null,
-      colorPalette: latestColorAnalysis
-        ? {
-            suited: latestColorAnalysis.colors_suited,
-            toWear: latestColorAnalysis.colors_to_wear,
-            toAvoid: latestColorAnalysis.colors_to_avoid,
-          }
-        : null,
-      preferences: user.memories.map((m) => m.memory),
-      gender: user.confirmedGender || user.inferredGender || null,
-      ageGroup: user.confirmedAgeGroup || user.inferredAgeGroup || null,
-      fitPreference: user.fitPreference || null,
-      lastVibeCheck: latestVibeCheck?.createdAt.toISOString() || null,
-    });
-
-    // 3. Cache in Redis
-    await redis.set(CONTEXT_KEY(userId), JSON.stringify(context), {
-      EX: CONTEXT_TTL,
-    });
-
-    return context;
+    const sessionProfile = await getSessionUserProfile(userId);
+    return mergeSessionProfileIntoContext(context, sessionProfile);
   } catch (err) {
     logger.error({ err, userId }, 'Failed to get user context');
-    return normalizeUserContext(null);
+    const fallback = normalizeUserContext(null);
+    try {
+      const sessionProfile = await getSessionUserProfile(userId);
+      return mergeSessionProfileIntoContext(fallback, sessionProfile);
+    } catch {
+      return fallback;
+    }
   }
 }
 
@@ -254,6 +326,7 @@ export async function resetChatSessionState(userId: string): Promise<void> {
   await Promise.all([
     clearHistory(userId),
     invalidateContext(userId),
+    clearSessionUserProfile(userId),
     resetSearchSession(userId),
     clearHttpPendingFlow(userId),
     clearStagedColorAnalysis(userId),

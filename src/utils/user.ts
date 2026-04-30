@@ -8,24 +8,16 @@ export function profileNameIndicatesGuest(profileName: string | null | undefined
 }
 
 /**
- * Checks if a user is a guest/temporary user.
- * Guest users: `isGuest` in DB, appUserId prefix guest_/TEMP_, or profile / request name
- * normalized to the placeholder "guest".
+ * Guest only when the display name is the placeholder "guest" (case-insensitive),
+ * from the request or the stored profile — not from empty name or appUserId prefix alone.
  *
- * @param user - The user to check
- * @param requestProfileName - Optional profile name from the current request (HTTP chat); used so guest flow applies even if DB row is stale in production.
+ * @param requestProfileName - Optional profile name from the current request (HTTP chat).
  */
 export function isGuestUser(
   user: User | null | undefined,
   requestProfileName?: string | null,
 ): boolean {
-  if (!user) return true;
-
-  if (user.isGuest) return true;
-
-  if (profileNameIndicatesGuest(user.profileName)) return true;
-
   if (profileNameIndicatesGuest(requestProfileName)) return true;
-
-  return Boolean(user.appUserId?.startsWith('guest_') || user.appUserId?.startsWith('TEMP_'));
+  if (profileNameIndicatesGuest(user?.profileName)) return true;
+  return false;
 }

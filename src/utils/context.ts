@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { resetChatSessionState } from '../agent/memory/redis';
 import { logger } from './logger';
 import { CHAT_SESSION_INACTIVITY_MS } from './constants';
+import { hydrateSessionUserProfileForChat } from './sessionUserProfile';
 import { profileNameIndicatesGuest } from './user';
 
 async function handleStaleConversation(
@@ -36,7 +37,8 @@ export async function getOrCreateUserAndConversation(
 ): Promise<{ user: User; conversation: Conversation }> {
   const isProduction = process.env.NODE_ENV === 'production';
   const trimmedProfile = profileName?.trim() ?? '';
-  const anonymous = !trimmedProfile || profileNameIndicatesGuest(trimmedProfile);
+  /** Guest only when display name is the literal placeholder "guest", not when the name is missing. */
+  const anonymous = profileNameIndicatesGuest(trimmedProfile);
   const rawAppUserId = String(appUserId || '').trim() || whatsappId;
   const guestTaggedAppUserId = rawAppUserId.startsWith('guest_')
     ? rawAppUserId
@@ -78,23 +80,30 @@ export async function getOrCreateUserAndConversation(
     orderBy: { updatedAt: 'desc' },
   });
 
+  let result: { user: User; conversation: Conversation };
+
   if (lastOpenConversation) {
     const timeSinceLastUpdate = Date.now() - new Date(lastOpenConversation.updatedAt).getTime();
     if (timeSinceLastUpdate > CHAT_SESSION_INACTIVITY_MS) {
       await resetChatSessionState(user.id);
-      return {
+      result = {
         user,
         conversation: await handleStaleConversation(user, lastOpenConversation),
       };
+    } else {
+      result = { user, conversation: lastOpenConversation };
     }
-    return { user, conversation: lastOpenConversation };
+  } else {
+    logger.debug({ userId: user.id }, 'No open conversation found, creating a new one.');
+    const newConversation = await prisma.conversation.create({
+      data: { userId: user.id },
+    });
+    result = { user, conversation: newConversation };
   }
 
-  logger.debug({ userId: user.id }, 'No open conversation found, creating a new one.');
-  const newConversation = await prisma.conversation.create({
-    data: { userId: user.id },
-  });
-  return { user, conversation: newConversation };
+  await hydrateSessionUserProfileForChat(result.user.id, trimmedProfile, rawAppUserId);
+
+  return result;
 }
 
 /**
