@@ -10,9 +10,13 @@ const SUGGESTIONS = [
   'User signups by month',
 ];
 
-interface Props { onResult: (r: QueryResponse) => void; }
+interface Props {
+  onResult: (r: QueryResponse) => void;
+  /** Selected analytics DB id (must match server registry). */
+  databaseId: string | null;
+}
 
-export function QueryPanel({ onResult }: Props) {
+export function QueryPanel({ onResult, databaseId }: Props) {
   const [question, setQuestion] = useState('');
   const [sqlMode, setSqlMode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,11 +24,13 @@ export function QueryPanel({ onResult }: Props) {
 
   const submit = async (q?: string) => {
     const text = (q ?? question).trim();
-    if (!text) return;
+    if (!text || !databaseId) return;
     setLoading(true);
     setError(null);
     try {
-      const result = sqlMode ? await analyticsApi.runSQL(text) : await analyticsApi.query(text);
+      const result = sqlMode
+        ? await analyticsApi.runSQL(text, 'Custom SQL', databaseId)
+        : await analyticsApi.query(text, databaseId);
       onResult(result);
       if (!q) setQuestion('');
     } catch (e) {
@@ -63,7 +69,7 @@ export function QueryPanel({ onResult }: Props) {
         />
         <button
           onClick={() => submit()}
-          disabled={loading || !question.trim()}
+          disabled={loading || !question.trim() || !databaseId}
           className="btn btn-primary"
           style={{ position: 'absolute', right: '0.5rem', bottom: '0.5rem', padding: '0.375rem', display: 'flex', alignItems: 'center' }}
         >

@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(({ mode }) => {
   const envRepo = loadEnv(mode, path.resolve(__dirname, '..'), '');
   const envDash = loadEnv(mode, __dirname, '');
-  // Must match analysis_agent / Dockerfile.api listen port (default 8000). Docker Compose sets ANALYTICS_API_URL for the server; Vite reads the same var when present.
+  // Must match dashboard/analytics-api / Dockerfile.api listen port (default 8000). Docker Compose sets ANALYTICS_API_URL for the server; Vite reads the same var when present.
   let analyticsProxyTarget =
     envDash.ANALYTICS_API_URL || envRepo.ANALYTICS_API_URL || 'http://localhost:8000';
   // Host dev cannot reach the Docker service hostname; fall back to localhost.

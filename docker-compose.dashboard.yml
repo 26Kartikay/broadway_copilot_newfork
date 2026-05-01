@@ -3,10 +3,10 @@
 # From repo root (broadway_copilot_newfork):
 #   docker compose -f docker-compose.dashboard.yml --env-file .env up -d --build
 #
-# Repo layout (analytics-api image is built from a sibling directory):
-#   broadway/
-#     analysis_agent/              ← required; compose build.context: ../analysis_agent
-#     broadway_copilot_newfork/    ← run compose from here
+# Repo layout (analytics-api is integrated into the dashboard):
+#   broadway_copilot_newfork/
+#     dashboard/
+#       analytics-api/             ← integrated service; compose build.context: ./dashboard/analytics-api
 #
 # You do NOT start the analytics agent separately when using this file — the `analytics-api`
 # service is uvicorn on port 8000. If you run the dashboard on the host (npm) instead of
@@ -72,14 +72,18 @@ services:
 
   analytics-api:
     build:
-      context: ../analysis_agent
+      context: ./dashboard/analytics-api
       dockerfile: Dockerfile.api
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       DB_CONNECTION_STRING: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-broadway}?schema=public}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       ACCESSIBLE_TABLES: ${ANALYTICS_ACCESSIBLE_TABLES:-}
+      # Optional JSON array of {id,label,url} — see .env.example. If unset, DB_CONNECTION_STRING is the only DB (id "default").
+      ANALYTICS_DATABASES: ${ANALYTICS_DATABASES:-}
+      ANALYTICS_DATABASE_MAX: ${ANALYTICS_DATABASE_MAX:-12}
     depends_on:
       db:
         condition: service_healthy

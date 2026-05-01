@@ -347,12 +347,10 @@ npx ts-node scripts/deleteProducts.ts --confirm
 ├── docker-compose.bot.yml      # bot + db + redis only
 ├── docker-compose.dashboard.yml # admin UI only (set DATABASE_URL)
 ├── docker-compose.bot.prod.yml # production-style bot image + db + redis
-├── src/ # Express API, agent graph, shared libraries
-│   ├── agent/ # LangGraph definition, nodes, and tools
-│   ├── lib/ # Twilio, Redis, Prisma, AI helpers
-│   ├── middleware/ # Auth, rate limiting, whitelist checks
-│   ├── utils/ # Context, logging, media, prompt loaders
-│   └── index.ts # HTTP entrypoint and message queue bootstrap
+├── dashboard/ # admin UI + BFF
+│   ├── analytics-api/ # integrated FastAPI analytics service
+│   ├── src/ # Frontend source
+│   └── server/ # Backend for Frontend (Node.js)
 ├── functions/ # Cloud Functions (memories, wardrobe indexing)
 ├── prompts/ # Prompt templates consumed by agent nodes
 ├── functions/prisma/ # Prisma schema and migrations (authoritative)
@@ -424,9 +422,9 @@ For migrating to RDS, ElastiCache, ECS/App Runner, secrets, and networking, see 
 
 An internal dashboard for operators is available in the `dashboard/` directory.
 
-- **Port:** 8090
-- **Features:** Service health monitoring, user search/management, and centralized application logs.
-- **Tech Stack:** React (Vite) frontend, Express (BFF) backend, Prisma ORM.
+- **Port:** 8090 (Dashboard), 8000 (Analytics API)
+- **Features:** Service health monitoring, user search/management, centralized application logs, and AI-powered data analytics.
+- **Tech Stack:** React (Vite) frontend, Express (BFF) backend, Prisma ORM, and FastAPI (Analytics).
 
 ### Running Locally
 

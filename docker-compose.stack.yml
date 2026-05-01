@@ -1,4 +1,4 @@
-# Full local dev stack: chat bot (app) + admin dashboard + Postgres + Redis (+ optional ngrok).
+# Full local dev stack: chat bot (app) + admin dashboard + analytics-api (FastAPI) + Postgres + Redis (+ optional ngrok).
 # Postgres and Redis run in Docker (named volumes). Set POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB in .env
 # (they must match DATABASE_URL for the in-stack `db` service). Bundled Redis has no auth; app/dashboard use
 # redis://redis:6379 (hardcoded in compose so .env REDIS_URL with credentials does not cause WRONGPASS).
@@ -134,6 +134,40 @@ services:
     networks:
       - broadway-network
 
+  analytics-api:
+    build:
+      context: ./dashboard/analytics-api
+      dockerfile: Dockerfile.api
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DB_CONNECTION_STRING: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      ACCESSIBLE_TABLES: ${ANALYTICS_ACCESSIBLE_TABLES:-}
+      ANALYTICS_DATABASES: ${ANALYTICS_DATABASES:-}
+      ANALYTICS_DATABASE_MAX: ${ANALYTICS_DATABASE_MAX:-12}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ANALYTICS_API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
+    networks:
+      - broadway-network
+    restart: unless-stopped
+
   dashboard:
     build:
       context: .
@@ -152,6 +186,7 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       SERVER_URL: ${SERVER_URL:-http://localhost:8080}
       CHAT_API_URL: ${CHAT_API_URL:-}
+      ANALYTICS_API_URL: http://analytics-api:8000
     ports:
       - "${DASHBOARD_PORT:-8090}:${DASHBOARD_PORT:-8090}"
     depends_on:
@@ -159,6 +194,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      analytics-api:
+        condition: service_healthy
     networks:
       - broadway-network
 

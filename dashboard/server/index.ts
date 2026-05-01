@@ -54,6 +54,24 @@ function parseCreatedAfterBefore(req: express.Request): {
 }
 
 app.use(cors());
+
+// Analytics API proxy — MUST be registered BEFORE express.json(). Otherwise body-parser
+// consumes the request stream and proxied POSTs (e.g. /query) hang or send an empty body.
+// http-proxy-middleware v3 rewrites paths relative to the Express mount; mount at /analytics-api
+// and prefix /api so /analytics-api/schema → /api/schema on the Python service.
+const analyticsApiUrl = process.env.ANALYTICS_API_URL || 'http://localhost:8000';
+app.use(
+  '/analytics-api',
+  createProxyMiddleware({
+    target: analyticsApiUrl,
+    changeOrigin: true,
+    pathRewrite: (pathname) => (pathname.startsWith('/api') ? pathname : `/api${pathname}`),
+    // NL→SQL can exceed default proxy timeouts; avoids 504 on slow /api/query.
+    proxyTimeout: 120_000,
+    timeout: 120_000,
+  }),
+);
+
 app.use(express.json({ limit: '10mb' }));
 
 // Request Logging
@@ -370,21 +388,6 @@ app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
-
-// Analytics API proxy — forwards /analytics-api/* → FastAPI app (see analysis_agent).
-// Path rewrite: browser /analytics-api/schema → upstream GET {ANALYTICS_API_URL}/api/schema
-const analyticsApiUrl = process.env.ANALYTICS_API_URL || 'http://localhost:8000';
-app.use(
-  '/analytics-api',
-  createProxyMiddleware({
-    target: analyticsApiUrl,
-    changeOrigin: true,
-    pathRewrite: { '^/analytics-api': '/api' },
-    // NL→SQL can exceed default proxy timeouts; avoids 504 on slow /api/query.
-    proxyTimeout: 120_000,
-    timeout: 120_000,
-  }),
-);
 
 // Serve Frontend
 const staticPath = path.join(__dirname, '../dist');

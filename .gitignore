@@ -78,3 +78,11 @@ uploads/
 celeb_images/
 scripts/color-analysis-eval/*.csv
 AWS_MIGRATION.md
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/.venv
+**/venv
+**/env

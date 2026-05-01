@@ -1,6 +1,11 @@
 // All requests go through the Express proxy at /analytics-api → analytics-api:8000/api
 const BASE = '/analytics-api';
 
+export interface DatabaseOption {
+  id: string;
+  label: string;
+}
+
 export interface ColumnMeta { name: string; type: string; }
 export interface TableSchema { table: string; columns: ColumnMeta[]; }
 export interface SchemaResponse { tables: TableSchema[]; }
@@ -20,22 +25,62 @@ export interface QueryResponse {
   insight: string | null;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+function buildHeaders(databaseId: string | undefined, init?: HeadersInit): Headers {
+  const h = new Headers(init);
+  if (!h.has('Content-Type')) {
+    h.set('Content-Type', 'application/json');
+  }
+  if (databaseId) {
+    h.set('X-Analytics-Database', databaseId);
+  }
+  return h;
+}
+
+async function apiFetch<T>(
+  path: string,
+  options?: RequestInit,
+  databaseId?: string,
+): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: buildHeaders(databaseId, options?.headers),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error((err as any).detail || `Request failed: ${res.status}`);
+    const detail = (err as { detail?: unknown }).detail;
+    const msg =
+      typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? JSON.stringify(detail)
+          : `Request failed: ${res.status}`;
+    throw new Error(msg);
   }
   return res.json() as Promise<T>;
 }
 
 export const analyticsApi = {
-  getSchema: () => apiFetch<SchemaResponse>('/schema'),
-  query: (question: string) =>
-    apiFetch<QueryResponse>('/query', { method: 'POST', body: JSON.stringify({ question }) }),
-  runSQL: (sql: string, question = 'Custom SQL') =>
-    apiFetch<QueryResponse>('/query/sql', { method: 'POST', body: JSON.stringify({ sql, question }) }),
+  listDatabases: () => apiFetch<{ databases: DatabaseOption[] }>('/databases'),
+
+  getSchema: (databaseId?: string) => apiFetch<SchemaResponse>('/schema', undefined, databaseId),
+
+  query: (question: string, databaseId?: string) =>
+    apiFetch<QueryResponse>(
+      '/query',
+      {
+        method: 'POST',
+        body: JSON.stringify({ question, database_id: databaseId }),
+      },
+      databaseId,
+    ),
+
+  runSQL: (sql: string, question = 'Custom SQL', databaseId?: string) =>
+    apiFetch<QueryResponse>(
+      '/query/sql',
+      {
+        method: 'POST',
+        body: JSON.stringify({ sql, question, database_id: databaseId }),
+      },
+      databaseId,
+    ),
 };

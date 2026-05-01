@@ -1,6 +1,11 @@
 import { RefreshCw, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { analyticsApi, type QueryResponse, type TableSchema } from './analyticsApi';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  analyticsApi,
+  type DatabaseOption,
+  type QueryResponse,
+  type TableSchema,
+} from './analyticsApi';
 import { DashboardGrid } from './DashboardGrid';
 import { QueryPanel } from './QueryPanel';
 import { SchemaExplorer } from './SchemaExplorer';
@@ -8,30 +13,93 @@ import { SchemaExplorer } from './SchemaExplorer';
 interface Item { id: string; result: QueryResponse; }
 let _id = 1;
 
+const STORAGE_KEY = 'analytics-database-id';
+
 export function AnalyticsPage() {
   const [schema, setSchema] = useState<TableSchema[]>([]);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
+  const [dbOptions, setDbOptions] = useState<DatabaseOption[]>([]);
+  const [selectedDbId, setSelectedDbId] = useState<string | null>(null);
+  const [dbError, setDbError] = useState<string | null>(null);
 
-  const loadSchema = () => {
-    analyticsApi.getSchema()
-      .then(r => { setSchema(r.tables); setSchemaError(null); })
-      .catch(e => setSchemaError(e.message));
-  };
+  const loadSchema = useCallback(() => {
+    if (!selectedDbId) return;
+    analyticsApi
+      .getSchema(selectedDbId)
+      .then(r => {
+        setSchema(r.tables);
+        setSchemaError(null);
+      })
+      .catch(e => setSchemaError(e instanceof Error ? e.message : 'Failed to load schema'));
+  }, [selectedDbId]);
 
-  useEffect(() => { loadSchema(); }, []);
+  useEffect(() => {
+    analyticsApi
+      .listDatabases()
+      .then(r => {
+        setDbOptions(r.databases);
+        setDbError(null);
+        const ids = new Set(r.databases.map(d => d.id));
+        const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+        const pick =
+          stored && ids.has(stored) ? stored : r.databases[0]?.id ?? null;
+        setSelectedDbId(pick);
+        if (pick && typeof localStorage !== 'undefined') {
+          localStorage.setItem(STORAGE_KEY, pick);
+        }
+      })
+      .catch(e =>
+        setDbError(e instanceof Error ? e.message : 'Could not load database list'),
+      );
+  }, []);
+
+  useEffect(() => {
+    loadSchema();
+  }, [loadSchema]);
 
   const addResult = (result: QueryResponse) =>
     setItems(prev => [{ id: String(_id++), result }, ...prev]);
 
   const handleColumnClick = (table: string, column: string) => {
-    analyticsApi.query(`Distribution of ${column} in ${table}`).then(addResult).catch(console.error);
+    if (!selectedDbId) return;
+    analyticsApi
+      .query(`Distribution of ${column} in ${table}`, selectedDbId)
+      .then(addResult)
+      .catch(console.error);
+  };
+
+  const onDatabaseChange = (id: string) => {
+    setSelectedDbId(id);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, id);
+    }
+    setItems([]);
   };
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       {/* Schema sidebar */}
       <aside style={{ width: '220px', borderRight: '1px solid var(--color-border)', padding: '1.25rem', overflowY: 'auto', flexShrink: 0 }}>
+        {dbError ? (
+          <p style={{ fontSize: '0.75rem', color: 'var(--color-error)' }}>{dbError}</p>
+        ) : dbOptions.length > 0 ? (
+          <div style={{ marginBottom: '1rem' }}>
+            <label className="text-muted" style={{ display: 'block', fontSize: '0.65rem', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Database
+            </label>
+            <select
+              className="input"
+              style={{ width: '100%', fontSize: '0.8125rem', padding: '0.4rem 0.5rem' }}
+              value={selectedDbId ?? ''}
+              onChange={e => onDatabaseChange(e.target.value)}
+            >
+              {dbOptions.map(d => (
+                <option key={d.id} value={d.id}>{d.label}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
         {schemaError ? (
           <div>
             <p style={{ fontSize: '0.75rem', color: 'var(--color-error)', marginBottom: '0.5rem' }}>{schemaError}</p>
@@ -65,7 +133,7 @@ export function AnalyticsPage() {
               </button>
             </div>
           </div>
-          <QueryPanel onResult={addResult} />
+          <QueryPanel onResult={addResult} databaseId={selectedDbId} />
         </div>
 
         {/* Results */}
