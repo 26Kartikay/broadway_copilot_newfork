@@ -35,6 +35,24 @@ if (!process.env.DATABASE_URL) {
 
 const prisma = new PrismaClient();
 
+function parseCreatedAfterBefore(req: express.Request): {
+  createdAfter?: Date;
+  createdBefore?: Date;
+} {
+  const a = (req.query.createdAfter as string | undefined)?.trim();
+  const b = (req.query.createdBefore as string | undefined)?.trim();
+  const out: { createdAfter?: Date; createdBefore?: Date } = {};
+  if (a) {
+    const d = new Date(a);
+    if (!Number.isNaN(d.getTime())) out.createdAfter = d;
+  }
+  if (b) {
+    const d = new Date(b);
+    if (!Number.isNaN(d.getTime())) out.createdBefore = d;
+  }
+  return out;
+}
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
@@ -105,6 +123,14 @@ app.get('/admin/logs', authMiddleware, async (req, res) => {
       });
     }
 
+    const { createdAfter, createdBefore } = parseCreatedAfterBefore(req);
+    if (createdAfter) {
+      parts.push({ createdAt: { gte: createdAfter } });
+    }
+    if (createdBefore) {
+      parts.push({ createdAt: { lte: createdBefore } });
+    }
+
     const where: Prisma.ServiceLogWhereInput = parts.length ? { AND: parts } : {};
 
     const logs = await prisma.serviceLog.findMany({
@@ -165,6 +191,14 @@ app.get('/admin/api-request-logs', authMiddleware, async (req, res) => {
           { userId: { contains: search } },
         ],
       });
+    }
+
+    const { createdAfter, createdBefore } = parseCreatedAfterBefore(req);
+    if (createdAfter) {
+      parts.push({ createdAt: { gte: createdAfter } });
+    }
+    if (createdBefore) {
+      parts.push({ createdAt: { lte: createdBefore } });
     }
 
     const where: Prisma.ApiRequestLogWhereInput = parts.length ? { AND: parts } : {};

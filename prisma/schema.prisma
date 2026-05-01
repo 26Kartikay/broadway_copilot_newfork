@@ -590,6 +590,11 @@ model ApiRequestLog {
 
   error String? @db.Text
 
+  /// Sanitized POST body snapshot (e.g. /api/chat) for dashboard + export.
+  requestPayload  Json?
+  /// Sanitized JSON response body for the same request.
+  responsePayload Json?
+
   @@index([createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
   @@index([endpoint, createdAt(sort: Desc)])

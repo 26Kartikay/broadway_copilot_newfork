@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 
+import type { ApiRequestLogInput } from '../utils/apiRequestLog';
 import { persistApiRequestLog, severityForHttpStatus } from '../utils/apiRequestLog';
 import { logger } from '../utils/logger';
 
@@ -67,6 +69,18 @@ function toLatencySecondsString(latencyMs: number): string {
   return `${(latencyMs / 1000).toFixed(3)}s`;
 }
 
+/** Prefer request snapshot (set in route handler before res.json) then res.locals. */
+function pickIntentField(req: Request, res: Response, key: 'intent' | 'intentV2'): string | null {
+  const snap = key === 'intent' ? req.apiLogIntent : req.apiLogIntentV2;
+  const loc = key === 'intent' ? res.locals.intent : res.locals.intentV2;
+  for (const v of [snap, loc]) {
+    if (v == null) continue;
+    const s = String(v).trim();
+    if (s.length > 0) return s;
+  }
+  return null;
+}
+
 export function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const requestId = getOrCreateRequestId(req);
   res.locals.requestId = requestId;
@@ -96,14 +110,10 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
       ...(responseSize !== undefined ? { responseSize } : null),
     };
 
-    const intentV2 =
-      typeof res.locals.intentV2 === 'string' && res.locals.intentV2.trim().length > 0
-        ? res.locals.intentV2
-        : undefined;
-    const intentLog =
-      typeof res.locals.intent === 'string' && res.locals.intent.trim().length > 0
-        ? res.locals.intent.trim()
-        : undefined;
+    const intentV2Raw = pickIntentField(req, res, 'intentV2');
+    const intentLogRaw = pickIntentField(req, res, 'intent');
+    const intentV2 = intentV2Raw ?? undefined;
+    const intentLog = intentLogRaw ?? undefined;
 
     const payload = {
       requestId,
@@ -126,14 +136,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     const pathOnly = (req.originalUrl || req.url).split('?')[0] ?? '';
     if (pathOnly.startsWith('/api')) {
       const endpoint = `${req.method} ${pathOnly}`;
-      const intentV2Str =
-        typeof res.locals.intentV2 === 'string' && res.locals.intentV2.trim().length > 0
-          ? res.locals.intentV2
-          : null;
-      const intentStr =
-        typeof res.locals.intent === 'string' && res.locals.intent.trim().length > 0
-          ? res.locals.intent.trim()
-          : null;
+      const intentV2Str = pickIntentField(req, res, 'intentV2');
+      const intentStr = pickIntentField(req, res, 'intent');
       const uid =
         typeof res.locals.requestLogUserId === 'string' && res.locals.requestLogUserId.length > 0
           ? res.locals.requestLogUserId
@@ -147,7 +151,13 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
           ? res.locals.requestLogError
           : null;
 
-      persistApiRequestLog({
+      const reqPayload = res.locals.apiLogRequestPayload;
+      const resPayload = res.locals.apiLogResponsePayload;
+      const isChatApiLog =
+        req.method === 'POST' &&
+        (pathOnly === '/api/chat' || pathOnly.startsWith('/api/chat/'));
+
+      const logInput: ApiRequestLogInput = {
         requestId,
         severity: severityForHttpStatus(res.statusCode),
         endpoint,
@@ -158,7 +168,15 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
         intent: intentStr,
         intentV2: intentV2Str,
         error: errStr,
-      });
+      };
+      if (isChatApiLog && reqPayload !== undefined) {
+        logInput.requestPayload = reqPayload as Prisma.InputJsonValue;
+      }
+      if (isChatApiLog && resPayload !== undefined) {
+        logInput.responsePayload = resPayload as Prisma.InputJsonValue;
+      }
+
+      persistApiRequestLog(logInput);
     }
   });
 

@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { resetChatSessionState } from '../agent/memory/redis';
 import { logger } from './logger';
 import { CHAT_SESSION_INACTIVITY_MS } from './constants';
+import { syncCopilotUserRowAfterHydrate } from './copilotUserSync';
 import { hydrateSessionUserProfileForChat } from './sessionUserProfile';
 import { profileNameIndicatesGuest } from './user';
 
@@ -102,6 +103,12 @@ export async function getOrCreateUserAndConversation(
   }
 
   await hydrateSessionUserProfileForChat(result.user.id, trimmedProfile, rawAppUserId);
+  await syncCopilotUserRowAfterHydrate(result.user.id, trimmedProfile, rawAppUserId, anonymous);
+
+  const refreshed = await prisma.user.findUnique({ where: { id: result.user.id } });
+  if (refreshed) {
+    result = { ...result, user: refreshed };
+  }
 
   return result;
 }

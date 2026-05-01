@@ -1,4 +1,4 @@
-import { Severity } from '@prisma/client';
+import { Prisma, Severity } from '@prisma/client';
 
 import { prisma } from '../lib/prisma';
 import { logger } from './logger';
@@ -23,6 +23,10 @@ export interface ApiRequestLogInput {
   intent?: string | null;
   intentV2?: string | null;
   error?: string | null;
+  /** Sanitized request body (e.g. /api/chat). Omitted when not applicable. */
+  requestPayload?: Prisma.InputJsonValue | null;
+  /** Sanitized response body. Omitted when not applicable. */
+  responsePayload?: Prisma.InputJsonValue | null;
 }
 
 /**
@@ -36,20 +40,28 @@ export function persistApiRequestLog(input: ApiRequestLogInput): void {
     return s.length > MAX_TEXT ? s.slice(0, MAX_TEXT) : s;
   };
 
+  const data: Prisma.ApiRequestLogUncheckedCreateInput = {
+    requestId: input.requestId ?? null,
+    severity: input.severity,
+    endpoint,
+    httpStatus: input.httpStatus,
+    latencyMs: input.latencyMs,
+    userId: input.userId ?? null,
+    userName: clip(input.userName ?? null),
+    intent: clip(input.intent ?? null),
+    intentV2: clip(input.intentV2 ?? null),
+    error: clip(input.error ?? null),
+  };
+  if (input.requestPayload !== undefined) {
+    data.requestPayload = input.requestPayload ?? Prisma.JsonNull;
+  }
+  if (input.responsePayload !== undefined) {
+    data.responsePayload = input.responsePayload ?? Prisma.JsonNull;
+  }
+
   void prisma.apiRequestLog
     .create({
-      data: {
-        requestId: input.requestId ?? null,
-        severity: input.severity,
-        endpoint,
-        httpStatus: input.httpStatus,
-        latencyMs: input.latencyMs,
-        userId: input.userId ?? null,
-        userName: clip(input.userName ?? null),
-        intent: clip(input.intent ?? null),
-        intentV2: clip(input.intentV2 ?? null),
-        error: clip(input.error ?? null),
-      },
+      data,
     })
     .catch((err: unknown) => {
       logger.error({ err }, 'persistApiRequestLog: insert failed');

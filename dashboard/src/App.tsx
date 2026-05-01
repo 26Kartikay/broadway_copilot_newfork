@@ -4,6 +4,32 @@ import { NavLink, Route, Routes, useSearchParams } from 'react-router-dom';
 import { api, ApiRequestLog, ServiceLog, User } from './api.ts';
 import { AnalyticsPage } from './analytics/AnalyticsPage.tsx';
 
+type DatePreset = 'all' | '24h' | '7d' | '30d' | 'custom';
+
+function buildCreatedRange(
+  preset: DatePreset,
+  customFrom: string,
+  customTo: string,
+): { createdAfter?: string; createdBefore?: string } {
+  const now = Date.now();
+  if (preset === 'all') return {};
+  if (preset === '24h') return { createdAfter: new Date(now - 24 * 60 * 60 * 1000).toISOString() };
+  if (preset === '7d') return { createdAfter: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString() };
+  if (preset === '30d') return { createdAfter: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString() };
+  const out: { createdAfter?: string; createdBefore?: string } = {};
+  const f = customFrom.trim();
+  const t = customTo.trim();
+  if (f) {
+    const d = new Date(f);
+    if (!Number.isNaN(d.getTime())) out.createdAfter = d.toISOString();
+  }
+  if (t) {
+    const d = new Date(t);
+    if (!Number.isNaN(d.getTime())) out.createdBefore = d.toISOString();
+  }
+  return out;
+}
+
 const Dashboard = () => {
   const [health, setHealth] = useState<any>(null);
 
@@ -55,15 +81,21 @@ const LogsPage = () => {
   const [serviceNameFilter, setServiceNameFilter] = useState('');
   const [endpointFilter, setEndpointFilter] = useState('');
   const [httpStatusFilter, setHttpStatusFilter] = useState('');
+  const [datePreset, setDatePreset] = useState<DatePreset>('7d');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true);
+      const range = buildCreatedRange(datePreset, customFrom, customTo);
       const common = {
         severity: severity === 'ALL' ? undefined : severity,
         userId: userFilter.trim() || undefined,
         search: search.trim() || undefined,
         limit: '100',
+        ...range,
       };
       if (logSource === 'service') {
         void api
@@ -93,6 +125,9 @@ const LogsPage = () => {
     serviceNameFilter,
     endpointFilter,
     httpStatusFilter,
+    datePreset,
+    customFrom,
+    customTo,
   ]);
 
   const severityColor = (sev: string) => {
@@ -142,11 +177,51 @@ const LogsPage = () => {
     );
   };
 
-  const exportPayload = logSource === 'service' ? serviceLogs : apiLogs;
   const exportName = logSource === 'service' ? 'service-logs' : 'api-request-logs';
 
+  const downloadJson = (data: unknown, suffix: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${exportName}-${suffix}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const exportFilteredUpTo10k = async () => {
+    setExporting(true);
+    try {
+      const range = buildCreatedRange(datePreset, customFrom, customTo);
+      const base = {
+        severity: severity === 'ALL' ? undefined : severity,
+        userId: userFilter.trim() || undefined,
+        search: search.trim() || undefined,
+        limit: '10000',
+        offset: '0',
+        ...range,
+      };
+      const data =
+        logSource === 'service'
+          ? await api.getLogs({
+              ...base,
+              service: serviceNameFilter.trim() || undefined,
+            })
+          : await api.getApiRequestLogs({
+              ...base,
+              endpoint: endpointFilter.trim() || undefined,
+              httpStatus: httpStatusFilter.trim() || undefined,
+            });
+      downloadJson(data, 'export');
+    } catch (e) {
+      console.error(e);
+      alert('Export failed — see console.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <div className="p-6">
+    <div className="p-6" style={{ overflowX: 'auto', maxWidth: '100%' }}>
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex justify-between items-center flex-wrap gap-4">
           <h1 className="text-2xl font-bold">Logs</h1>
@@ -180,19 +255,26 @@ const LogsPage = () => {
               <option value="ERROR">ERROR</option>
               <option value="CRITICAL">CRITICAL</option>
             </select>
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              value={datePreset}
+              title="Filter rows by time range"
+              onChange={(e) => setDatePreset(e.target.value as DatePreset)}
+            >
+              <option value="all">All time</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="custom">Custom range…</option>
+            </select>
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => {
-                const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `${exportName}-${new Date().toISOString().slice(0, 10)}.json`;
-                a.click();
-                URL.revokeObjectURL(a.href);
-              }}
+              disabled={exporting}
+              onClick={() => void exportFilteredUpTo10k()}
             >
-              Export JSON
+              {exporting ? 'Exporting…' : 'Export JSON (filtered, up to 10k)'}
             </button>
           </div>
         </div>
@@ -250,10 +332,31 @@ const LogsPage = () => {
             </>
           )}
         </div>
+        {datePreset === 'custom' && (
+          <div className="flex flex-wrap gap-2 items-center text-sm">
+            <span className="text-muted">From</span>
+            <input
+              type="datetime-local"
+              className="input"
+              style={{ maxWidth: '200px' }}
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+            />
+            <span className="text-muted">To</span>
+            <input
+              type="datetime-local"
+              className="input"
+              style={{ maxWidth: '200px' }}
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+            />
+          </div>
+        )}
       </div>
       {logSource === 'service' ? (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table className="table">
+        <div className="card" style={{ padding: 0, overflow: 'hidden', maxWidth: '100%' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
+          <table className="table" style={{ minWidth: '900px', width: '100%' }}>
             <thead>
               <tr>
                 <th>Timestamp</th>
@@ -283,10 +386,12 @@ const LogsPage = () => {
               )}
             </tbody>
           </table>
+          </div>
         </div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table className="table">
+        <div className="card" style={{ padding: 0, overflow: 'hidden', maxWidth: '100%' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}>
+          <table className="table" style={{ minWidth: '1200px', width: '100%' }}>
             <thead>
               <tr>
                 <th>Timestamp</th>
@@ -298,12 +403,13 @@ const LogsPage = () => {
                 <th>Intent</th>
                 <th>Inference (intent v2)</th>
                 <th>Error</th>
+                <th>Request / response</th>
                 <th>Request ID</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} style={{ textAlign: 'center' }}>Loading...</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center' }}>Loading...</td></tr>
               ) : apiLogs.length > 0 ? apiLogs.map((log) => (
                 <tr key={log.id} className="text-sm">
                   <td className="text-muted whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</td>
@@ -327,13 +433,28 @@ const LogsPage = () => {
                   >
                     {log.error || '—'}
                   </td>
+                  <td className="align-top max-w-[min(360px,40vw)] text-xs">
+                    <details className="mb-1">
+                      <summary className="cursor-pointer" style={{ color: 'var(--color-primary)' }}>Request</summary>
+                      <pre className="mt-1 p-2 rounded overflow-auto max-h-40 whitespace-pre-wrap break-words" style={{ backgroundColor: 'var(--color-surface)', fontSize: '0.7rem' }}>
+                        {log.requestPayload != null ? JSON.stringify(log.requestPayload, null, 2) : '—'}
+                      </pre>
+                    </details>
+                    <details>
+                      <summary className="cursor-pointer" style={{ color: 'var(--color-primary)' }}>Response</summary>
+                      <pre className="mt-1 p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-words" style={{ backgroundColor: 'var(--color-surface)', fontSize: '0.7rem' }}>
+                        {log.responsePayload != null ? JSON.stringify(log.responsePayload, null, 2) : '—'}
+                      </pre>
+                    </details>
+                  </td>
                   <td className="text-muted text-xs font-mono">{log.requestId || '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No API request logs found.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>No API request logs found.</td></tr>
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

@@ -15,6 +15,7 @@ import { connectPrisma, prisma } from './lib/prisma';
 import { connectRedis, getRedisHealthSnapshot } from './lib/redis';
 import { errorHandler } from './middleware/errors';
 import { requestLogger } from './middleware/requestLogger';
+import { sanitizeChatRequestForLog, sanitizeChatResponseForLog } from './utils/apiLogPayload';
 import { clearUploadsDirectory } from './utils/clearUploads';
 import { getOrCreateUserAndConversation } from './utils/context';
 import { dbLog } from './utils/dbLogger';
@@ -41,8 +42,6 @@ app.use(
         callback(null, true);
         return;
       }
-
-      // Allow localhost for development
       if (
         /^http:\/\/localhost(:\d+)?$/.test(origin) ||
         /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)
@@ -50,8 +49,6 @@ app.use(
         callback(null, true);
         return;
       }
-
-      // Allow Cloud Run URLs and custom domains
       const serverUrl = getServerUrlBase();
       if (serverUrl && origin) {
         // Extract origin from serverUrl (protocol + hostname + port)
@@ -61,8 +58,6 @@ app.use(
           return;
         }
       }
-
-      // Allow *.run.app domains (Cloud Run default)
       if (
         /^https:\/\/[^\.]+-[^\.]+\.a\.run\.app$/.test(origin) ||
         /^https:\/\/[^\.]+\.run\.app$/.test(origin)
@@ -70,8 +65,6 @@ app.use(
         callback(null, true);
         return;
       }
-
-      // Default: allow same-origin requests (frontend served from same domain)
       callback(null, true);
     },
     credentials: true,
@@ -82,9 +75,6 @@ app.use(express.json({ limit: '50mb' }));
 
 app.use('/uploads', express.static(staticUploadsMount()));
 
-/**
- * Health check: process is up; includes Redis ping when socket is open.
- */
 app.get('/health', async (_req: Request, res: Response) => {
   const redisHealth = await getRedisHealthSnapshot();
   res.status(200).json({
@@ -102,10 +92,6 @@ app.get('/health', async (_req: Request, res: Response) => {
     },
   });
 });
-
-// Internal API routes for bot user sync - removed (controllers deleted)
-// app.post('/internal/bot-users/upsert', authenticateInternal, upsertBotUser);
-// app.patch('/internal/bot-users/:appUserId', authenticateInternal, patchBotUser);
 
 /**
  * Main chat endpoint for the app.
@@ -139,12 +125,18 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
   let requestLogUserId: string | undefined;
   let requestLogUserName: string | undefined;
 
+  res.locals.apiLogRequestPayload = sanitizeChatRequestForLog(req.body);
+
   try {
     const chatRequest = req.body as ChatRequest;
     const { userId, messageId } = chatRequest;
 
     // Basic validation
     if (!userId) {
+      res.locals.apiLogResponsePayload = sanitizeChatResponseForLog({
+        error: 'userId is required',
+        code: 'MISSING_USER_ID',
+      });
       return res.status(400).json({
         error: 'userId is required',
         code: 'MISSING_USER_ID',
@@ -157,6 +149,10 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     const messageInput = chatRequestToMessageInput(chatRequest, sid);
     const waId = messageInput.WaId;
     if (!waId) {
+      res.locals.apiLogResponsePayload = sanitizeChatResponseForLog({
+        error: 'Invalid message input',
+        code: 'INVALID_INPUT',
+      });
       return res.status(400).json({ error: 'Invalid message input', code: 'INVALID_INPUT' });
     }
 
@@ -198,12 +194,15 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     );
 
     const { replies, pending, intentV2, intent } = await runAgentForHttp(user.id, sid, messageInput);
-    if (intent !== undefined && intent.length > 0) {
-      res.locals.intent = intent;
+    if (intent !== undefined && String(intent).trim().length > 0) {
+      res.locals.intent = String(intent).trim();
     }
-    if (intentV2 !== undefined && intentV2.length > 0) {
-      res.locals.intentV2 = intentV2;
+    if (intentV2 !== undefined && String(intentV2).trim().length > 0) {
+      res.locals.intentV2 = String(intentV2).trim();
     }
+    // Snapshot on req so ApiRequestLog always sees values on response `finish` (same request scope).
+    req.apiLogIntent = res.locals.intent ?? null;
+    req.apiLogIntentV2 = res.locals.intentV2 ?? null;
 
     // Response without metadata
     const response = {
@@ -211,6 +210,7 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       pending,
     };
 
+    res.locals.apiLogResponsePayload = sanitizeChatResponseForLog(response);
     return res.status(200).json(response);
   } catch (err: unknown) {
     if (requestLogUserId !== undefined) {
@@ -220,6 +220,9 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       res.locals.requestLogUserName = requestLogUserName;
     }
     res.locals.requestLogError = err instanceof Error ? err.message : String(err);
+    res.locals.apiLogResponsePayload = sanitizeChatResponseForLog({
+      error: err instanceof Error ? err.message : String(err),
+    });
     return next(err);
   }
 });

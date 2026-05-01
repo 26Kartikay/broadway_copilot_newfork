@@ -12,5 +12,9 @@ declare module 'express-serve-static-core' {
     requestLogUserName?: string;
     /** Error message when the handler failed (ApiRequestLog.error). */
     requestLogError?: string;
+    /** Sanitized /api/chat request body for ApiRequestLog.requestPayload. */
+    apiLogRequestPayload?: Record<string, unknown> | null;
+    /** Sanitized /api/chat response body for ApiRequestLog.responsePayload. */
+    apiLogResponsePayload?: Record<string, unknown> | null;
   }
 }

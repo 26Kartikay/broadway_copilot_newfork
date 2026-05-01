@@ -40,6 +40,10 @@ export type LogQuery = {
   search?: string;
   limit?: string;
   offset?: string;
+  /** ISO-8601 lower bound (inclusive) on createdAt */
+  createdAfter?: string;
+  /** ISO-8601 upper bound (inclusive) on createdAt */
+  createdBefore?: string;
 };
 
 export interface ApiRequestLog {
@@ -55,6 +59,10 @@ export interface ApiRequestLog {
   intent: string | null;
   intentV2: string | null;
   error: string | null;
+  /** Sanitized POST /api/chat body (for dashboard + export). */
+  requestPayload?: unknown;
+  /** Sanitized response JSON. */
+  responsePayload?: unknown;
   user?: {
     id: string;
     profileName: string;
@@ -71,6 +79,8 @@ export type ApiRequestLogQuery = {
   search?: string;
   limit?: string;
   offset?: string;
+  createdAfter?: string;
+  createdBefore?: string;
 };
 
 export type AdminConfig = {

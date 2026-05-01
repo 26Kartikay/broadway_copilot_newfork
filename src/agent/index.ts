@@ -48,7 +48,12 @@ export async function runAgentForHttp(
         { userId: prismaUserId, messageId, replyCount: replies.length },
         user ? { userId: prismaUserId } : {},
       );
-      return { replies, pending: null };
+      return {
+        replies,
+        pending: null,
+        intent: 'main_menu',
+        intentV2: 'User opened or returned to the main menu.',
+      };
     }
 
     const flow = await tryHandleHttpChatFlows(prismaUserId, messageInput, user);
@@ -65,7 +70,12 @@ export async function runAgentForHttp(
         },
         user ? { userId: prismaUserId } : {},
       );
-      return { replies: flow.replies, pending: flow.pending };
+      return {
+        replies: flow.replies,
+        pending: flow.pending,
+        intent: 'in_app_flow',
+        intentV2: 'Handled by structured in-app flow (color / vibe / buttons / saves).',
+      };
     }
 
     const guestRecGate = await tryGuestRecProductGenderGate(prismaUserId, messageInput, user);
@@ -77,7 +87,12 @@ export async function runAgentForHttp(
         { userId: prismaUserId, messageId, replyCount: guestRecGate.replies.length },
         user ? { userId: prismaUserId } : {},
       );
-      return { replies: guestRecGate.replies, pending: 'GUEST_REC_GENDER' };
+      return {
+        replies: guestRecGate.replies,
+        pending: 'GUEST_REC_GENDER',
+        intent: 'guest_product_gate',
+        intentV2: 'Guest shopping flow — gender preference prompt before catalog picks.',
+      };
     }
 
     if (guestRecGate.kind === 'replay') {
