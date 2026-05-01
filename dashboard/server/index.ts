@@ -389,13 +389,24 @@ app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Serve Frontend
+// Serve Frontend (avoid stale UI after deploy: never cache index.html; hashed /assets are immutable)
 const staticPath = path.join(__dirname, '../dist');
-app.use(express.static(staticPath));
+app.use(
+  express.static(staticPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }),
+);
 
 // Terminal middleware: handle SPA routing without wildcards that trigger PathErrors
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/admin')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     return res.sendFile(path.join(staticPath, 'index.html'));
   }
   next();

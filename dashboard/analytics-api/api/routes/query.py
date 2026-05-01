@@ -22,7 +22,10 @@ def run_query(request: Request, req: QueryRequest):
             raise HTTPException(status_code=422, detail=str(e)) from e
 
         if not sql:
-            raise HTTPException(status_code=422, detail="Could not generate SQL for this question")
+            detail = (description or "").strip()
+            if not detail:
+                detail = "Could not generate SQL for this question"
+            raise HTTPException(status_code=422, detail=detail)
 
         try:
             columns, rows, row_count = execute_query(sql)

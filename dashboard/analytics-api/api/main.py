@@ -8,7 +8,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import analyze, databases, query, schema
+from api.routes import agent, analyze, databases, query, schema
 
 app = FastAPI(
     title="Broadway Analytics API",
@@ -28,6 +28,7 @@ app.include_router(databases.router, prefix="/api", tags=["databases"])
 app.include_router(schema.router, prefix="/api", tags=["schema"])
 app.include_router(query.router, prefix="/api", tags=["query"])
 app.include_router(analyze.router, prefix="/api", tags=["analyze"])
+app.include_router(agent.router, prefix="/api", tags=["agent"])
 
 
 @app.get("/health")
