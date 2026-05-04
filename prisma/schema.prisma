@@ -1,12 +1,503 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  extensions = [ vector]
-}
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model User {
+  id                  String          @id @default(cuid())
+  appUserId           String          @unique
+  whatsappId          String          @unique
+  profileName         String          @default("")
+  details             String          @default("")
+  isGuest             Boolean         @default(false)
+  inferredGender      Gender?
+  inferredAgeGroup    AgeGroup?
+  confirmedGender     Gender?
+  confirmedAgeGroup   AgeGroup?
+  fitPreference       Fit?
+  lastVibeCheckAt     DateTime?
+  lastColorAnalysisAt DateTime?
+  createdAt           DateTime        @default(now())
+  dailyPromptOptIn    Boolean         @default(false)
+  apiRequestLogs      ApiRequestLog[]
+  colorAnalyses       ColorAnalysis[]
+  conversations       Conversation[]
+  graphRuns           GraphRun[]
+  memories            Memory[]
+  logs                ServiceLog[]
+  tasks               Task[]
+  vibeChecks          VibeCheck[]
+  wardrobe            WardrobeItem[]
+
+  @@index([createdAt])
+  @@index([appUserId])
+}
+
+model Conversation {
+  id        String             @id @default(cuid())
+  userId    String
+  status    ConversationStatus @default(OPEN)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feedback  Feedback?
+  graphRuns GraphRun[]
+  messages  Message[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Message {
+  id                     String       @id @default(cuid())
+  conversationId         String
+  role                   MessageRole
+  intent                 String?
+  buttonPayload          String?
+  pending                PendingType? @default(NONE)
+  selectedTonality       Tonality?
+  content                Json[]       @default([])
+  additionalKwargs       Json?
+  thisOrThatFirstImageId String?
+  memoriesProcessed      Boolean      @default(false)
+  wardrobeProcessed      Boolean      @default(false)
+  createdAt              DateTime     @default(now())
+  /// Plain-text summary of what the intent classifier inferred from this user message.
+  intentV2               String?      @map("intentv2")
+  media                  Media[]
+  conversation           Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([role, createdAt])
+  @@index([buttonPayload])
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  messageId  String
+  twilioUrl  String
+  serverUrl  String
+  gcsUri     String?
+  mimeType   String
+  isUploaded Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model Memory {
+  id             String                 @id @default(cuid())
+  userId         String
+  memory         String
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  embeddingDim   Int?
+  embeddingAt    DateTime?
+  createdAt      DateTime               @default(now())
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model VibeCheck {
+  id                             String   @id @default(cuid())
+  userId                         String
+  comment                        String
+  fit_silhouette_score           Float
+  fit_silhouette_explanation     String
+  color_harmony_score            Float
+  color_harmony_explanation      String
+  styling_details_score          Float
+  styling_details_explanation    String
+  context_confidence_score       Float
+  context_confidence_explanation String
+  overall_score                  Float
+  recommendations                String[]
+  prompt                         String
+  tonality                       String?
+  createdAt                      DateTime @default(now())
+  user                           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model ColorAnalysis {
+  id                  String   @id @default(cuid())
+  userId              String
+  skin_tone           String?
+  eye_color           String?
+  hair_color          String?
+  undertone           String?
+  compliment          String?
+  palette_name        String?
+  palette_description String?
+  colors_suited       Json?
+  colors_to_wear      Json?
+  colors_to_avoid     Json?
+  createdAt           DateTime @default(now())
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model WardrobeItem {
+  id             String                 @id @default(cuid())
+  userId         String
+  name           String
+  description    String
+  category       WardrobeItemCategory
+  type           String
+  subtype        String?
+  mainColor      String
+  secondaryColor String?
+  attributes     Json
+  searchDoc      String
+  keywords       String[]
+  embedding      Unsupported("vector")?
+  embeddingModel String?
+  embeddingDim   Int?
+  embeddingAt    DateTime?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, category])
+  @@index([userId, type])
+  @@index([userId, mainColor])
+  @@index([userId, createdAt])
+  @@index([userId, keywords])
+}
+
+model Product {
+  id               String                 @id @default(cuid())
+  handleId         String                 @unique
+  barcode          String?
+  name             String
+  brand            String
+  category         ProductCategory
+  generalTag       String
+  style            String?
+  fit              String?
+  colors           String[]
+  patterns         String?
+  occasions        String[]
+  componentTags    Json
+  imageUrl         String
+  productLink      String
+  searchDoc        String                 @db.Text
+  embedding        Unsupported("vector")?
+  embeddingModel   String?
+  embeddingDim     Int?
+  embeddingAt      DateTime?
+  isActive         Boolean                @default(true)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  // Automation-managed structured tags
+  legacyCategory   String?
+  subCategory      String?
+  productType      String?
+  allTags          String                 @default("") @db.Text
+  /// LLM-generated retail block (see tagExtractor formattedDescription); used for search/recommendation copy
+  llmDescription   String?                @db.Text
+
+  // Automation metadata
+  taggedBy         String?
+  taggedAt         DateTime?
+  embeddingStatus  String                 @default("pending")
+  automationErrors String[]
+
+  @@index([category])
+  @@index([generalTag])
+  @@index([style])
+  @@index([fit])
+  @@index([patterns])
+  @@index([brand])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([legacyCategory])
+  @@index([subCategory])
+  @@index([embeddingStatus])
+  @@index([taggedAt])
+}
+
+model AvailableBarcode {
+  id          String    @id @default(cuid())
+  barcode     String    @unique
+  externalId  Int
+  name        String
+  brand       String?
+  category    String?
+  lastChecked DateTime  @default(now())
+  processedAt DateTime?
+  productId   String?
+  status      String    @default("pending")
+  syncErrors  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([processedAt])
+  @@index([lastChecked])
+}
+
+model AutomationRun {
+  id              String    @id @default(cuid())
+  name            String
+  startTime       DateTime
+  endTime         DateTime?
+  status          String    @default("running")
+  totalTasks      Int       @default(0)
+  successCount    Int       @default(0)
+  failureCount    Int       @default(0)
+  averageDuration Float     @default(0)
+  errors          String[]
+  metrics         Json      @default("{}")
+  createdAt       DateTime  @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([name])
+}
+
+model AutomationFailure {
+  id          String    @id @default(cuid())
+  productId   String
+  barcode     String?
+  reason      String    @db.Text
+  retryCount  Int       @default(0)
+  lastRetried DateTime?
+  runId       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([productId])
+  @@index([retryCount])
+  @@index([createdAt])
+  @@unique([productId, runId])
+}
+
+model GraphRun {
+  id             String         @id
+  userId         String
+  conversationId String
+  status         GraphRunStatus @default(RUNNING)
+  errorTrace     String?
+  initialState   Json
+  finalState     Json?
+  startTime      DateTime       @default(now())
+  endTime        DateTime?
+  durationMs     Int?
+  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodeRuns       NodeRun[]
+
+  @@index([conversationId, startTime])
+  @@index([userId, startTime])
+}
+
+model LLMTrace {
+  id               String    @id @default(cuid())
+  nodeRunId        String
+  model            String
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  costUsd          Decimal?  @db.Decimal(10, 6)
+  errorTrace       String?
+  inputMessages    Json
+  outputMessage    Json?
+  rawRequest       Json
+  rawResponse      Json?
+  startTime        DateTime  @default(now())
+  endTime          DateTime?
+  durationMs       Int?
+  nodeRun          NodeRun   @relation(fields: [nodeRunId], references: [id], onDelete: Cascade)
+
+  @@index([nodeRunId])
+}
+
+model NodeRun {
+  id         String     @id @default(cuid())
+  graphRunId String
+  nodeName   String
+  startTime  DateTime
+  endTime    DateTime?
+  durationMs Int?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  llmTraces  LLMTrace[]
+  graphRun   GraphRun   @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
+
+  @@index([graphRunId])
+}
+
+model Feedback {
+  id             String       @id @default(cuid())
+  conversationId String       @unique
+  helpful        Boolean?
+  comment        String?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id        String     @id @default(cuid())
+  taskId    String     @unique
+  userId    String
+  type      TaskType
+  status    TaskStatus @default(QUEUED)
+  payload   Json?
+  runAt     DateTime
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, runAt])
+  @@index([status, runAt])
+}
+
+model AdminWhitelist {
+  id    String @id @default(cuid())
+  email String @unique
+}
+
+model UserWhitelist {
+  id   String @id @default(cuid())
+  waId String @unique
+}
+
+model Admins {
+  id             String               @id @default(cuid())
+  email          String               @unique
+  name           String?
+  image          String?
+  emailVerified  DateTime?
+  accounts       AdminAccount[]
+  authenticators AdminAuthenticator[]
+  sessions       AdminSession[]
+}
+
+model AdminAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  admin             Admins  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId], name: "provider_providerAccountId")
+  @@index([userId])
+}
+
+model AdminSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  admin        Admins   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AdminVerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token], name: "identifier_token")
+}
+
+model AdminAuthenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+  admin                Admins  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+}
+
+model ServiceLog {
+  id                  String   @id @default(cuid())
+  createdAt           DateTime @default(now())
+  severity            Severity @default(INFO)
+  service             String
+  message             String
+  context             Json?
+  userId              String?
+  appUserId           String?
+  whatsappId          String?
+  profileNameSnapshot String?
+  conversationId      String?
+  graphRunId          String?
+  traceId             String?
+  user                User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([severity, createdAt(sort: Desc)])
+  @@index([service, createdAt(sort: Desc)])
+  @@index([appUserId])
+  @@index([whatsappId])
+}
+
+/// HTTP API access row: endpoint, latency, classifier intent + inference, optional user and error.
+model ApiRequestLog {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  requestId       String?
+  severity        Severity @default(INFO)
+  /// e.g. "POST /api/chat"
+  endpoint        String
+  httpStatus      Int
+  latencyMs       Int
+  userId          String?
+  userName        String?
+  /// Classifier intent slug (e.g. product_search, brand_info).
+  intent          String?
+  /// Plain-language classifier inference (rolling summary / fallback).
+  intentV2        String?
+  error           String?
+  /// Sanitized POST body snapshot (e.g. /api/chat) for dashboard + export.
+  requestPayload  Json?
+  /// Sanitized JSON response body for the same request.
+  responsePayload Json?
+  user            User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([endpoint, createdAt(sort: Desc)])
+  @@index([severity, createdAt(sort: Desc)])
+}
+
+model AdminAuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  adminId   String?
+  action    String
+  target    String?
+  details   Json?
+
+  @@index([createdAt(sort: Desc)])
 }
 
 enum MessageRole {
@@ -15,16 +506,19 @@ enum MessageRole {
   SYSTEM
   TOOL
 }
+
 enum Gender {
   MALE
   FEMALE
   OTHER
 }
+
 enum AgeGroup {
   TEEN
   ADULT
   SENIOR
 }
+
 enum PendingType {
   NONE
   VIBE_CHECK_IMAGE
@@ -51,28 +545,33 @@ enum PendingType {
   SAVE_COLOR_ANALYSIS
   CONFIRM_PRODUCT_RECOMMENDATION
 }
+
 enum TaskType {
   SEND_FEEDBACK_REQUEST
   SCHEDULE_WARDROBE_INDEX
   PROCESS_MEMORIES
   UPLOAD_IMAGES
 }
+
 enum TaskStatus {
   QUEUED
   IN_PROGRESS
   COMPLETED
   FAILED
 }
+
 enum GraphRunStatus {
   RUNNING
   COMPLETED
   ERROR
   ABORTED
 }
+
 enum ConversationStatus {
   OPEN
   CLOSED
 }
+
 enum WardrobeItemCategory {
   TOP
   BOTTOM
@@ -91,6 +590,7 @@ enum ProductCategory {
   FOOTWEAR
   BAGS_LUGGAGE
 }
+
 enum Tonality {
   savage
   friendly
@@ -110,504 +610,4 @@ enum Fit {
   LOW
   MEDIUM
   HIGH
-}
-// --- CORE ---
-
-model User {
-  id          String @id @default(cuid())
-  appUserId   String @unique
-  whatsappId  String @unique
-  profileName String @default("")
-  details     String  @default("")
-  isGuest     Boolean @default(false)
-
-  inferredGender    Gender?
-  inferredAgeGroup  AgeGroup?
-  confirmedGender   Gender?
-  confirmedAgeGroup AgeGroup?
-  fitPreference     Fit?
-
-  lastVibeCheckAt     DateTime?
-  lastColorAnalysisAt DateTime?
-
-  createdAt DateTime @default(now())
-  
-  dailyPromptOptIn Boolean @default(false)
-
-
-  conversations Conversation[]
-  wardrobe      WardrobeItem[]
-  memories      Memory[]
-  vibeChecks    VibeCheck[]
-  colorAnalyses ColorAnalysis[]
-  tasks         Task[]
-  graphRuns        GraphRun[]
-  logs             ServiceLog[]
-  apiRequestLogs   ApiRequestLog[]
-
-  @@index([createdAt])
-  @@index([appUserId])
-}
-
-model Conversation {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  status ConversationStatus @default(OPEN)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  messages  Message[]
-  graphRuns GraphRun[]
-  feedback  Feedback?
-
-  @@index([userId, createdAt])
-  @@index([status, createdAt])
-}
-
-model Message {
-  id              String      @id @default(cuid())
-  conversationId  String
-  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  role            MessageRole
-  intent          String?
-  /// Plain-text summary of what the intent classifier inferred from this user message.
-  intentV2        String?     @db.Text @map("intentv2")
-  buttonPayload   String?
-  pending         PendingType? @default(NONE)
-
-  selectedTonality Tonality? 
-
-  content          Json[] @default([])
-  additionalKwargs Json?
-
-  thisOrThatFirstImageId String?
-
-  memoriesProcessed Boolean @default(false)
-  wardrobeProcessed Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  media Media[]
-
-  @@index([conversationId, createdAt])
-  @@index([role, createdAt])
-  @@index([buttonPayload])
-}
-
-// --- MEDIA ---
-
-model Media {
-  id        String  @id @default(cuid())
-  messageId String
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-
-  twilioUrl  String
-  serverUrl  String
-  gcsUri     String?
-  mimeType   String
-  isUploaded Boolean  @default(false)
-  createdAt  DateTime @default(now())
-
-  @@index([messageId])
-}
-
-// --- USER PROFILE & ANALYSIS ---
-
-model Memory {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  memory String
-
-  embedding      Unsupported("vector")?
-  embeddingModel String?
-  embeddingDim   Int?
-  embeddingAt    DateTime?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId, createdAt])
-}
-
-model VibeCheck {
-  id                          String      @id @default(cuid())
-  userId                      String
-  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  comment                     String
-  fit_silhouette_score        Float
-  fit_silhouette_explanation  String
-  color_harmony_score         Float
-  color_harmony_explanation   String
-  styling_details_score       Float
-  styling_details_explanation String
-  context_confidence_score    Float
-  context_confidence_explanation String
-  overall_score               Float
-  recommendations             String[]
-  prompt                      String
-  tonality                    String?   // optional
-  createdAt DateTime @default(now())
-
-  @@index([userId, createdAt])
-}
-model ColorAnalysis {
-  id               String   @id @default(cuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  skin_tone        String?
-  eye_color        String?
-  hair_color       String?
-  undertone        String?
-  compliment       String?   // New field to store compliment
-  palette_name     String?
-  palette_description String?
-  colors_suited    Json?
-  colors_to_wear   Json?
-  colors_to_avoid  Json?
-
-  createdAt        DateTime @default(now())
-
-  @@index([userId, createdAt])
-}
-
-
-
-model WardrobeItem {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  name           String
-  description    String
-  category       WardrobeItemCategory
-  type           String
-  subtype        String?
-  mainColor      String
-  secondaryColor String?
-  attributes     Json
-
-  searchDoc String
-  keywords  String[]
-
-  embedding      Unsupported("vector")?
-  embeddingModel String?
-  embeddingDim   Int?
-  embeddingAt    DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, category])
-  @@index([userId, type])
-  @@index([userId, mainColor])
-  @@index([userId, createdAt])
-  @@index([userId, keywords])
-}
-
-// --- PRODUCT CATALOG ---
-
-model Product {
-  id        String @id @default(cuid())
-  handleId  String @unique                    // URL-friendly product identifier
-  barcode   String?                           // Product barcode/SKU
-  
-  name      String                            // article_name
-  brand     String                            // Brand name
-  
-  // Category & Type
-  category    ProductCategory                 // Main category (Clothing, Beauty, etc.)
-  generalTag  String                          // Product type (T-shirt, Hoodie, Sunscreen, etc.)
-  
-  // Parsed from component string (for fast filtering)
-  style       String?                         // Athleisure, Minimal, Streetwear, etc.
-  fit         String?                         // Oversized, Slim, Regular, etc.
-  colors      String[]                        // Black, Navy, Red, etc.
-  patterns    String?                         // Solid, Graphics, Stripes, etc.
-  occasions   String[]                        // Casual, Work, Party, etc.
-  
-  // Full component tags as JSON (for category-specific tags)
-  componentTags Json                          // All parsed tags from component string
-  
-  // URLs
-  imageUrl    String                          // Product image URL
-  productLink String                          // Link to product page on broadwaylive.in
-  
-  // Vector search
-  searchDoc        String      @db.Text       // Combined text for embedding generation
-  embedding        Unsupported("vector")?     // 1536-dim vector from text-embedding-3-small
-  embeddingModel   String?
-  embeddingDim     Int?
-  embeddingAt      DateTime?
-  
-  // Metadata
-  isActive    Boolean  @default(true)         // Whether product is available
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // Indexes for fast filtering
-  @@index([category])
-  @@index([generalTag])
-  @@index([style])
-  @@index([fit])
-  @@index([patterns])
-  @@index([brand])
-  @@index([isActive])
-  @@index([createdAt])
-}
-
-// --- AGENT & LOGGING ---
-
-model GraphRun {
-  id             String       @id
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  status     GraphRunStatus @default(RUNNING)
-  errorTrace String?
-
-  initialState Json
-  finalState   Json?
-
-  startTime  DateTime  @default(now())
-  endTime    DateTime?
-  durationMs Int?
-
-  nodeRuns NodeRun[]
-
-  @@index([conversationId, startTime])
-  @@index([userId, startTime])
-}
-
-model LLMTrace {
-  id        String  @id @default(cuid())
-  nodeRunId String
-  nodeRun   NodeRun @relation(fields: [nodeRunId], references: [id], onDelete: Cascade)
-
-  model            String
-  promptTokens     Int?
-  completionTokens Int?
-  totalTokens      Int?
-  costUsd          Decimal? @db.Decimal(10, 6)
-  errorTrace       String?
-
-  inputMessages Json
-  outputMessage Json?
-  rawRequest    Json
-  rawResponse   Json?
-
-  startTime  DateTime  @default(now())
-  endTime    DateTime?
-  durationMs Int?
-
-  @@index([nodeRunId])
-}
-
-model NodeRun {
-  id         String     @id @default(cuid())
-  graphRunId String
-  graphRun   GraphRun   @relation(fields: [graphRunId], references: [id], onDelete: Cascade)
-  nodeName   String
-  startTime  DateTime
-  endTime    DateTime?
-  durationMs Int?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  llmTraces  LLMTrace[]
-
-  @@index([graphRunId])
-}
-
-// --- FEEDBACK ---
-
-model Feedback {
-  id             String       @id @default(cuid())
-  conversationId String       @unique
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  helpful Boolean?
-  comment String?
-
-  createdAt DateTime @default(now())
-}
-
-// --- BACKGROUND PROCESSING ---
-
-model Task {
-  id     String @id @default(cuid())
-  taskId String @unique
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type    TaskType
-  status  TaskStatus @default(QUEUED)
-  payload Json?
-  runAt   DateTime
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, runAt])
-  @@index([status, runAt])
-}
-
-// --- ADMIN MANAGEMENT ---
-
-model AdminWhitelist {
-  id    String @id @default(cuid())
-  email String @unique
-}
-
-model UserWhitelist {
-  id   String @id @default(cuid())
-  waId String @unique
-}
-
-// --- AUTH FOR ADMINS ---
-
-model Admins {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String?
-  image         String?
-  emailVerified DateTime?
-
-  accounts       AdminAccount[]
-  sessions       AdminSession[]
-  authenticators AdminAuthenticator[]
-}
-
-model AdminAccount {
-  id                String @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-
-  refresh_token String?
-  access_token  String?
-  expires_at    Int?
-  token_type    String?
-  scope         String?
-  id_token      String?
-  session_state String?
-
-  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId], name: "provider_providerAccountId")
-  @@index([userId])
-}
-
-model AdminSession {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-
-  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model AdminVerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token], name: "identifier_token")
-}
-
-model AdminAuthenticator {
-  credentialID         String  @unique
-  userId               String
-  providerAccountId    String
-  credentialPublicKey  String
-  counter              Int
-  credentialDeviceType String
-  credentialBackedUp   Boolean
-  transports           String?
-
-  admin Admins @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([userId, credentialID])
-}
-
-model ServiceLog {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  severity  Severity @default(INFO)
-  service   String
-  message   String
-  context   Json?
-
-  userId              String?
-  appUserId           String?
-  whatsappId          String?
-  profileNameSnapshot String?
-  user                User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  conversationId String?
-  graphRunId     String?
-
-  traceId String?
-
-  @@index([createdAt(sort: Desc)])
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([severity, createdAt(sort: Desc)])
-  @@index([service, createdAt(sort: Desc)])
-  @@index([appUserId])
-  @@index([whatsappId])
-}
-
-/// HTTP API access row: endpoint, latency, classifier intent + inference, optional user and error.
-model ApiRequestLog {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-
-  requestId String?
-  severity  Severity @default(INFO)
-
-  /// e.g. "POST /api/chat"
-  endpoint   String
-  httpStatus Int
-  latencyMs  Int
-
-  userId   String?
-  userName String? @db.Text
-  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  /// Classifier intent slug (e.g. product_search, brand_info).
-  intent    String?
-  /// Plain-language classifier inference (rolling summary / fallback).
-  intentV2  String? @db.Text
-
-  error String? @db.Text
-
-  /// Sanitized POST body snapshot (e.g. /api/chat) for dashboard + export.
-  requestPayload  Json?
-  /// Sanitized JSON response body for the same request.
-  responsePayload Json?
-
-  @@index([createdAt(sort: Desc)])
-  @@index([userId, createdAt(sort: Desc)])
-  @@index([endpoint, createdAt(sort: Desc)])
-  @@index([severity, createdAt(sort: Desc)])
-}
-
-model AdminAuditLog {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  adminId   String?
-  action    String
-  target    String?
-  details   Json?
-
-  @@index([createdAt(sort: Desc)])
 }

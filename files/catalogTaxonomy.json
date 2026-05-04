@@ -1,0 +1,814 @@
+{
+  "_bulkCatalog": {
+    "columnMap": {
+      "barcode": "barcode",
+      "name": "name",
+      "description": "description",
+      "imageUrl": "primary_image_url",
+      "skuId": "id"
+    },
+    "defaults": {
+      "brand": "Unknown",
+      "category": "CLOTHING_FASHION",
+      "generalTag": "Product"
+    }
+  },
+  "Clothing & Fashion": {
+    "Product Type": [
+      "Tops",
+      "Bottoms",
+      "Dresses",
+      "Co-ord Sets",
+      "Jumpsuits",
+      "Playsuits",
+      "Outerwear",
+      "Activewear",
+      "Loungewear",
+      "Sleepwear",
+      "Lingerie",
+      "Swimwear",
+      "Ethnic Wear"
+    ],
+    "Topwear Type": [
+      "T-Shirts",
+      "Shirts",
+      "Blouses",
+      "Crop Tops",
+      "Tanks",
+      "Hoodies",
+      "Sweatshirts",
+      "Kurtas",
+      "Tops",
+      "Tunics",
+      "Kaftan"
+    ],
+    "Bottomwear Type": [
+      "Jeans",
+      "Trousers",
+      "Joggers",
+      "Leggings",
+      "Shorts",
+      "Skirts",
+      "Palazzos",
+      "Skort",
+      "Sweatpants"
+    ],
+    "Outerwear Type": [
+      "Jackets",
+      "Coats",
+      "Blazers",
+      "Shrugs",
+      "Sweaters",
+      "Cardigans"
+    ],
+    "Fit": [
+      "Oversized",
+      "Relaxed",
+      "Regular",
+      "Slim",
+      "Skinny",
+      "Bodycon",
+      "Tailored"
+    ],
+    "Length": [
+      "Cropped",
+      "Hip Length",
+      "Waist Length",
+      "Knee Length",
+      "Mini",
+      "Midi",
+      "Maxi",
+      "Ankle Length"
+    ],
+    "Rise": [
+      "Low Rise",
+      "Mid Rise",
+      "High Rise"
+    ],
+    "Sleeve Type": [
+      "Sleeveless",
+      "Cap Sleeve",
+      "Short Sleeve",
+      "Three-Quarter Sleeve",
+      "Full Sleeve",
+      "Puff Sleeve",
+      "Bell Sleeve",
+      "Raglan"
+    ],
+    "Neckline": [
+      "Round Neck",
+      "V Neck",
+      "Square Neck",
+      "Boat Neck",
+      "Collared",
+      "Halter Neck",
+      "Off-Shoulder"
+    ],
+    "Fabric": [
+      "Cotton",
+      "Linen",
+      "Denim",
+      "Polyester",
+      "Rayon",
+      "Viscose",
+      "Wool",
+      "Silk",
+      "Satin",
+      "Nylon",
+      "Elastane",
+      "Modal",
+      "Sustainable Fabric",
+      "Hemp"
+    ],
+    "Fabric Quality": [
+      "Wrinkle Resistant",
+      "Wrinkle Free",
+      "Easy Care",
+      "Breathable",
+      "Lightweight",
+      "Soft Touch",
+      "Stretchable",
+      "High Stretch",
+      "Moisture Wicking",
+      "Quick Dry",
+      "Thermal",
+      "Insulating",
+      "Anti-Odor",
+      "Fade Resistant",
+      "Shape Retention",
+      "Durable",
+      "Skin Friendly"
+    ],
+    "Color Family": [
+      "Black",
+      "White",
+      "Grey",
+      "Blue",
+      "Green",
+      "Brown",
+      "Beige",
+      "Red",
+      "Yellow",
+      "Orange",
+      "Pink",
+      "Purple",
+      "Multicolor"
+    ],
+    "Color Shade": {
+      "Blue": [
+        "Baby Blue",
+        "Sky Blue",
+        "Powder Blue",
+        "Denim Blue",
+        "Navy",
+        "Midnight Blue"
+      ],
+      "Green": [
+        "Forest Green",
+        "Olive",
+        "Sage Green",
+        "Mint Green",
+        "Bottle Green"
+      ],
+      "Red": [
+        "Burgundy",
+        "Maroon",
+        "Crimson",
+        "Wine"
+      ],
+      "Pink": [
+        "Blush Pink",
+        "Baby Pink",
+        "Hot Pink",
+        "Rose"
+      ],
+      "Purple": [
+        "Lavender",
+        "Lilac",
+        "Plum"
+      ],
+      "Brown": [
+        "Tan",
+        "Camel",
+        "Chocolate",
+        "Coffee"
+      ],
+      "Grey": [
+        "Light Grey",
+        "Charcoal",
+        "Ash Grey"
+      ],
+      "Yellow": [
+        "Mustard",
+        "Lemon",
+        "Pastel Yellow"
+      ],
+      "Orange": [
+        "Peach",
+        "Coral",
+        "Rust"
+      ],
+      "Beige": [
+        "Cream",
+        "Ivory",
+        "Sand"
+      ],
+      "Black": [
+        "Jet Black",
+        "Faded Black"
+      ],
+      "White": [
+        "Off White",
+        "Ivory White"
+      ]
+    },
+    "Pattern": [
+      "Solid",
+      "Stripes",
+      "Checks",
+      "Graphics",
+      "Floral",
+      "Polka Dots",
+      "Abstract"
+    ],
+    "Graphics": [
+      "Minimal Text"
+    ],
+    "Occasion": [
+      "Casual",
+      "Formal",
+      "College",
+      "Gym",
+      "Travel",
+      "Party",
+      "Festive",
+      "Wedding",
+      "Lounge",
+      "Going out / Pret"
+    ],
+    "Style": [
+      "Minimal",
+      "Streetwear",
+      "Classic",
+      "Y2K",
+      "Trendy",
+      "Boho",
+      "Formal",
+      "Vintage",
+      "Athleisure",
+      "Luxury"
+    ],
+    "Season": [
+      "Summer",
+      "Winter",
+      "Monsoon",
+      "All Season",
+      "Spring Summer (SS)",
+      "Autumn Winter (AW)"
+    ],
+    "Care Instructions": [
+      "Machine Wash",
+      "Hand Wash",
+      "Dry Clean Only"
+    ],
+    "Target User": [
+      "Men",
+      "Women",
+      "Unisex",
+      "Kids"
+    ],
+    "Color Palette": [
+      "Bright Spring",
+      "True Spring",
+      "Light Spring",
+      "Light Summer",
+      "True Summer",
+      "Soft Summer",
+      "Soft Autumn",
+      "True Autumn",
+      "Dark Autumn",
+      "Dark Winter",
+      "True Winter",
+      "Bright Winter"
+    ],
+    "Gender": [
+      "MALE",
+      "FEMALE",
+      "OTHER",
+      "N/A"
+    ],
+    "Age Group": [
+      "TEEN",
+      "ADULT",
+      "SENIOR",
+      "N/A"
+    ]
+  },
+  "Beauty & Personal Care": {
+    "Product Type": [
+      "Skincare",
+      "Makeup",
+      "Hair Care",
+      "Fragrance",
+      "Men's Grooming",
+      "Body Care"
+    ],
+    "Sub Category": [
+      "Moisturizers",
+      "Cleansers",
+      "Toners",
+      "Serums",
+      "Essences",
+      "Sunscreens",
+      "Face Masks",
+      "Eye Creams",
+      "Foundations",
+      "Concealers",
+      "Blush",
+      "Bronzer",
+      "Highlighter",
+      "Lipsticks",
+      "Lip Balms",
+      "Mascaras",
+      "Eyeliners",
+      "Shampoo",
+      "Conditioner",
+      "Hair Masks",
+      "Hair Oils",
+      "Hair Serums",
+      "Styling Products",
+      "Perfume",
+      "Body Mist",
+      "Deodorants",
+      "Beard Care",
+      "Shaving"
+    ],
+    "Skin Type": [
+      "Normal",
+      "Dry",
+      "Oily",
+      "Combination",
+      "Sensitive",
+      "Acne-Prone"
+    ],
+    "Hair Type": [
+      "Straight",
+      "Wavy",
+      "Curly",
+      "Coily",
+      "Frizzy",
+      "Color-Treated",
+      "Damaged",
+      "Thinning"
+    ],
+    "Skin Concern": [
+      "Acne",
+      "Dryness",
+      "Dullness",
+      "Pigmentation",
+      "Ageing",
+      "Fine Lines",
+      "Wrinkles",
+      "Dark Spots",
+      "Sensitivity",
+      "Redness",
+      "Uneven Texture",
+      "Open Pores"
+    ],
+    "Hair Concern": [
+      "Hair Fall",
+      "Dandruff",
+      "Dry Hair",
+      "Frizz",
+      "Split Ends",
+      "Scalp Buildup",
+      "Hair Thinning",
+      "Color Damage"
+    ],
+    "Benefits": [
+      "Hydrating",
+      "Moisturizing",
+      "Brightening",
+      "Oil Control",
+      "Soothing",
+      "Anti-Ageing",
+      "Pore Minimizing",
+      "Repairing",
+      "Strengthening",
+      "Volumizing",
+      "Nourishing",
+      "Protecting"
+    ],
+    "Texture / Finish": [
+      "Gel",
+      "Cream",
+      "Lotion",
+      "Foam",
+      "Oil",
+      "Serum",
+      "Balm",
+      "Stick",
+      "Matte",
+      "Dewy",
+      "Satin",
+      "Lightweight"
+    ],
+    "Ingredient Focus": [
+      "Niacinamide",
+      "Hyaluronic Acid",
+      "Retinol",
+      "Salicylic Acid",
+      "Glycolic Acid",
+      "Lactic Acid",
+      "Vitamin C",
+      "Vitamin E",
+      "Ceramides",
+      "Peptides",
+      "AHA",
+      "BHA",
+      "PHA",
+      "Caffeine",
+      "Tea Tree",
+      "Aloe Vera",
+      "Centella Asiatica",
+      "Fragrance-Free"
+    ],
+    "Formulation": [
+      "Dermatologically Tested",
+      "Non-Comedogenic",
+      "pH Balanced",
+      "Alcohol-Free",
+      "Paraben-Free",
+      "Sulphate-Free",
+      "Silicone-Free",
+      "Cruelty-Free",
+      "Vegan",
+      "Clean Beauty"
+    ],
+    "Usage Time": [
+      "AM",
+      "PM",
+      "Day & Night"
+    ],
+    "SPF Level": [
+      "SPF 15",
+      "SPF 30",
+      "SPF 50",
+      "PA+++",
+      "PA++++"
+    ]
+  },
+  "Health & Wellness": {
+    "Vertical": [
+      "Nutrition & Supplements",
+      "Smart Healthtech & Electronics"
+    ],
+    "Nutrition & Supplements": {
+      "Product Category": [
+        "Protein & Amino Acids",
+        "Vitamins & Minerals",
+        "Herbal & Ayurvedic",
+        "Weight Management",
+        "Sleep & Recovery",
+        "Immunity Booster"
+      ],
+      "Protein Type": [
+        "Whey Concentrate",
+        "Whey Isolate",
+        "Whey Hydrolysate",
+        "Casein Protein",
+        "Multi-Plant Blend",
+        "Collagen Peptides",
+        "BCAA",
+        "EAA"
+      ],
+      "Protein Usage": [
+        "Pre-Workout",
+        "Post-Workout",
+        "Anytime / General"
+      ],
+      "Vitamin Type": [
+        "Multivitamin",
+        "Vitamin C",
+        "Vitamin D3",
+        "Vitamin B12",
+        "Vitamin B-Complex",
+        "Calcium",
+        "Magnesium",
+        "Iron",
+        "Zinc",
+        "Omega 3"
+      ],
+      "Health Goal": [
+        "Weight Loss",
+        "Muscle Gain",
+        "Strength",
+        "Endurance",
+        "Recovery",
+        "Immunity Boost",
+        "Gut Health"
+      ],
+      "Dietary Preference": [
+        "Vegan",
+        "Vegetarian",
+        "Keto",
+        "High-Protein",
+        "Low-Carb",
+        "Gluten-Free",
+        "Lactose-Free",
+        "Sugar-Free",
+        "Dairy-Free",
+        "Soy-Free"
+      ],
+      "Sweetener Type": [
+        "No Sweetener",
+        "Stevia",
+        "Monk Fruit",
+        "Erythritol",
+        "Sucralose",
+        "Cane Sugar",
+        "Honey"
+      ],
+      "Format": [
+        "Powders",
+        "Capsules",
+        "Tablets",
+        "Gummies",
+        "Ready-to-Drink",
+        "Shots"
+      ],
+      "Ingredient Focus": [
+        "Ashwagandha",
+        "Shilajit",
+        "Biotin",
+        "Curcumin",
+        "Apple Cider Vinegar",
+        "Spirulina",
+        "Probiotics",
+        "Prebiotics",
+        "Collagen"
+      ]
+    },
+    "Smart Healthtech & Electronics": {
+      "Device Category": [
+        "Smart Rings",
+        "Smart Bands",
+        "Fitness Trackers",
+        "Smart Scales",
+        "Smart mirrors",
+        "Gym Equipments"
+      ],
+      "Core Metrics Tracked": [
+        "Heart Rate",
+        "HRV",
+        "Sleep Stages",
+        "SpO2",
+        "Body Temperature",
+        "Steps",
+        "Calories Burned",
+        "Recovery Score",
+        "Stress Score"
+      ]
+    }
+  },
+  "Jewellery & Accessories": {
+    "Sub Category": [
+      "Necklaces",
+      "Earrings",
+      "Rings",
+      "Bracelets",
+      "Watches"
+    ],
+    "Metal Type": [
+      "Gold",
+      "Silver",
+      "Rose Gold",
+      "Platinum"
+    ],
+    "Aesthetic": [
+      "Minimal",
+      "Bold",
+      "Traditional",
+      "Modern",
+      "Gemstone"
+    ],
+    "Occasion": [
+      "Daily Wear",
+      "Office",
+      "Party",
+      "Wedding"
+    ],
+    "Stone Type": [
+      "Diamond",
+      "CZ",
+      "Gemstones",
+      "Pearls"
+    ]
+  },
+  "Footwear": {
+    "Product Type": [
+      "Sneakers",
+      "Casual Shoes",
+      "Sports Shoes",
+      "Running Shoes",
+      "Training Shoes",
+      "Walking Shoes",
+      "Boots",
+      "Sandals",
+      "Sliders",
+      "Heels",
+      "Flats",
+      "Loafers",
+      "shoes",
+      "low-tops",
+      "high-tops",
+      "flip flops",
+      "Gym Shoes",
+      "Formal shoes",
+      "Slippers"
+    ],
+    "Usage": [
+      "Everyday",
+      "Office",
+      "Gym",
+      "Running",
+      "Training",
+      "Walking",
+      "Outdoor",
+      "Travel",
+      "Party"
+    ],
+    "Footwear Style": [
+      "Athleisure",
+      "Street",
+      "Formal",
+      "Casual",
+      "Outdoor",
+      "Lifestyle",
+      "Performance"
+    ],
+    "Fit Type": [
+      "Narrow",
+      "Regular",
+      "Wide"
+    ],
+    "Upper Material": [
+      "Leather",
+      "Mesh",
+      "Knit",
+      "Synthetic",
+      "Canvas",
+      "Suade",
+      "Denim",
+      "Lace"
+    ],
+    "Sole Material": [
+      "Rubber",
+      "EVA",
+      "PU",
+      "TPR",
+      "Phylon"
+    ],
+    "Cushioning Level": [
+      "Minimal",
+      "Moderate",
+      "High"
+    ],
+    "Heel Type": [
+      "Flat",
+      "Low Heel",
+      "Mid Heel",
+      "High Heel",
+      "Wedge",
+      "Platform"
+    ],
+    "Closure Type": [
+      "Lace-Up",
+      "Slip-On",
+      "Velcro",
+      "Buckle",
+      "Zip"
+    ],
+    "Toe Shape": [
+      "Round Toe",
+      "Pointed Toe",
+      "Square Toe",
+      "Open Toe"
+    ],
+    "Terrain": [
+      "Road",
+      "Trail",
+      "Indoor",
+      "All-Terrain"
+    ],
+    "Color Family": [
+      "Neutrals",
+      "Earthy",
+      "Brights",
+      "Pastels",
+      "Dark Tones",
+      "Monochrome"
+    ],
+    "Target User": [
+      "Men",
+      "Women",
+      "Unisex",
+      "Kids"
+    ]
+  },
+  "Bags & Luggage": {
+    "Product Type": [
+      "Backpacks",
+      "Handbags",
+      "Totes",
+      "Wallets",
+      "Sling Bags",
+      "Duffel Bags",
+      "Laptop Bags",
+      "Travel Bags",
+      "Luggage",
+      "Messenger bags",
+      "Massager Backpacks",
+      "Travel Accessories",
+      "Laptop Sleeves"
+    ],
+    "Usage": [
+      "Everyday",
+      "Office",
+      "College",
+      "Travel",
+      "Gym",
+      "Outdoor",
+      "Business"
+    ],
+    "Style": [
+      "Minimal",
+      "Street",
+      "Formal",
+      "Casual",
+      "Travel",
+      "Luxury"
+    ],
+    "Size": [
+      "XS",
+      "Small",
+      "Medium",
+      "Large",
+      "Cabin",
+      "Check-in",
+      "Trunk"
+    ],
+    "Capacity Range": [
+      "Up to 10L",
+      "10–20L",
+      "20–30L",
+      "30–40L",
+      "40L+"
+    ],
+    "Material": [
+      "Leather",
+      "Faux Leather",
+      "Canvas",
+      "Nylon",
+      "Polyester",
+      "Recycled Material",
+      "Hard Shell",
+      "Soft Shell",
+      "Aluminium",
+      "Polycarbonate"
+    ],
+    "Carry Type": [
+      "Shoulder Carry",
+      "Hand Carry",
+      "Back Carry",
+      "Crossbody",
+      "Trolley"
+    ],
+    "Features": [
+      "Waterproof",
+      "Water-Resistant",
+      "Laptop Compartment",
+      "Tablet Sleeve",
+      "Anti-theft",
+      "RFID Protection",
+      "USB Charging",
+      "Expandable",
+      "Lightweight",
+      "TSA Lock",
+      "360 Spinner Wheels"
+    ],
+    "Closure Type": [
+      "Zip",
+      "Magnetic",
+      "Buckle",
+      "Drawstring",
+      "Flap"
+    ],
+    "Target User": [
+      "Men",
+      "Women",
+      "Unisex",
+      "Kids"
+    ]
+  }
+}

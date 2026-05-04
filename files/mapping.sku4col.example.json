@@ -1,0 +1,14 @@
+{
+  "taxonomyPath": "catalogTaxonomy.json",
+  "columnMap": {
+    "barcode": "barCode",
+    "description": "description",
+    "imageUrl": "imageUrl",
+    "skuId": "skuId"
+  },
+  "defaults": {
+    "brand": "Unknown",
+    "category": "CLOTHING_FASHION",
+    "generalTag": "Product"
+  }
+}
