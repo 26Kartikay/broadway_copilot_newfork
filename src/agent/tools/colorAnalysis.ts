@@ -8,7 +8,7 @@ import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user';
-import { anthropicVisionCompletion } from '../anthropicVision';
+import { openaiVisionCompletion } from '../openaiVision';
 import { setStagedColorAnalysis } from '../memory/redis';
 
 const COLOR_ANALYSIS_VISION_PROMPT = `
@@ -57,7 +57,7 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
     let result: Record<string, unknown>;
 
     if (imageBase64 && mimeType) {
-      const text = await anthropicVisionCompletion({
+      const text = await openaiVisionCompletion({
         prompt: COLOR_ANALYSIS_VISION_PROMPT,
         imageBase64,
         mimeType,
@@ -74,7 +74,7 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
       }
     } else {
       const textPrompt = `Based on these details: Skin tone: ${skinTone}, Hair: ${hairColor}, Eyes: ${eyeColor}. No photo was supplied — set "quality_ok": true. ${COLOR_ANALYSIS_VISION_PROMPT}`;
-      const text = await anthropicVisionCompletion({ prompt: textPrompt, maxTokens: 1024 });
+      const text = await openaiVisionCompletion({ prompt: textPrompt, maxTokens: 1024 });
       result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     }
 

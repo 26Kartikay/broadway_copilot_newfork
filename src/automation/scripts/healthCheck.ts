@@ -13,12 +13,6 @@ async function healthCheck() {
   }
 
   checks.push({
-    name: 'anthropic_api_key',
-    ok: !!process.env.ANTHROPIC_API_KEY,
-    ...(process.env.ANTHROPIC_API_KEY ? {} : { detail: 'ANTHROPIC_API_KEY not set' }),
-  });
-
-  checks.push({
     name: 'openai_api_key',
     ok: !!process.env.OPENAI_API_KEY,
     ...(process.env.OPENAI_API_KEY ? {} : { detail: 'OPENAI_API_KEY not set' }),

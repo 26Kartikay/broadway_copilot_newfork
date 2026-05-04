@@ -1,8 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
+
 import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
-import { anthropicVisionCompletion } from '../anthropicVision';
-import { ANTHROPIC_VISION_MODEL } from '../anthropicModels';
+import { OPENAI_VISION_MODEL } from '../openaiAgentModels';
+import { getOpenAI } from '../openaiClient';
+import { openaiVisionCompletion } from '../openaiVision';
 import { getUserContext } from '../memory/redis';
 
 export interface ThisOrThatInput {
@@ -13,12 +15,6 @@ export interface ThisOrThatInput {
   productIdA?: string;
   productIdB?: string;
   context?: string;
-}
-
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _client;
 }
 
 type SupportedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
@@ -60,26 +56,27 @@ Return JSON only:
 
     if (imageABase64 && imageBBase64 && mimeType) {
       const mt = safeMime(mimeType);
-      const res = await getClient().messages.create({
-        model: ANTHROPIC_VISION_MODEL,
+      const content: ChatCompletionContentPart[] = [
+        {
+          type: 'image_url',
+          image_url: { url: `data:${mt};base64,${imageABase64}` },
+        },
+        {
+          type: 'image_url',
+          image_url: { url: `data:${mt};base64,${imageBBase64}` },
+        },
+        { type: 'text', text: prompt },
+      ];
+      const res = await getOpenAI().chat.completions.create({
+        model: OPENAI_VISION_MODEL,
         max_tokens: 512,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mt, data: imageABase64 } },
-            { type: 'image', source: { type: 'base64', media_type: mt, data: imageBBase64 } },
-            { type: 'text', text: prompt },
-          ],
-        }],
+        messages: [{ role: 'user', content }],
       });
-      const text = res.content
-        .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('');
+      const text = res.choices[0]?.message?.content ?? '';
       return JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text);
     }
 
-    const text = await anthropicVisionCompletion({ prompt, maxTokens: 512 });
+    const text = await openaiVisionCompletion({ prompt, maxTokens: 512 });
     return JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text);
   } catch (err) {
     logger.error({ err, userId }, 'Error in thisOrThat tool');

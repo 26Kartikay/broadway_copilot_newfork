@@ -15,14 +15,11 @@ export type { HttpReplyPayload } from './httpReplies';
 const orchestrator = new ChatOrchestrator();
 
 export function initializeAgent(): void {
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-    logger.error('ANTHROPIC_API_KEY is required for the chat agent (Claude Sonnet + Haiku)');
-    throw new Error('ANTHROPIC_API_KEY is required');
-  }
   if (!process.env.OPENAI_API_KEY?.trim()) {
-    logger.warn('OPENAI_API_KEY not set — catalog vector search will fall back to ILIKE text search');
+    logger.error('OPENAI_API_KEY is required for the chat agent (GPT chat, intent, vision, and embeddings)');
+    throw new Error('OPENAI_API_KEY is required');
   }
-  logger.info('Broadway AI Agent initialized (Claude Sonnet for chat, Claude Haiku for intent, OpenAI for embeddings)');
+  logger.info('Broadway AI Agent initialized (OpenAI chat, intent, vision, and embeddings)');
 }
 
 export async function runAgentForHttp(

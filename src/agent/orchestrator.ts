@@ -1,12 +1,12 @@
 import { createId } from '@paralleldrive/cuid2';
 import { z } from 'zod';
 import { agentExecutor } from '../lib/ai/agents/executor';
-import { ChatAnthropic } from '../lib/ai/anthropic/chat_models';
+import { ChatOpenAI } from '../lib/ai/openai/chat_models';
 import { AssistantMessage, MessageContent, SystemMessage, UserMessage } from '../lib/ai/core/messages';
 import { MessageInput } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
-import { AGENT_MAX_COMPLETION_TOKENS, ANTHROPIC_CHAT_MODEL } from './anthropicModels';
+import { AGENT_MAX_COMPLETION_TOKENS, OPENAI_CHAT_MODEL } from './openaiAgentModels';
 import { classifyIntent, formatIntentV2PlainText } from './intentClassifier';
 import {
   appendToHistory,
@@ -42,7 +42,7 @@ const responseSchema = z.object({
   suggested_follow_up: z.string().nullable().optional().describe('One follow-up question if relevant'),
 });
 
-/** Match current-turn fallback so Redis never stores a bare empty user line (Anthropic rejects empty text blocks). */
+/** Match current-turn fallback so Redis never stores a bare empty user line (empty user text breaks some providers). */
 const EMPTY_USER_HISTORY_PLACEHOLDER = '(empty)';
 const EMPTY_ASSISTANT_HISTORY_PLACEHOLDER = '[no text]';
 
@@ -155,7 +155,7 @@ export class ChatOrchestrator {
 
     const hasImages = parseInt(messageInput.NumMedia || '0', 10) > 0;
 
-    // Step 3: Classify intent (Haiku) — used for prompt shaping, routing context, and intentv2 logs
+    // Step 3: Classify intent (fast OpenAI model) — prompt shaping, routing context, intentv2 logs
     const {
       intent,
       entities,
@@ -209,7 +209,7 @@ export class ChatOrchestrator {
     const systemPrompt = buildSystemPrompt(userContext, intent, entities, isFollowUp) + sessionContext;
 
     const allAvailableTools = getTools(userId, userImages, messageInput, activeSession, genderForSearch);
-    // Intent-based tool filtering paused — give Claude all main chat tools
+    // Intent-based tool filtering paused — expose full main chat tool set
     const CHAT_TOOL_NAMES = [
       'search_catalog',
       'lookup_brands',
@@ -221,7 +221,7 @@ export class ChatOrchestrator {
     ];
     const tools = allAvailableTools.filter((t) => CHAT_TOOL_NAMES.includes(t.name));
 
-    // Step 7: Convert history to messages (last 12) — never replay empty text (Anthropic 400)
+    // Step 7: Convert history to messages (last 12) — never replay empty text
     const conversationHistory = history.slice(-12).map((m) => {
       const raw = extractTextFromStoredContent(m.content);
       const content = textForHistoryReplay(m.role === 'user' ? 'user' : 'assistant', raw);
@@ -234,15 +234,17 @@ export class ChatOrchestrator {
     const currentContent: MessageContent = [...imageParts, { type: 'text', text: textBody }];
     const currentMessage = new UserMessage(currentContent);
 
-    // Step 9: Run Claude Sonnet via agentExecutor
-    const model = new ChatAnthropic({
-      model: ANTHROPIC_CHAT_MODEL,
+    // Step 9: Run main chat model via agentExecutor
+    const model = new ChatOpenAI({
+      model: OPENAI_CHAT_MODEL,
       maxTokens: AGENT_MAX_COMPLETION_TOKENS,
     });
+    model.structuredOutputToolName = 'json';
 
     logger.info(
       {
         userId,
+        model: model.params.model,
         intent,
         intentV2: intentV2Plain,
         isFollowUp,

@@ -1,21 +1,19 @@
-import { ChatAnthropic } from '../anthropic/chat_models';
-import { ANTHROPIC_CHAT_MODEL, ANTHROPIC_VISION_MODEL } from '../../../agent/anthropicModels';
+import { OPENAI_CHAT_MODEL, OPENAI_VISION_MODEL } from '../../../agent/openaiAgentModels';
+import { ChatOpenAI } from '../openai/chat_models';
 
-let chatLLM: ChatAnthropic | null = null;
-let visionLLM: ChatAnthropic | null = null;
+let chatLLM: ChatOpenAI | null = null;
+let visionLLM: ChatOpenAI | null = null;
 
-/** Cached Sonnet instance for main chat + tool calling. */
-export function getChatLLM(): ChatAnthropic {
+export function getChatLLM(): ChatOpenAI {
   if (!chatLLM) {
-    chatLLM = new ChatAnthropic({ model: ANTHROPIC_CHAT_MODEL, maxTokens: 1024 });
+    chatLLM = new ChatOpenAI({ model: OPENAI_CHAT_MODEL, maxTokens: 1024 });
   }
   return chatLLM;
 }
 
-/** Cached Sonnet instance for vision tasks. */
-export function getVisionLLM(): ChatAnthropic {
+export function getVisionLLM(): ChatOpenAI {
   if (!visionLLM) {
-    visionLLM = new ChatAnthropic({ model: ANTHROPIC_VISION_MODEL, maxTokens: 1024 });
+    visionLLM = new ChatOpenAI({ model: OPENAI_VISION_MODEL, maxTokens: 1024 });
   }
   return visionLLM;
 }

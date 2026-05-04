@@ -1,14 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../../utils/logger';
+import { getOpenAI } from '../../agent/openaiClient';
+import { OPENAI_INTENT_MODEL } from '../../agent/openaiAgentModels';
 import type { RecipientContext, UserProfile } from './types';
-
-const INTENT_MODEL = process.env.ANTHROPIC_INTENT_MODEL ?? 'claude-haiku-4-5-20251001';
-
-let _client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _client;
-}
 
 const SYSTEM = `You are a shopping context classifier. Your job is to determine who a user is shopping for based on their query. Look for relationship words, pronouns, and gifting signals.
 - If the query mentions anyone other than the user themselves, set shopping_for to "other".
@@ -65,14 +58,17 @@ export async function detectRecipient(
   try {
     const userContent = `User query: "${query}"\nUser profile gender (for reference only, do NOT use for recipient inference): ${userProfile.gender ?? 'unknown'}`;
 
-    const res = await getClient().messages.create({
-      model: INTENT_MODEL,
+    const res = await getOpenAI().chat.completions.create({
+      model: OPENAI_INTENT_MODEL,
       max_tokens: 256,
-      system: SYSTEM,
-      messages: [{ role: 'user', content: userContent }],
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SYSTEM },
+        { role: 'user', content: userContent },
+      ],
     });
 
-    const text = res.content[0]?.type === 'text' ? res.content[0].text.trim() : '';
+    const text = res.choices[0]?.message?.content?.trim() ?? '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON in Stage 0 response');
 

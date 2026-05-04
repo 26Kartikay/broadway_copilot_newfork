@@ -41,7 +41,6 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
       BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}

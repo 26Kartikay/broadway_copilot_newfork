@@ -3,7 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { logger } from '../../utils/logger';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user';
-import { anthropicVisionCompletion } from '../anthropicVision';
+import { openaiVisionCompletion } from '../openaiVision';
 
 const VIBE_CHECK_PROMPT = `
 Analyze this outfit as a Broadway fashion stylist.
@@ -53,7 +53,7 @@ export async function vibeCheck(input: VibeCheckInput) {
     let result: Record<string, unknown>;
 
     if (imageBase64 && mimeType) {
-      const text = await anthropicVisionCompletion({
+      const text = await openaiVisionCompletion({
         prompt: VIBE_CHECK_PROMPT,
         imageBase64,
         mimeType,
@@ -62,7 +62,7 @@ export async function vibeCheck(input: VibeCheckInput) {
       result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     } else {
       const prompt = `Analyze this outfit description: ${description ?? ''}. ${VIBE_CHECK_PROMPT}`;
-      const text = await anthropicVisionCompletion({ prompt, maxTokens: 1024 });
+      const text = await openaiVisionCompletion({ prompt, maxTokens: 1024 });
       result = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || text) as Record<string, unknown>;
     }
 

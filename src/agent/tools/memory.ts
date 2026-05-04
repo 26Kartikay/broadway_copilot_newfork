@@ -13,14 +13,13 @@ export async function saveUserPreference(input: SavePreferenceInput) {
   try {
     const userExists = await prisma.user.findUnique({ where: { id: userId } });
     if (userExists) {
-      // FIRE AND FORGET: Only save the memory text record since we're Anthropic-only
-      // We don't await this to speed up the agent's turn
+      // FIRE AND FORGET: save preference text without embedding on this path
       prisma.memory
         .create({
           data: {
             userId,
             memory: preference,
-            embeddingModel: 'anthropic-text', // Mark as non-OpenAI
+            embeddingModel: 'memory-text-no-embed',
           },
         })
         .then(() => {

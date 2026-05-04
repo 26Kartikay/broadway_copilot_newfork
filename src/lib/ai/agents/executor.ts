@@ -8,6 +8,44 @@ import { Tool } from '../core/tools';
 const MAX_ITERATIONS = 5;
 
 /**
+ * GPT models sometimes echo JSON Schema (reply as { type, description }) instead of a real string.
+ * Normalize before Zod validation.
+ */
+function coerceSchemaEchoToPayload(parsed: unknown): unknown {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
+  const o = parsed as Record<string, unknown>;
+
+  if (typeof o.reply === 'string') return parsed;
+
+  const replyObj = o.reply;
+  if (replyObj && typeof replyObj === 'object' && !Array.isArray(replyObj)) {
+    const d = (replyObj as { description?: unknown }).description;
+    if (typeof d === 'string' && d.trim().length > 0) {
+      return {
+        ...o,
+        reply: d.trim(),
+      };
+    }
+  }
+
+  const props = o.properties as Record<string, unknown> | undefined;
+  const nested = props?.reply;
+  if (nested && typeof nested === 'object' && nested !== null) {
+    const d = (nested as { description?: unknown }).description;
+    if (typeof d === 'string' && d.trim().length > 0) {
+      const out: Record<string, unknown> = { reply: d.trim() };
+      const ut = o.used_tools ?? (props.used_tools as unknown);
+      if (Array.isArray(ut)) out.used_tools = ut;
+      const sf = o.suggested_follow_up ?? (props.suggested_follow_up as unknown);
+      if (sf !== undefined) out.suggested_follow_up = sf;
+      return out;
+    }
+  }
+
+  return parsed;
+}
+
+/**
  * Orchestrates an agentic loop of model calls and tool executions to fulfill a user request.
  * The executor manages the conversation history, calls tools when requested by the model,
  * and feeds the results back to the model until a final answer is generated.
@@ -67,9 +105,12 @@ export async function agentExecutor<T extends ZodType>(
   const runnerWithTools = runner.bind(options.tools);
   const conversation: BaseMessage[] = [...history];
 
-  // Append a JSON instruction to the system prompt if not already present
-  const schemaJson = JSON.stringify(z.toJSONSchema(options.outputSchema), null, 2);
-  const jsonInstruction = `\n\nWhen you are ready to provide your final response to the user, you MUST return a single JSON object that matches this schema: ${schemaJson}. If you are calling other tools first, you can do so, but your final answer MUST be this JSON object. Do not include any text before or after the JSON. Use the key "reply" for your stylistic stylistic response to the user.`;
+  const toolName = runner.structuredOutputToolName || 'json';
+  const jsonInstruction = `\n\nFINAL RESPONSE (after any tool calls):
+- Prefer invoking the tool "${toolName}" with arguments { "reply": "<your user-visible message as a plain string>", "used_tools": optional string[], "suggested_follow_up": optional string or null }.
+- Or output a single compact JSON object only, e.g. {"reply":"Hello!","used_tools":[]}
+- Do NOT echo JSON Schema, $schema, or nest "reply" as { "type", "description" }. The "reply" value must be the actual message text as one string.
+- Do not wrap your answer in schema metadata.`;
 
   const systemPromptContent = systemPrompt.content
     .filter((p): p is TextPart => p.type === 'text')
@@ -92,6 +133,7 @@ export async function agentExecutor<T extends ZodType>(
     logger.debug(
       {
         nodeName: options.nodeName,
+        model: runner.params.model,
         iteration: i,
         toolCallsCount: toolCalls.length,
         toolNames: toolCalls.map((tc) => tc.name),
@@ -105,11 +147,12 @@ export async function agentExecutor<T extends ZodType>(
     const jsonToolCall = toolCalls.find((tc) => tc.name === runner.structuredOutputToolName);
     if (jsonToolCall) {
       logger.debug(
-        { nodeName: options.nodeName, iteration: i },
+        { nodeName: options.nodeName, model: runner.params.model, iteration: i },
         'agentExecutor: Model called structured output tool.',
       );
       try {
-        const validatedOutput = options.outputSchema.parse(jsonToolCall.arguments);
+        const coercedArgs = coerceSchemaEchoToPayload(jsonToolCall.arguments);
+        const validatedOutput = options.outputSchema.parse(coercedArgs);
         return { output: validatedOutput, toolResults: toolResultsList };
       } catch (error) {
         logger.warn(
@@ -122,7 +165,7 @@ export async function agentExecutor<T extends ZodType>(
 
     if (toolCalls.length === 0) {
       logger.debug(
-        { nodeName: options.nodeName, iteration: i },
+        { nodeName: options.nodeName, model: runner.params.model, iteration: i },
         'agentExecutor: No tool calls, attempting to parse final output from text.',
       );
 
@@ -132,8 +175,17 @@ export async function agentExecutor<T extends ZodType>(
           .map((p) => p.text)
           .join('');
 
+        const rawTrim = content.trim();
+        // Plain prose with no JSON — accept as reply (common when the model skips format)
+        if (rawTrim.length > 0 && !rawTrim.includes('{')) {
+          const plain = options.outputSchema.safeParse({ reply: rawTrim });
+          if (plain.success) {
+            return { output: plain.data, toolResults: toolResultsList };
+          }
+        }
+
         // Extract JSON from markdown code blocks if present, otherwise use content as-is
-        let jsonString = content.trim();
+        let jsonString = rawTrim;
 
         // Strategy 1: Try to extract from markdown code blocks
         const jsonBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -178,9 +230,9 @@ export async function agentExecutor<T extends ZodType>(
         // Remove trailing commas before closing braces/brackets
         jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
 
-        // Try to parse
         const parsedJson = JSON.parse(jsonString);
-        const validatedOutput = options.outputSchema.parse(parsedJson);
+        const coerced = coerceSchemaEchoToPayload(parsedJson);
+        const validatedOutput = options.outputSchema.parse(coerced);
         return { output: validatedOutput, toolResults: toolResultsList };
       } catch (error) {
         // Only warn if this is not the last attempt (if it's the last, we'll throw anyway)
@@ -225,7 +277,7 @@ export async function agentExecutor<T extends ZodType>(
 
         conversation.push(
           new UserMessage(
-            'That was not valid JSON. Please provide your final answer again, ensuring it is a single, valid JSON object that matches the required schema and nothing else. Do not include any explanatory text outside the JSON object.',
+            `That was not valid. Call the "${toolName}" tool with reply as a plain string, or output only {"reply":"...your text..."}. Do not output JSON Schema or nested type/description objects.`,
           ),
         );
         continue;

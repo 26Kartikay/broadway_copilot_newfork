@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../utils/logger';
-import { ANTHROPIC_INTENT_MODEL } from './anthropicModels';
+import { getOpenAI } from './openaiClient';
+import { OPENAI_INTENT_MODEL } from './openaiAgentModels';
 
 export type Intent =
   | 'product_search'
@@ -40,12 +40,6 @@ export interface IntentResult {
   isFollowUp: boolean;
   searchMeta: SearchMeta;
   rollingContextSummary?: string | undefined;
-}
-
-let haiku: Anthropic | null = null;
-function getHaiku(): Anthropic {
-  if (!haiku) haiku = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return haiku;
 }
 
 const INTENT_SYSTEM = `You are an intent classifier for Broadway, a fashion shopping app in India.
@@ -213,20 +207,19 @@ export async function classifyIntent(
     : '';
 
   try {
-    const res = await getHaiku().messages.create({
-      model: ANTHROPIC_INTENT_MODEL,
+    const res = await getOpenAI().chat.completions.create({
+      model: OPENAI_INTENT_MODEL,
       max_tokens: 320,
-      system: INTENT_SYSTEM,
-      messages: [{ role: 'user', content: `${contextSection}\nCurrent user message: "${message}"` }],
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: INTENT_SYSTEM },
+        { role: 'user', content: `${contextSection}\nCurrent user message: "${message}"` },
+      ],
     });
 
-    const raw = res.content
-      .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-
+    const raw = res.choices[0]?.message?.content ?? '';
     const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON in Haiku response');
+    if (!match) throw new Error('No JSON in intent classifier response');
 
     const parsed = JSON.parse(match[0]) as {
       intent?: string;
@@ -268,13 +261,13 @@ export async function classifyIntent(
         : undefined,
     };
   } catch (err) {
-    logger.warn({ err, message: message.slice(0, 80) }, 'Haiku intent classification failed, using regex fallback');
+    logger.warn({ err, message: message.slice(0, 80) }, 'Intent classification failed, using regex fallback');
     return regexClassify(message, hasImages, rollingContext);
   }
 }
 
 /**
- * Plain-text for `intentv2`: only what was inferred about the user's ask (Haiku summary when present).
+ * Plain-text for `intentv2`: only what was inferred about the user's ask (LLM summary when present).
  */
 export function formatIntentV2PlainText(result: IntentResult): string {
   const summary = result.rollingContextSummary?.trim();
