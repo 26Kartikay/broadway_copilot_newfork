@@ -45,10 +45,12 @@ COPY --from=build /app/files ./files
 COPY --from=build /app/templates ./templates
 COPY --from=build /app/node_modules/.prisma/client ./node_modules/.prisma/client
 COPY --from=build /app/package*.json ./
-# From build stage so CI contexts that omit loose files still get the script
+# From build stage — only whitelisted loose scripts (not the whole repo scripts/ tree).
 COPY --from=build /app/scripts/clear-uploads.mjs ./scripts/clear-uploads.mjs
 COPY --from=build /app/scripts/preflight-db-push.sql ./scripts/preflight-db-push.sql
-# Scripts are compiled to dist/scripts/ during build
+COPY --from=build /app/scripts/bulk-tag-embed-10k.sh ./scripts/bulk-tag-embed-10k.sh
+RUN chmod +x ./scripts/bulk-tag-embed-10k.sh
+# TS automation entrypoints live under dist/automation/scripts/ (see npm run build).
 
 EXPOSE 8080
 
