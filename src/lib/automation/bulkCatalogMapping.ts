@@ -110,13 +110,29 @@ export function barcodeColumnSpecified(spec: CsvHeaderSpec | undefined): boolean
   return spec.some((s) => typeof s === 'string' && s.trim().length > 0);
 }
 
+function normalizeHeaderKey(key: string): string {
+  return key.replace(/^\uFEFF/, '').trim().toLowerCase();
+}
+
+/** First matching column (exact header); then case-insensitive match on row keys (Excel exports vary casing). */
 export function cell(row: Record<string, unknown>, header: CsvHeaderSpec | undefined): string {
   if (header == null) return '';
   const keys = Array.isArray(header) ? header : [header];
   for (const raw of keys) {
-    const k = typeof raw === 'string' ? raw.trim() : '';
+    const k = typeof raw === 'string' ? raw.replace(/^\uFEFF/, '').trim() : '';
     if (!k) continue;
     const v = row[k];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  const want = new Set(
+    keys
+      .filter((raw): raw is string => typeof raw === 'string' && raw.trim().length > 0)
+      .map((raw) => normalizeHeaderKey(raw)),
+  );
+  if (want.size === 0) return '';
+  for (const rk of Object.keys(row)) {
+    if (!want.has(normalizeHeaderKey(rk))) continue;
+    const v = row[rk];
     if (v != null && String(v).trim() !== '') return String(v).trim();
   }
   return '';
@@ -144,12 +160,26 @@ export function inferBrandFromNameAndDescription(name: string, description: stri
   if (m?.[1]) return tidyCapturedBrand(m[1]);
 
   const d = description || '';
+
+  const fromVerb =
+    /\bfrom\s+([A-Za-z0-9][A-Za-z0-9&.'\-\s]{0,52}?)\s+(?:delivers|brings|combines|features|offers|creates|provides|give|present|shows)\b/i;
+  m = fromVerb.exec(d);
+  if (m?.[1]) {
+    const cand = tidyCapturedBrand(m[1]);
+    if (cand.length >= 2 && !/^(the|this|these|those|your|our|a|an)\b/i.test(cand)) return cand;
+  }
+
   m = /\bfrom\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/.exec(d);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
-  m = /\bfrom\s+([A-Z]{2,30})\b/.exec(d);
+  m = /\bfrom\s+([A-Z]{2,35})\b/.exec(d);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
-  m = /\bfrom\s+([A-Z][a-z]{1,29})\b/.exec(d);
+  m = /\bfrom\s+([A-Z][a-z]{1,34})\b/.exec(d);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
+  m = /\bfrom\s+([a-z][a-z]+)\s+(?:delivers|brings|offers)\b/i.exec(d);
+  if (m?.[1]) {
+    const w = tidyCapturedBrand(m[1]);
+    if (w.length >= 2) return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  }
   m = /\bby\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,4})\b/.exec(d);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
 

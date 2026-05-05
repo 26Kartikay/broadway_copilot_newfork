@@ -84,7 +84,7 @@ function parseCsvFile(resolved: string): Record<string, unknown>[] {
     header: true,
     skipEmptyLines: true,
     delimiter,
-    transformHeader: (h) => h.trim(),
+    transformHeader: (h) => h.replace(/^\uFEFF/, '').replace(/\s+$/, '').trim(),
   });
 
   const fatalErrors = parsed.errors.filter((e) => e.code !== 'UndetectableDelimiter');
