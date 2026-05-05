@@ -25,8 +25,23 @@ if [[ "$LLM" == "1" || "$LLM" == "true" ]]; then
   EXTRA+=(--llm-tags)
 fi
 
+# Prod/Docker images only ship dist/ (no src/). Dev uses ts-node + src/.
+BULK_JS="$ROOT/dist/automation/scripts/bulkCatalogSync.js"
+BULK_TS="$ROOT/src/automation/scripts/bulkCatalogSync.ts"
+set +u
+if [[ -f "$BULK_TS" ]]; then
+  RUNNER=(npx ts-node --transpile-only "$BULK_TS")
+else
+  if [[ ! -f "$BULK_JS" ]]; then
+    echo "bulkCatalogSync not found: expected $BULK_TS (dev) or $BULK_JS (run: npm run build)." >&2
+    exit 1
+  fi
+  RUNNER=(node "$BULK_JS")
+fi
+set -u
+
 # Omitting --seed/--tag/--embed with --csv enables all three steps (see bulkCatalogSync.ts).
-exec npx ts-node --transpile-only src/automation/scripts/bulkCatalogSync.ts \
+exec "${RUNNER[@]}" \
   --csv "$CSV" \
   --mapping "$MAPPING" \
   --max "$MAX" \

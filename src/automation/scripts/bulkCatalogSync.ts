@@ -145,6 +145,8 @@ async function main(): Promise<number> {
       console.error('mapping.json columnMap.barcode is required (CSV header name or list, e.g. "barcode")');
       return 1;
     }
+    console.log('[BulkCatalogSync] Mapping resolved:', path.resolve(args.mappingPath));
+    console.log('[BulkCatalogSync] columnMap.brand:', JSON.stringify(mapping.columnMap.brand ?? null));
   }
 
   const mappingResolved = path.resolve(args.mappingPath);

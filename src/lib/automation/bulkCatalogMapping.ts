@@ -53,6 +53,11 @@ export interface BulkCatalogMappingFile {
   columnMap: BulkCatalogColumnMap;
   defaults?: BulkCatalogDefaults;
   /**
+   * When true, `Product.brand` comes only from the CSV column(s) in `columnMap.brand` (plus `defaults.brand`);
+   * description/title heuristics are not used. Use for feeds like `brand_name` only.
+   */
+  csvBrandOnly?: boolean;
+  /**
    * Path to catalog taxonomy JSON (allowed values tree). Resolved relative to this mapping file’s directory.
    * When set, CSV tag cells are normalized to canonical taxonomy spelling and vertical names map to legacyCategory.
    */
@@ -90,6 +95,9 @@ export function loadBulkCatalogMapping(filePath: string): BulkCatalogMappingFile
       columnMap: bc.columnMap as BulkCatalogColumnMap,
       taxonomyInline: !taxonomyPath,
     };
+    if (bc.csvBrandOnly === true) {
+      out.csvBrandOnly = true;
+    }
     if (bc.defaults && typeof bc.defaults === 'object') {
       out.defaults = bc.defaults as BulkCatalogDefaults;
     }
@@ -114,28 +122,69 @@ function normalizeHeaderKey(key: string): string {
   return key.replace(/^\uFEFF/, '').trim().toLowerCase();
 }
 
-/** First matching column (exact header); then case-insensitive match on row keys (Excel exports vary casing). */
+/** Collapse spaces/hyphens/underscores — matches `SKU Id` ↔ `SKU_ID`. */
+function normalizeHeaderFlex(key: string): string {
+  return normalizeHeaderKey(key).replace(/[\s\-_]+/g, '');
+}
+
+/** First matching column (exact header); then case-insensitive; then flexible (SKU_Id vs SKU ID). */
 export function cell(row: Record<string, unknown>, header: CsvHeaderSpec | undefined): string {
   if (header == null) return '';
   const keys = Array.isArray(header) ? header : [header];
-  for (const raw of keys) {
-    const k = typeof raw === 'string' ? raw.replace(/^\uFEFF/, '').trim() : '';
-    if (!k) continue;
+  const stringKeys = keys.filter((raw): raw is string => typeof raw === 'string' && raw.trim().length > 0);
+  for (const raw of stringKeys) {
+    const k = raw.replace(/^\uFEFF/, '').trim();
     const v = row[k];
     if (v != null && String(v).trim() !== '') return String(v).trim();
   }
-  const want = new Set(
-    keys
-      .filter((raw): raw is string => typeof raw === 'string' && raw.trim().length > 0)
-      .map((raw) => normalizeHeaderKey(raw)),
-  );
+  const want = new Set(stringKeys.map((raw) => normalizeHeaderKey(raw)));
   if (want.size === 0) return '';
   for (const rk of Object.keys(row)) {
     if (!want.has(normalizeHeaderKey(rk))) continue;
     const v = row[rk];
     if (v != null && String(v).trim() !== '') return String(v).trim();
   }
+  const flexWant = new Set(stringKeys.map((raw) => normalizeHeaderFlex(raw)));
+  for (const rk of Object.keys(row)) {
+    if (!flexWant.has(normalizeHeaderFlex(rk))) continue;
+    const v = row[rk];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
   return '';
+}
+
+/**
+ * Prefer human-readable copy after embedded HTML/CSS blobs (many PDP exports prepend `.desc-* {`).
+ * Used for deriving display name when title/sku columns are blank.
+ */
+export function sanitizeDescriptionForProductText(raw: string): string {
+  let s = (raw ?? '').replace(/\r\n/g, '\n').trim();
+  if (!s) return '';
+  s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '\n');
+
+  const kickIdx = s.search(
+    /\n(?:This\b|These\b|Introducing\b|Overview\b|Precision-crafted\b|Key\s+Highlights\b|Ingredients\b)/im,
+  );
+  if (kickIdx >= 0) {
+    const cut = s.slice(kickIdx + 1).trim();
+    if (cut.length >= 12) return cut;
+  }
+
+  const lines = s.split('\n');
+  const proseStartIdx = lines.findIndex((line) => {
+    const t = line.trim();
+    if (t.length < 16) return false;
+    if (t.startsWith('.')) return false;
+    if (/^[{};\s:*\-]+$/.test(t)) return false;
+    if (/^[.#][\w-]+\s*[,\s]*\{/.test(t)) return false;
+    return true;
+  });
+  if (proseStartIdx >= 0) {
+    const cut = lines.slice(proseStartIdx).join('\n').trim();
+    if (cut.length >= 24) return cut;
+  }
+
+  return s.trim();
 }
 
 /** Trim stray punctuation from heuristic captures */
@@ -152,17 +201,23 @@ function tidyCapturedBrand(raw: string): string {
  * ("Rareism Women's ...", "... from RAREISM ...", "... by Vendor ...").
  */
 export function inferBrandFromNameAndDescription(name: string, description: string): string {
-  const n = (name || '').trim();
+  const n = sanitizeDescriptionForProductText((name || '').trim()) || (name || '').trim();
 
   let m = /^\s*([A-Za-z0-9][A-Za-z0-9&.'\-\s]{1,54}?)\s+women'?s\b/i.exec(n);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
   m = /^\s*([A-Za-z0-9][A-Za-z0-9&.'\-\s]{1,54}?)\s+men'?s\b/i.exec(n);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
 
-  const d = description || '';
+  const d = sanitizeDescriptionForProductText(description || '') || (description || '');
+
+  m = /\bIntroducing\s+([A-Za-z0-9]{2,32})\b/i.exec(d);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+
+  m = /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+ISO\b/im.exec(d.trim());
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
 
   const fromVerb =
-    /\bfrom\s+([A-Za-z0-9][A-Za-z0-9&.'\-\s]{0,52}?)\s+(?:delivers|brings|combines|features|offers|creates|provides|give|present|shows)\b/i;
+    /\bfrom\s+([A-Za-z0-9][A-Za-z0-9&.'\-\s]{0,52}?)\s+(?:delivers|brings|combines|features|offers|creates|provides|give|present|shows|carries|comes|crafted|stands|embodies)\b/i;
   m = fromVerb.exec(d);
   if (m?.[1]) {
     const cand = tidyCapturedBrand(m[1]);
@@ -175,7 +230,8 @@ export function inferBrandFromNameAndDescription(name: string, description: stri
   if (m?.[1]) return tidyCapturedBrand(m[1]);
   m = /\bfrom\s+([A-Z][a-z]{1,34})\b/.exec(d);
   if (m?.[1]) return tidyCapturedBrand(m[1]);
-  m = /\bfrom\s+([a-z][a-z]+)\s+(?:delivers|brings|offers)\b/i.exec(d);
+  m =
+    /\bfrom\s+([a-z][a-z]+)\s+(?:delivers|brings|offers|carries|shows)\b/i.exec(d);
   if (m?.[1]) {
     const w = tidyCapturedBrand(m[1]);
     if (w.length >= 2) return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
@@ -287,8 +343,10 @@ export function rowToSeedProductInput(
   if (!barcode) return null;
 
   const skuId = cell(row, m.skuId);
-  const description = cell(row, m.description);
-  const nameFromCsv = cell(row, m.name);
+  const descriptionRaw = cell(row, m.description);
+  const description = sanitizeDescriptionForProductText(descriptionRaw);
+  const nameFromCsvRaw = cell(row, m.name);
+  const nameFromCsv = sanitizeDescriptionForProductText(nameFromCsvRaw) || nameFromCsvRaw.trim();
   const name =
     nameFromCsv ||
     (skuId ? `SKU ${skuId}` : '') ||
@@ -300,7 +358,9 @@ export function rowToSeedProductInput(
   let brand =
     csvBrand && !/^unknown$/i.test(csvBrand)
       ? csvBrand
-      : inferBrandFromNameAndDescription(name, description);
+      : mapping.csvBrandOnly
+        ? ''
+        : inferBrandFromNameAndDescription(name, description || descriptionRaw);
   if (!brand?.trim()) {
     brand = defaultBrand && !/^unknown$/i.test(defaultBrand) ? defaultBrand : 'Unknown';
   }
@@ -331,7 +391,7 @@ export function rowToSeedProductInput(
           shortDescription: tags.shortDescription,
         }
       : {}),
-    csvDescription: description || undefined,
+    csvDescription: descriptionRaw || undefined,
     ...(skuId ? { csvSkuId: skuId } : {}),
   };
 
@@ -342,7 +402,8 @@ export function rowToSeedProductInput(
   if (applyTags && tags.legacyCategory) {
     parts.push(`Category: ${tags.legacyCategory}`);
   }
-  if (description) parts.push(description.slice(0, 500));
+  const searchDesc = description || descriptionRaw;
+  if (searchDesc) parts.push(searchDesc.slice(0, 500));
   const searchDoc = parts.join('. ') || name;
 
   return {
