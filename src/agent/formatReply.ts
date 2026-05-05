@@ -9,6 +9,7 @@ import {
 import { isGuestUser } from '../utils/user';
 import type { HttpReplyPayload } from './httpReplies';
 import { AgentResult } from './orchestrator';
+import { sanitizeAssistantProductReply } from './sanitizeAssistantProductReply';
 
 
 export function buildColorAnalysisCardPayload(
@@ -123,26 +124,29 @@ export function formatReplies(
   const skipColorSavePrompt = Boolean(options?.skipColorSavePrompt);
   const requestProfileName = options?.requestProfileName;
 
-  if (result.text?.trim()) {
+  const hasProducts = Boolean(result.products && result.products.length > 0);
+  const rawText = result.text?.trim() ?? '';
+  const textForUser = hasProducts ? sanitizeAssistantProductReply(rawText) : rawText;
+  if (textForUser) {
     replies.push({
       reply_type: 'text',
-      reply_text: result.text.trim(),
+      reply_text: textForUser,
     });
   }
 
   if (result.products && result.products.length > 0) {
     replies.push({
       reply_type: 'product_card',
-      products: result.products.map((p: any) => ({
-        name: p.name,
-        brand: p.brand ?? '',
-        imageUrl: p.imageUrl ?? p.image_url,
-        description: p.generalTag ?? p.description,
-        colors: p.colors,
-        reason: p.reason,
-        productLink: p.productLink ?? p.product_link,
-      })),
-      reply_text: 'Here are some pieces I found for you:',
+      products: result.products.map((p: any) => {
+        const link = p.productLink ?? p.product_link;
+        return {
+          name: '',
+          brand: p.brand ?? '',
+          imageUrl: p.imageUrl ?? p.image_url,
+          ...(typeof link === 'string' && link.trim() !== '' ? { productLink: link } : {}),
+        };
+      }),
+      reply_text: '',
     });
   }
 

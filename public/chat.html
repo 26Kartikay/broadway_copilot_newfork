@@ -1188,7 +1188,9 @@
           // Create image element programmatically to ensure proper URL handling
           const img = document.createElement('img');
           img.className = 'product-card-image';
-          img.alt = product.name || 'Product';
+          img.alt = (product.name && product.name.trim())
+            ? product.name
+            : (product.brand || 'Product');
           
           // Determine the image URL - use placeholder if invalid
           const placeholderUrl = 'https://via.placeholder.com/160x140?text=No+Image';
@@ -1205,9 +1207,12 @@
           // Create card content
           const content = document.createElement('div');
           content.className = 'product-card-content';
+          const nm = product.name && String(product.name).trim()
+            ? String(product.name).replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            : '';
           content.innerHTML = `
             <div class="product-card-brand">${(product.brand || 'Broadway').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-            <div class="product-card-name">${(product.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+            ${nm ? `<div class="product-card-name">${nm}</div>` : ''}
             ${product.description ? `<div class="product-card-description">${product.description.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${product.colors && product.colors.length > 0 ? `<div class="product-card-colors">Colors: ${product.colors.join(', ').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${product.reason ? `<div class="product-card-reason">${product.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}

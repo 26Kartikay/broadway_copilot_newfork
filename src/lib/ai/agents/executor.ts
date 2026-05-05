@@ -110,7 +110,8 @@ export async function agentExecutor<T extends ZodType>(
 - Prefer invoking the tool "${toolName}" with arguments { "reply": "<your user-visible message as a plain string>", "used_tools": optional string[], "suggested_follow_up": optional string or null }.
 - Or output a single compact JSON object only, e.g. {"reply":"Hello!","used_tools":[]}
 - Do NOT echo JSON Schema, $schema, or nest "reply" as { "type", "description" }. The "reply" value must be the actual message text as one string.
-- Do not wrap your answer in schema metadata.`;
+- Do not wrap your answer in schema metadata.
+- If you used search_catalog: "reply" must be plain sentences only — no markdown images (![), no pasted product URLs, no SKU or barcode lines. Describe garment types (hoodie, tee, etc.) and vibe; visuals are handled by the UI.`;
 
   const systemPromptContent = systemPrompt.content
     .filter((p): p is TextPart => p.type === 'text')

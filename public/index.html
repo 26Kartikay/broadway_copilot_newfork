@@ -107,8 +107,8 @@
               const buttons = (r.buttons || []).map(b => `<button disabled>${b.text}</button>`).join(' ');
               addBubble('assistant', `${r.reply_text || ''}<div class="qr">${buttons}</div>`);
             } else if (r.reply_type === 'product_card') {
-              const productList = (r.products || []).map(p => `${p.name} (${p.brand})`).join(', ');
-              addBubble('assistant', `${r.reply_text || ''}<br/>Products: ${productList}`);
+              const productList = (r.products || []).map(p => p.brand || p.name || '').filter(Boolean).join(', ');
+              addBubble('assistant', `${r.reply_text ? r.reply_text + '<br/>' : ''}${productList ? `Brands: ${productList}` : ''}`);
             } else if (r.reply_type === 'color_analysis_card') {
               const userImg = r.user_image_url ? `<img class="img" src="${r.user_image_url}" alt="User photo"/><br/>` : '';
               addBubble('assistant', `${userImg}Color Analysis: ${r.palette_name}${r.description ? '<br/>' + r.description : ''}`);
