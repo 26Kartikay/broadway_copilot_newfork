@@ -7,6 +7,8 @@ import { logger } from '../../utils/logger';
 export interface SearchCatalogInput {
   query?: string;
   category?: string;
+  /** Exact brand name — set ONLY when user explicitly named a specific brand. Omit for category/style queries. */
+  brand?: string;
   colors?: string[];
   occasions?: string[];
   style?: string;
@@ -274,6 +276,10 @@ async function searchCatalogVector(
     clauses.push(`"category"::text = $${p++}`);
     params.push(fi.category);
   }
+  if (fi.brand) {
+    clauses.push(`LOWER("brand") = LOWER($${p++})`);
+    params.push(fi.brand);
+  }
   if (fi.style) {
     clauses.push(`"style" = $${p++}`);
     params.push(fi.style);
@@ -404,6 +410,10 @@ async function searchCatalogIlike(
     baseConditions.push(`"category"::text = $${paramIndex++}`);
     params.push(category);
   }
+  if (!relaxed && input.brand) {
+    baseConditions.push(`LOWER("brand") = LOWER($${paramIndex++})`);
+    params.push(input.brand);
+  }
   if (style) {
     baseConditions.push(`"style" = $${paramIndex++}`);
     params.push(style);
@@ -499,8 +509,9 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
         (input.occasions && input.occasions.length > 0),
       );
       if (products.length === 0 && hadStrictFilters) {
-        // Same embedding text as `input`, but no SQL filters (avoids 0-row vector + model retry)
-        const relaxed = await searchCatalogVector(input, limit, {});
+        // Relax category/style/color/occasion filters but keep brand filter if set
+        const relaxedFilter: SearchCatalogInput = input.brand ? { brand: input.brand } : {};
+        const relaxed = await searchCatalogVector(input, limit, relaxedFilter);
         if (relaxed.length > 0) {
           products = relaxed;
           resolvedViaEmbedding = true;

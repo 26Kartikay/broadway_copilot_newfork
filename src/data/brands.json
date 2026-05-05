@@ -1,162 +1,398 @@
 [
   {
-    "name": "Mokobara",
-    "description": "Design-forward travel gear built for modern journeys, combining durability, clean aesthetics, and smart functionality.",
-    "classification": ["top_seller", "travel", "modern"]
+    "name": "Thank You Farmer",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Award-winning Korean skincare brand rooted in the philosophy of an honest, hardworking farmer. Nature-powered, clinically effective formulas — no shortcuts, no compromises. Pure ingredients, real results. Gentle on skin, grateful to nature."
   },
   {
-    "name": "COMET",
-    "description": "Bold, homegrown sneaker brand known for statement designs, comfort tech, and expressive streetwear energy.",
-    "classification": ["top_seller", "footwear", "streetwear"]
-  },
-  {
-    "name": "Kingdom of White",
-    "description": "Minimalist fashion brand specializing in timeless white apparel crafted from premium natural fabrics.",
-    "classification": ["top_seller", "minimal", "apparel"]
-  },
-  {
-    "name": "sorta",
-    "description": "Contemporary lifestyle label blending oversized silhouettes, gender-fluid design, and global streetwear aesthetics.",
-    "classification": ["high_performer", "streetwear", "lifestyle"]
-  },
-  {
-    "name": "RWDY",
-    "description": "Culture-driven streetwear brand merging avant-garde design with Indian craftsmanship and bold identity.",
-    "classification": ["high_performer", "streetwear", "premium"]
-  },
-  {
-    "name": "Beauty of Joseon",
-    "description": "K-beauty brand inspired by traditional Korean skincare rituals, delivering gentle, effective formulations.",
-    "classification": ["high_performer", "skincare", "k_beauty"]
-  },
-  {
-    "name": "Chapter 2",
-    "description": "Modern footwear brand focused on comfort, versatility, and everyday wear with a minimalist design approach.",
-    "classification": ["mid_tier", "footwear", "modern"]
-  },
-  {
-    "name": "Dymatize",
-    "description": "Performance-driven sports nutrition brand known for high-quality protein and scientifically backed formulas.",
-    "classification": ["mid_tier", "fitness", "nutrition"]
+    "name": "KAPIVA",
+    "category": "Health & Wellness",
+    "subCategory": "Ayurvedic and Herbal Remedies",
+    "description": "India's leading Ayurvedic nutrition brand blending ancient wisdom with modern science. From Himalayan shilajit and aloe vera juices to herbal supplements & protein — pure, potent, and 100% natural. Real Ayurveda. Real Results."
   },
   {
     "name": "PurplFrog",
-    "description": "Art-led streetwear brand from Kolkata blending bold graphics with expressive, identity-driven fashion.",
-    "classification": ["mid_tier", "streetwear", "artistic"]
+    "category": "Streetwear",
+    "subCategory": "streetwear",
+    "description": "India's premium streetwear brand from Kolkata — where art meets apparel. Bold, art-inspired tees, jeans, caps & more for those who wear their identity on their sleeve. Enter the world of art."
   },
   {
-    "name": "NUUK",
-    "description": "Design-first home appliance brand creating functional, stylish products for modern Indian homes.",
-    "classification": ["mid_tier", "home", "modern"]
+    "name": "Rare Rabbit",
+    "category": "Clothing",
+    "subCategory": "Mens",
+    "description": "India's leading premium menswear brand by The House of Rare. European-inspired minimalism tailored to Indian tastes — shirts, tees, trousers & sneakers. Most Admired Fashion Brand of the Year, 4 years running. Welcome to the Burrow."
   },
   {
-    "name": "Celimax",
-    "description": "Korean skincare brand focused on transparency, clinical ingredients, and personalized routines.",
-    "classification": ["mid_tier", "skincare", "k_beauty"]
+    "name": "The Clothing Factory",
+    "category": "Clothing",
+    "subCategory": "Women - Casuals",
+    "description": "India's homegrown fashion brand making bold, statement clothing accessible for everyone. From co-ords to party wear — quality fits at honest prices, crafted for those who believe great style shouldn't cost a fortune. Made to make a statement."
   },
   {
-    "name": "COSMIX",
-    "description": "Holistic wellness brand offering plant-based nutrition blends rooted in Ayurveda and herbal science.",
-    "classification": ["mid_tier", "wellness", "nutrition"]
+    "name": "BIODERMA",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "French dermatological skincare brand founded in 1977. Pioneers of micellar water with the iconic Sensibio H2O — trusted by dermatologists and makeup artists worldwide. Biology-first formulas that respect and restore the skin's natural ecosystem."
   },
   {
-    "name": "Biodance",
-    "description": "Science-led Korean skincare brand combining advanced actives with gentle, skin-friendly formulations.",
-    "classification": ["mid_tier", "skincare", "k_beauty"]
-  },
-  {
-    "name": "ISOPURE",
-    "description": "Clean sports nutrition brand known for ultra-pure whey protein with zero-carb, high-performance formulas.",
-    "classification": ["mid_tier", "fitness", "nutrition"]
-  },
-  {
-    "name": "Gully Labs",
-    "description": "India-inspired sneaker brand blending cultural storytelling with contemporary streetwear design.",
-    "classification": ["mid_tier", "footwear", "streetwear"]
-  },
-  {
-    "name": "Winston",
-    "description": "Modern grooming brand offering simple, effective skincare solutions tailored for men.",
-    "classification": ["mid_tier", "grooming", "men"]
-  },
-  {
-    "name": "Theater",
-    "description": "Design-led fashion brand known for expressive, premium accessories and statement pieces.",
-    "classification": ["mid_tier", "fashion", "premium"]
-  },
-  {
-    "name": "Cosrx",
-    "description": "Globally loved K-beauty brand delivering effective, minimal skincare backed by science and simplicity.",
-    "classification": ["mid_tier", "skincare", "k_beauty"]
-  },
-  {
-    "name": "52 Sundaze",
-    "description": "Easygoing lifestyle brand focused on everyday comfort, relaxed fits, and effortless style.",
-    "classification": ["mid_tier", "lifestyle", "casual"]
-  },
-  {
-    "name": "Cava",
-    "description": "Youth-driven fashion brand blending streetwear aesthetics with bold, everyday essentials.",
-    "classification": ["mid_tier", "fashion", "streetwear"]
-  },
-  {
-    "name": "Contemponari",
-    "description": "Modern womenswear brand offering elegant, versatile pieces designed for everyday sophistication.",
-    "classification": ["mid_tier", "womenswear", "modern"]
-  },
-  {
-    "name": "Moxie Beauty",
-    "description": "Clean haircare brand designed for Indian hair, focusing on performance, simplicity, and real results.",
-    "classification": ["mid_tier", "beauty", "haircare"]
-  },
-  {
-    "name": "Protouch",
-    "description": "Tech-enabled personal care brand delivering professional-grade grooming solutions at home.",
-    "classification": ["emerging", "grooming", "tech"]
-  },
-  {
-    "name": "Hamptons",
-    "description": "Premium grooming brand offering refined, minimal products tailored for modern lifestyles.",
-    "classification": ["emerging", "grooming", "premium"]
-  },
-  {
-    "name": "Minimalist",
-    "description": "Ingredient-focused skincare brand delivering transparent, science-backed formulations.",
-    "classification": ["emerging", "skincare", "science"]
-  },
-  {
-    "name": "SUPERYOU",
-    "description": "Next-gen nutrition brand creating clean, accessible protein products for everyday wellness.",
-    "classification": ["emerging", "fitness", "nutrition"]
-  },
-  {
-    "name": "Reginald Men",
-    "description": "Premium men’s grooming brand focused on effortless skincare and refined daily essentials.",
-    "classification": ["emerging", "grooming", "men"]
-  },
-  {
-    "name": "Dr. Althea",
-    "description": "Korean skincare brand blending dermatological science with gentle, skin-soothing formulations.",
-    "classification": ["emerging", "skincare", "k_beauty"]
-  },
-  {
-    "name": "Axis-Y",
-    "description": "Climate-inspired K-beauty brand delivering targeted skincare solutions for changing environments.",
-    "classification": ["emerging", "skincare", "k_beauty"]
+    "name": "Bear House",
+    "category": "Clothing",
+    "subCategory": "Mens",
+    "description": "India's premium menswear brand built for young gentlemen who Go Everywhere & Do Everything. European-inspired minimalism meets Indian sensibility — crisp shirts, smart casuals & versatile essentials from 9 to 5 and beyond. As seen on Shark Tank Season 4."
   },
   {
     "name": "Torriden",
-    "description": "Hydration-focused Korean skincare brand known for clean, minimalist, and effective formulas.",
-    "classification": ["emerging", "skincare", "k_beauty"]
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Korea's No.1 clean beauty skincare brand, founded on the mantra \"Your Skin is Our Planet.\" Known for the viral Dive-In 5D Hyaluronic Acid line and Balanceful Cica range. Vegan, cruelty-free, and built for deep hydration and barrier repair."
   },
   {
-    "name": "Kaine",
-    "description": "Vegan Korean skincare brand focused on gentle, eco-conscious formulations for sensitive skin.",
-    "classification": ["emerging", "skincare", "clean_beauty"]
+    "name": "ANNY",
+    "category": "Clothing",
+    "subCategory": "Women - Casuals",
+    "description": "India's fastest trend-to-closet womenswear brand — accessible luxury for the cosmopolitan Indian woman. Real-time data meets culture to deliver global styles fast, with new drops every day. Fashion that's as ambitious as your dreams. ANNYtime, ANNYwhere."
+  },
+  {
+    "name": "Treecell",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Hair",
+    "description": "Korean haircare brand from the Mediheal group — treating your scalp like your skin. Vegan, clinically tested formulas with collagen, peptides & amino acids for damaged, thinning & oily hair. Bestselling Day & Night Collagen Shampoos. 100% made in Korea."
+  },
+  {
+    "name": "Crazy Mosquitoes",
+    "category": "Streetwear",
+    "subCategory": "Streetwear",
+    "description": "Bengaluru's edgy urban streetwear brand — born from the street, for the street. Oversized tees, sweatshirts, joggers & more for the fearless urbanite who isn't afraid to stand out. Join the swarm. #Jointheswarm"
+  },
+  {
+    "name": "PAST MODERN",
+    "category": "Clothing",
+    "subCategory": "Women - Casuals",
+    "description": "India's fashion brand where the past meets modern wear. Timeless silhouettes reimagined with a contemporary lens — Made in India, loved worldwide. Clothing that carries history forward with every stitch. Ships worldwide."
   },
   {
     "name": "PrimalGray",
-    "description": "Contemporary fashion brand offering refined, seasonless pieces with a focus on craftsmanship and longevity.",
-    "classification": ["emerging", "fashion", "premium"]
+    "category": "Clothing",
+    "subCategory": "Mens",
+    "description": "New Delhi's conscious luxury fashion brand for men & women. Seasonless, trendless ready-to-wear in clean silhouettes — crafted from sustainably sourced, ethically produced fabrics designed to endure. Made in India. Ships worldwide."
+  },
+  {
+    "name": "Biodance",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "BIODANCE is a Korean skincare brand built on the belief that science and sustainability go hand in hand. Committed to delivering high-quality, cruelty-free formulations that are effective across all skin types — including the most sensitive — BIODANCE develops products that are EWG-graded, vegan-certified, and eco-conscious at every step. The brand is best known for its pioneering collagen technology."
+  },
+  {
+    "name": "Theater",
+    "category": "Lifestyle",
+    "subCategory": "Footwear",
+    "description": "India's design-led high fashion brand with enough drama for all. Known for premium stockings, tights, socks, shoes, bags & jewellery. Featured in Vogue, Harper's Bazaar, Elle & more — mass-premium western fashion made for the bold & the beautiful."
+  },
+  {
+    "name": "ESTEE LAUDER",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "American luxury beauty icon founded in 1946 by Estée Lauder herself. A global leader in skincare, makeup, fragrance & haircare — home to legendary products like Advanced Night Repair, Double Wear Foundation & more. Beautiful in every sense."
+  },
+  {
+    "name": "Moxie Beauty",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Hair",
+    "description": "India's clean haircare brand celebrating real, glorious Indian hair. 100% clean, salon-quality shampoos, conditioners & more — intentionally formulated for Indian hair types, genes & weather. No filters, no fakery. Just bold, beautiful hair."
+  },
+  {
+    "name": "Cosrx",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "COSRX is one of K-beauty's most globally recognised and trusted skincare brands. Founded in 2013, born from a simple mission: to provide practical, science-backed skincare solutions for real-world skin concerns, without unnecessary fillers or harsh chemicals. Every product is dermatologically tested, hypoallergenic, and free from 14 commonly harmful chemicals."
+  },
+  {
+    "name": "HK Vitals",
+    "category": "Health & Wellness",
+    "subCategory": "Beauty Supplements",
+    "description": "India's fastest-growing health & wellness brand by HealthKart. Science-backed supplements for hair, skin, immunity & fitness — from biotin and collagen to multivitamins & omega-3. Trusted by 10M+ Indians. Your daily dose of vitality."
+  },
+  {
+    "name": "Kingdom of White",
+    "category": "Clothing",
+    "subCategory": "Mens",
+    "description": "India's first all-white menswear brand. Premium shirts, kurtas, co-ords & more — crafted in natural fabrics for the modern minimalist. White isn't just a colour here, it's clarity, confidence, and a way of life. 30+ stores across India."
+  },
+  {
+    "name": "Celimax",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Celimax (est. 2019) is a South Korean brand focused on honest results through clinical data and community feedback. Its name blends \"cell\" and \"climax.\" Key collections include the Real Noni, Dual Barrier, and Jiwoogae lines for customized skincare."
+  },
+  {
+    "name": "Style Island",
+    "category": "Clothing",
+    "subCategory": "Women - Luxe",
+    "description": "India's womenswear brand built for the modern Indian woman. Western wear reimagined with Indian sensibilities — impeccable fits, premium fabrics, bold designs crafted for real bodies, real lifestyles & real confidence. Clothes that fit, flatter & turn heads."
+  },
+  {
+    "name": "STITCH STORIES",
+    "category": "Clothing",
+    "subCategory": "Women - Luxe",
+    "description": "Delhi's homegrown womenswear brand with a story behind every outfit. From everyday staples to occasion wear — think Sunset, Dreamscape & more. Unique, personal collections crafted for women who want fashion that feels intentional & special."
+  },
+  {
+    "name": "Outerworld",
+    "category": "Clothing",
+    "subCategory": "Mens",
+    "description": "India's premium menswear brand born from a desire to dress men as boldly as the night deserves. Sleek cuts, premium fabrics & sophisticated occasion wear — crafted for men who refuse to be ordinary. As worn on the best dance floors in the world."
+  },
+  {
+    "name": "TirTir",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Make up",
+    "description": "Korean beauty brand where T-I-R stands for Trust In Radiance. Known for the viral Mask Fit Red Cushion in 30 inclusive shades. Science-backed skincare & makeup made in Korea for your healthiest, most luminous skin."
+  },
+  {
+    "name": "Axis-y",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "AXIS-Y is a South Korean skincare brand founded on a bold philosophy: climate-inspired, community-driven beauty. Born from the understanding that environmental factors directly impact skin health, AXIS-Y formulates every product using its proprietary 611 Advanced Formula™. Every product is 100% vegan, cruelty-free, and certified by the Korean Vegan Association."
+  },
+  {
+    "name": "Masha",
+    "category": "Clothing",
+    "subCategory": "Women - Casuals",
+    "description": "India's homegrown women's sleepwear brand — thoughtfully made, beautifully hand-printed. Soft cotton nightdresses, PJ sets & kaftans designed for comfort in every casual moment. Sleepwear you'll actually want to stay in."
+  },
+  {
+    "name": "Rareism",
+    "category": "Clothing",
+    "subCategory": "Women - Casuals",
+    "description": "India's contemporary womenswear brand by The House of Rare. Modern, minimalist designs that Believe, Inspire & Conquer — desk-to-dinner looks crafted for the multifaceted Indian woman. Fashion Beyond Barriers. 30+ stores across India."
+  },
+  {
+    "name": "COMET",
+    "category": "Footwear",
+    "subCategory": "Footwear",
+    "description": "India's homegrown unisex sneaker brand built on bold design and fearless storytelling. Premium-quality kicks with 14+ colorways, SpaceWalk cushioning tech, and exclusive drops — all at accessible prices. Never Shy, Never Sorry."
+  },
+  {
+    "name": "Mokobara",
+    "category": "Luggage",
+    "subCategory": "Luggage",
+    "description": "India's premium travel lifestyle brand redefining how you carry yourself. Thoughtfully designed luggage, backpacks & accessories — built with clean aesthetics, durable materials & emotional resonance. Not just a bag. It's a statement. #GoingPlaces"
+  },
+  {
+    "name": "Protouch",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Appliances",
+    "description": "India's tech-led personal care brand bringing salon-grade results home. Clinically tested, portable devices and products for hair, skin & oral care — professional quality at everyday prices."
+  },
+  {
+    "name": "Chapter 2",
+    "category": "Clothing",
+    "subCategory": "Streetwear",
+    "description": "India's bold streetwear brand co-founded by Rhea & Showik Chakraborty. A manifesto of resilience & reinvention — unisex acid-wash prints, futuristic cuts & minimalist slogans for those rewriting their story."
+  },
+  {
+    "name": "Mixsoon",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Korean minimal beauty brand built on one philosophy — pure, single-ingredient formulas your skin truly needs. Transparent, honest, and biologically processed essences for glass skin. Clean beauty stripped back to its most essential form."
+  },
+  {
+    "name": "Beauty of Joseon",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Beauty of Joseon is a beloved Korean skincare brand that bridges centuries of traditional wisdom with the precision of modern science. Founded in 2016, the brand draws deep inspiration from Hanbang — the ancient Korean practice of herbal medicine — and the legendary beauty rituals of Joseon Dynasty nobility."
+  },
+  {
+    "name": "RWDY",
+    "category": "Clothing",
+    "subCategory": "Streetwear",
+    "description": "India's iconic streetwear brand by Vijay Deverakonda. Rooted in culture, the lotus-emblemed label blends avant-garde street style with traditional craftsmanship. Reclaiming Indian supremacy in fashion — from India, to the world."
+  },
+  {
+    "name": "AHMED AL MAGHRIBI",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Fragrance",
+    "description": "UAE's iconic niche fragrance house with 25+ years of heritage and 200+ branches across the GCC. Handcrafted oriental perfumes using rare oud, musk, amber & floral extracts — timeless Arabic perfumery now available in India."
+  },
+  {
+    "name": "NUUK",
+    "category": "Electronics",
+    "subCategory": "Electronics",
+    "description": "Nuuk is a Gurugram-based Indian D2C brand on a mission to make great design accessible to every home. Founded in 2023, Nuuk set out to challenge the status quo of the home appliances category — proving that everyday products don't have to be dull, bulky, or forgettable. Every Nuuk product is designed internally with a design-first philosophy."
+  },
+  {
+    "name": "Gully Labs",
+    "category": "Footwear",
+    "subCategory": "Sneakers",
+    "description": "India's original culture-led sneaker brand — designed & manufactured in India. Hand-lasted shoes rooted in Indian motifs, scripts & craft traditions. Built to tell desi stories on a global stage. As seen on Shark Tank India."
+  },
+  {
+    "name": "Contemponari",
+    "category": "Clothing",
+    "subCategory": "Women - Luxe",
+    "description": "Indian womenswear brand designed for the modern woman who wears many hats. From boardroom to brunch — timeless contemporary fashion in premium fabrics that blends global trends with Indian sensibility. Elegant, versatile, and effortlessly you."
+  },
+  {
+    "name": "Dash and Dot",
+    "category": "Clothing",
+    "subCategory": "Women - Luxe",
+    "description": "India's globally inspired, consciously made fashion brand for all genders and sizes. Founded in 2020 by Ashray Gujral — fluid co-ords, bold prints, elevated essentials in organic & recycled fabrics. Globally inspired, unmistakably you. Ships worldwide."
+  },
+  {
+    "name": "Cava",
+    "category": "Clothing",
+    "subCategory": "Women - Casuals",
+    "description": "India's youth-first athleisure brand founded by sisters Ria & Shreya Mittal. Function-first, design-led activewear made with sustainable BCI cotton & recycled polyester — tailored for Indian fits and built for the gym, work, and everything in between."
+  },
+  {
+    "name": "Hamptons",
+    "category": "Clothing",
+    "subCategory": "Mens",
+    "description": "India's premium men's shirt brand with the widest range of embroidered shirts. From classic linens and satins to signature overshirts and corduroy — global fashion brought to India with exceptional craftsmanship at accessible prices. #TheHamptonsLife"
+  },
+  {
+    "name": "GOTHIC TOONS",
+    "category": "Streetwear",
+    "subCategory": "Streetwear",
+    "description": "India's creative apparel brand founded by Subhalaxmi Rajannamalai — where gothic art meets bold self-expression. Each design is a canvas of dark aesthetics, whimsical storytelling & individuality. Wear your story. Unleash your imagination."
+  },
+  {
+    "name": "Huemn",
+    "category": "Streetwear",
+    "subCategory": "streetwear",
+    "description": "India's award-winning unisex RTW label co-founded by Pranav Misra & Shyma Shetty in 2012. Vogue India Fashion Fund winner. Culture-driven, handcrafted fashion rooted in social commentary — storytellers first, designers second. Humans are made to love."
+  },
+  {
+    "name": "Dymatize",
+    "category": "Health & Wellness",
+    "subCategory": "Sports Nutrition and Fitness",
+    "description": "US-based sports nutrition brand founded in 1994 and trusted by athletes worldwide. Known for its award-winning ISO100 hydrolyzed whey protein — science-backed, Informed-Choice certified, and made in GMP facilities. Serious fuel for serious goals."
+  },
+  {
+    "name": "Numour",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Appliances",
+    "description": "India's performance-first beauty tech brand where science meets technology. LED therapy, EMS & advanced at-home skincare devices — dermatologically approved, professional-grade results from the comfort of your home. Skincare that actually works."
+  },
+  {
+    "name": "COSRX",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "COSRX is one of K-beauty's most globally recognised and trusted skincare brands. Founded in 2013, born from a simple mission: to provide practical, science-backed skincare solutions for real-world skin concerns, without unnecessary fillers or harsh chemicals."
+  },
+  {
+    "name": "Dr. Althea",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Dr. Althea is a premium Korean vegan skincare brand that sits at the intersection of advanced dermatological research and clean beauty. The brand blends high-performance active ingredients with carefully selected natural extracts. The 345 Relief Cream has become a cult classic."
+  },
+  {
+    "name": "No Nazar",
+    "category": "Streetwear",
+    "subCategory": "Streetwear",
+    "description": "India's sacred streetwear brand born from brothers Arjun & Varun Ahluwalia. Ancient evil eye protection meets urban luxury — every piece is a personal talisman. Bold, psychedelic designs crafted to empower, protect & elevate your aura."
+  },
+  {
+    "name": "SUPERYOU",
+    "category": "Health & Wellness",
+    "subCategory": "Sports Nutrition and Fitness",
+    "description": "India's protein brand co-founded by Ranveer Singh. Powered by bio-fermented yeast protein — gut-friendly, allergen-free & complete. From protein wafers to powders, making high-quality protein delicious, accessible & guilt-free for every Indian."
+  },
+  {
+    "name": "VALKYRIE",
+    "category": "Streetwear",
+    "subCategory": "Streetwear",
+    "description": "India's wearable art brand founded on \"Streetwear with a Cause.\" Bespoke hand-painted denim jackets crafted by talented artists — each piece a one-of-a-kind canvas. Custom designs available. Worn by Karan Tacker and loved by art & fashion lovers."
+  },
+  {
+    "name": "Winston",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Appliances",
+    "description": "Winston is a modern grooming brand built for men who take their personal care seriously. Blending contemporary formulations with a no-fuss approach, Winston offers a thoughtfully curated lineup of skincare and grooming essentials tailored to the needs of Indian men."
+  },
+  {
+    "name": "Ewoke",
+    "category": "Clothing",
+    "subCategory": "Women - Luxe",
+    "description": "India's new-age modern fashion brand built on the belief that great style, great fit & great fabrics must work together. Elevated essentials and statement pieces crafted in premium fabrics with thoughtful, small-batch production. Fashion that feels like you."
+  },
+  {
+    "name": "ISOPURE",
+    "category": "Health & Wellness",
+    "subCategory": "Sports Nutrition and Fitness",
+    "description": "Premium sports nutrition brand built on one principle — give your body what it needs, nothing more. Known for 100% whey isolate protein that's zero/low carb, lactose-free, and packed with vitamins & minerals. Clean fuel for every fitness goal."
+  },
+  {
+    "name": "Minimalist",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "India's leading science-first skincare brand. Full ingredient transparency, clinically tested formulas, and no false promises — just actives like niacinamide, retinol & AHA/BHA that actually work. Dermatologist tested. Available in 6+ countries."
+  },
+  {
+    "name": "NEESH",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Fragrance",
+    "description": "India's haute perfumery house with a 120-year heritage. Story-rich fragrances in Extrait de Parfum concentration, blended by award-winning master perfumers. Iconic emerald-cut shard bottles. Wear your fragrance as a jewel piece."
+  },
+  {
+    "name": "Reginald Men",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Men's Grooming",
+    "description": "Reginald Men is a premium men's grooming brand that brings refined, fuss-free personal care to the modern man. Rooted in the belief that grooming should be effortless yet elevated, the brand offers a curated range of products designed to work with men's skin and hair."
+  },
+  {
+    "name": "OPTIMUM NUTRITION",
+    "category": "Health & Wellness",
+    "subCategory": "Sports Nutrition and Fitness",
+    "description": "The world's #1 sports nutrition brand with 35+ years of proven performance. Home of the legendary Gold Standard 100% Whey — most awarded, most trusted, most reviewed protein on the planet. Fuel your goals. Get the Optimum Advantage."
+  },
+  {
+    "name": "PINQ POLKA",
+    "category": "Clothing",
+    "subCategory": "Innerwear",
+    "description": "India's comfort-first intimate lifestyle brand founded by Manveen Ssharma in 2017. From nipple covers and breast tape to shapewear — bold, unapologetic products designed for real women. Own Your Vibe. As seen on Shark Tank India Season 4."
+  },
+  {
+    "name": "KAINE",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Korean vegan lifestyle skincare brand — \"Kaine\" meaning new in Greek. 100% vegan, cruelty-free, and EVE VEGAN certified, with eco-friendly PCR packaging. Gentle yet effective formulas for sensitive skin. Donates profits to animal rights causes."
+  },
+  {
+    "name": "sorta",
+    "category": "Streetwear",
+    "subCategory": "streetwear",
+    "description": "Sorta is a Kolkata-born Indian lifestyle brand that defies easy categorisation — and that's entirely the point. Founded in 2020, Sorta calls itself \"unisex luxury hustlewear\" — premium, gender-free clothing and fragrance built for the dreamers, creators, artists, designers, and entrepreneurs who refuse to fit into a box."
+  },
+  {
+    "name": "Lador",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "Korean professional haircare brand founded in 2007. Salon-grade formulas made with naturally-derived ingredients — bringing the Perfect Hair Fill-Up Ampoule, LPP Treatment & more to your home routine. Clean, safe, and 100% made in Korea."
+  },
+  {
+    "name": "COSMIX",
+    "category": "Health & Wellness",
+    "subCategory": "Sports Nutrition and Fitness",
+    "description": "India's clean superfood & plant protein brand by herbalist Vibha Harish. Farm-sourced, in-house blends for gut, sleep, hormones & skin. Root-cause nutrition rooted in herbalism & Ayurveda. As seen on Shark Tank India."
+  },
+  {
+    "name": "Neude",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Bath & Body",
+    "description": "India's first certified supercharged milk-based skincare brand. Powered by milk peptides, new-age actives & 1,400+ blacklisted ingredients. Dermatologist-tested, cruelty-free & designed for Indian skin and weather. Hi-Glaze skin goals, delivered."
+  },
+  {
+    "name": "52 Sundaze",
+    "category": "Beauty & Personal Care",
+    "subCategory": "Skin",
+    "description": "India's fun, fuss-free SPF brand on a mission to make sunscreen a daily essential. Known for the world's first SPF 50 Rosewater Mist that works over makeup. Vegan, dermatologist-tested, and lightweight enough to actually enjoy wearing every day."
+  },
+  {
+    "name": "FLYAF",
+    "category": "Streetwear",
+    "subCategory": "streetwear",
+    "description": "India's luxury streetwear brand weaving bold stories through fashion. Rule-breaking designs, premium drops & a community built for trendsetters who refuse to be confined. Indian luxury — crafted for the world. Fly as f*** with FLYAF."
   }
 ]

@@ -32,18 +32,16 @@ export function getTools(
     new Tool({
       name: 'lookup_brands',
       description:
-        "Look up Broadway partner brands: name, description, and classification (e.g. top_seller, trending, new). Call when the user asks about brands on Broadway, what's trending, top sellers, or a specific brand. For buying SKUs use search_catalog.",
+        "Look up Broadway partner brands: name, category, subCategory, and description. Call when the user asks about brands on Broadway, which brands are in a category, or a specific brand's story. For buying SKUs use search_catalog.",
       schema: z.object({
         query: z
           .string()
           .optional()
-          .describe('Brand name or free-text question to match against catalog entries'),
-        highlight: z
-          .enum(['trending', 'top_sellers', 'all'])
+          .describe('Brand name or free-text question to match against brand name/category/description'),
+        category: z
+          .string()
           .optional()
-          .describe(
-            'trending = classification includes trending; top_sellers = classification includes top_seller; all = no classification filter',
-          ),
+          .describe('Filter brands by category or subCategory (e.g. "Streetwear", "Skincare", "Footwear")'),
         limit: z.number().optional().describe('Max brands to return (default 8, max 24)'),
       }),
       func: async (args) => runLookupBrandsTool(cleanArgs(args)),
@@ -51,7 +49,7 @@ export function getTools(
     new Tool({
       name: 'search_catalog',
       description:
-        "Search Broadway's product catalog using semantic vector similarity. Call when the user wants products, recommendations, or browsing. Pass a rich natural-language query plus category, colors, occasions, style, and colorSeason when known.",
+        "Search Broadway's product catalog using semantic vector similarity. Call when the user wants products, recommendations, or browsing. Pass a rich natural-language query plus category, colors, occasions, style, and colorSeason when known. Pass brand ONLY when user explicitly names a specific brand — omit it for category or style searches.",
       schema: z.object({
         query: z.string().describe("The search query (e.g., 'blue dress', 'denim jacket')"),
         category: z
@@ -59,6 +57,12 @@ export function getTools(
           .optional()
           .describe(
             'CLOTHING_FASHION | BEAUTY_PERSONAL_CARE | JEWELLERY_ACCESSORIES | FOOTWEAR | BAGS_LUGGAGE',
+          ),
+        brand: z
+          .string()
+          .optional()
+          .describe(
+            'Exact brand name — set ONLY when user explicitly names a brand (e.g. "show me COMET"). Do NOT set this for category or style queries like "show me streetwear".',
           ),
         colors: z.array(z.string()).optional().describe('filter by color'),
         occasions: z.array(z.string()).optional().describe('filter by occasion'),

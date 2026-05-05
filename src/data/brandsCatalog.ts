@@ -1,21 +1,26 @@
 import brandsJson from './brands.json';
 
-export type BrandClassification = string;
-
-/** One row in `brands.json` — only these three fields. */
+/** One row in `brands.json` */
 export interface BrandRecord {
   name: string;
+  category: string;
+  subCategory: string;
   description: string;
-  /** Merchandising labels only, e.g. top_seller, trending, new, classic — not sales numbers */
-  classification: BrandClassification[];
+}
+
+export interface BrandPublicView {
+  name: string;
+  category: string;
+  subCategory: string;
+  description: string;
 }
 
 const raw = brandsJson as unknown as BrandRecord[];
 const brands: BrandRecord[] = raw.filter((b) => {
-  if (!b || typeof b.name !== 'string' || typeof b.description !== 'string') return false;
-  if (!Array.isArray(b.classification)) return false;
-  if (!b.name.trim() || !b.description.trim()) return false;
-  return b.classification.every((c) => typeof c === 'string');
+  if (!b || typeof b.name !== 'string') return false;
+  if (typeof b.category !== 'string' || typeof b.subCategory !== 'string') return false;
+  if (typeof b.description !== 'string') return false;
+  return b.name.trim() && b.description.trim();
 });
 
 function norm(s: string): string {
@@ -30,41 +35,16 @@ function tokens(s: string): string[] {
 }
 
 function rowText(b: BrandRecord): string {
-  return norm([b.name, ...(b.classification ?? []), b.description].join(' '));
-}
-
-export type BrandHighlight = 'trending' | 'top_sellers' | 'all';
-
-export interface LookupBrandsInput {
-  query?: string;
-  highlight?: BrandHighlight;
-  limit?: number;
-}
-
-export interface BrandPublicView {
-  name: string;
-  description: string;
-  classification: BrandClassification[];
+  return norm([b.name, b.category, b.subCategory, b.description].join(' '));
 }
 
 function toPublic(b: BrandRecord): BrandPublicView {
   return {
     name: b.name,
+    category: b.category,
+    subCategory: b.subCategory,
     description: b.description,
-    classification: [...b.classification],
   };
-}
-
-function matchesHighlight(b: BrandRecord, highlight: BrandHighlight): boolean {
-  if (highlight === 'all') return true;
-  const cls = b.classification.map(norm);
-  if (highlight === 'trending') {
-    return cls.includes('trending');
-  }
-  if (highlight === 'top_sellers') {
-    return cls.some((c) => c === 'top_seller' || c === 'topseller' || c === 'top-seller');
-  }
-  return true;
 }
 
 function sortByName(a: BrandRecord, b: BrandRecord): number {
@@ -86,19 +66,29 @@ function scoreQuery(b: BrandRecord, query: string): number {
   return score;
 }
 
+export interface LookupBrandsInput {
+  query?: string;
+  category?: string;
+  limit?: number;
+}
+
 /**
- * Returns Broadway brand facts from the static catalog (merchandising copy only).
+ * Returns Broadway brand facts from the static catalog.
+ * - `query`: free-text match against name/category/subCategory/description
+ * - `category`: filter to brands whose category contains this string (case-insensitive)
+ * - `limit`: max results (default 8, max 24)
  */
 export function lookupBrands(input: LookupBrandsInput): {
   brands: BrandPublicView[];
-  highlight: BrandHighlight;
   guidance: string;
 } {
-  const highlight = input.highlight ?? 'all';
   const limit = Math.min(Math.max(input.limit ?? 8, 1), 24);
   const query = (input.query ?? '').trim();
+  const categoryFilter = (input.category ?? '').trim().toLowerCase();
 
-  let pool = brands.filter((b) => matchesHighlight(b, highlight));
+  let pool = categoryFilter
+    ? brands.filter((b) => norm(b.category).includes(categoryFilter) || norm(b.subCategory).includes(categoryFilter))
+    : [...brands];
 
   if (query) {
     const scored = pool
@@ -106,6 +96,7 @@ export function lookupBrands(input: LookupBrandsInput): {
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s || sortByName(a.b, b.b));
     pool = scored.map((x) => x.b);
+
     if (pool.length === 0) {
       const globalScored = brands
         .map((b) => ({ b, s: scoreQuery(b, query) }))
@@ -117,15 +108,30 @@ export function lookupBrands(input: LookupBrandsInput): {
       pool = [...brands].sort(sortByName);
     }
   } else {
-    pool = [...pool].sort(sortByName);
+    pool = pool.sort(sortByName);
   }
 
-  const slice = pool.slice(0, limit).map(toPublic);
-
   return {
-    brands: slice,
-    highlight,
+    brands: pool.slice(0, limit).map(toPublic),
     guidance:
-      'Use only the name, description, and classification returned here. Do not invent sales, revenue, market share, inventory, or any internal or confidential metrics. If asked for numbers or private company data, say you do not have that information.',
+      'Use only the name, category, subCategory, and description returned here. Do not invent sales, revenue, market share, inventory, or any internal or confidential metrics. If asked for numbers or private company data, say you do not have that information.',
   };
+}
+
+/**
+ * Returns all brand names whose category or subCategory matches the given style/category string.
+ * Used to discover which brands cover a requested category before filtering the product catalog.
+ */
+export function getBrandNamesByCategory(categoryOrStyle: string): string[] {
+  const q = norm(categoryOrStyle);
+  return brands
+    .filter((b) => norm(b.category).includes(q) || norm(b.subCategory).includes(q))
+    .map((b) => b.name);
+}
+
+/** Returns a single brand record by exact name match (case-insensitive). */
+export function getBrandByName(name: string): BrandPublicView | null {
+  const q = norm(name);
+  const found = brands.find((b) => norm(b.name) === q);
+  return found ? toPublic(found) : null;
 }
