@@ -1,15 +1,14 @@
 {
   "_bulkCatalog": {
     "columnMap": {
-      "barcode": "barcode",
-      "name": "name",
-      "description": "description",
-      "imageUrl": "primary_image_url",
-      "brand": "brand",
-      "skuId": "id"
+      "barcode": ["barcode", "barCode", "Barcode", "ean", "EAN", "SKU", "sku", "SKU_ID", "sku_id"],
+      "name": ["name", "Name", "title", "Title", "product_title", "product_name", "Product Name"],
+      "description": ["description", "Description", "desc", "long_description", "details", "body"],
+      "imageUrl": ["primary_image_url", "image_url", "imageUrl", "image", "img", "Image URL"],
+      "brand": ["brand", "Brand", "brand_name", "Brand Name", "vendor", "Vendor", "manufacturer"],
+      "skuId": ["id", "Id", "sku_id", "skuId", "product_id", "SKU_ID"]
     },
     "defaults": {
-      "brand": "Unknown",
       "category": "CLOTHING_FASHION",
       "generalTag": "Product"
     }

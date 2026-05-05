@@ -9,6 +9,8 @@
 # Optional tunnel profile:
 #   docker compose -f docker-compose.stack.yml --profile tunnel up -d
 
+name: broadway-stack
+
 services:
   app:
     image: node:22

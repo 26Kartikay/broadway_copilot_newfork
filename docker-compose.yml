@@ -9,5 +9,7 @@
 # Production bot image:
 #   docker compose -f docker-compose.bot.prod.yml ...
 
+name: broadway-stack
+
 include:
   - path: docker-compose.stack.yml

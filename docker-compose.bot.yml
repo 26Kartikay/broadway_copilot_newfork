@@ -13,6 +13,8 @@
 # Optional tunnel:
 #   docker compose -f docker-compose.bot.yml --profile tunnel up -d
 
+name: broadway-bot
+
 services:
   app:
     image: node:22

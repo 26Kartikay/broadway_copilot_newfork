@@ -22,7 +22,6 @@
     "categoryHint": "category"
   },
   "defaults": {
-    "brand": "Unknown",
     "category": "CLOTHING_FASHION",
     "generalTag": "Product"
   }

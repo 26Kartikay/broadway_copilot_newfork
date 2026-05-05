@@ -4,6 +4,7 @@ import * as path from 'path';
 import Papa from 'papaparse';
 import { automationConfig } from '../../lib/automation/config';
 import {
+  barcodeColumnSpecified,
   loadBulkCatalogMapping,
   rowToSeedProductInput,
   type BulkCatalogMappingFile,
@@ -140,8 +141,8 @@ async function main(): Promise<number> {
       return 1;
     }
     mapping = loadBulkCatalogMapping(args.mappingPath);
-    if (!mapping.columnMap.barcode?.trim()) {
-      console.error('mapping.json columnMap.barcode is required (CSV header name, e.g. "barcode")');
+    if (!barcodeColumnSpecified(mapping.columnMap.barcode)) {
+      console.error('mapping.json columnMap.barcode is required (CSV header name or list, e.g. "barcode")');
       return 1;
     }
   }

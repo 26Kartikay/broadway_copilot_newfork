@@ -1,5 +1,7 @@
 version: '3.8'
 
+name: broadway-automation
+
 # Automation services — run alongside the main stack.
 # Prerequisites: main stack running (broadway-network must exist).
 #   docker compose -f docker-compose.stack.yml --env-file .env up -d

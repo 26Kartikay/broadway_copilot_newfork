@@ -11,33 +11,36 @@ import {
 import { normalizeCsvImageUrl } from './visionImageUrl';
 import type { ExtractedTags } from './types';
 
+/** CSV header name, or ordered alternates (first column with a non-empty cell wins). */
+export type CsvHeaderSpec = string | string[];
+
 /**
- * Keys are logical roles; JSON values are the CSV column headers (must match export exactly).
- * Description-bulk row: id, barcode, name, description, primary_image_url, brand — e.g. `"skuId": "id"`, `"imageUrl": "primary_image_url"`.
+ * Keys are logical roles; values are header name(s) — must match the CSV header row (after trim).
+ * Typical bulk row: id, barcode, name, description, primary_image_url, brand — e.g. `"skuId": "id"`.
  */
 export interface BulkCatalogColumnMap {
-  barcode?: string;
+  barcode?: CsvHeaderSpec;
   /** Product title; if omitted, name is derived from skuId, description, or barcode. */
-  name?: string;
+  name?: CsvHeaderSpec;
   /** External SKU id from your sheet (stored in componentTags.csvSkuId). */
-  skuId?: string;
-  brand?: string;
-  imageUrl?: string;
-  productLink?: string;
-  description?: string;
-  legacyCategory?: string;
-  subCategory?: string;
-  productType?: string;
-  gender?: string;
-  ageGroup?: string;
-  colors?: string;
-  occasions?: string;
-  style?: string;
-  fit?: string;
-  allTags?: string;
-  shortDescription?: string;
+  skuId?: CsvHeaderSpec;
+  brand?: CsvHeaderSpec;
+  imageUrl?: CsvHeaderSpec;
+  productLink?: CsvHeaderSpec;
+  description?: CsvHeaderSpec;
+  legacyCategory?: CsvHeaderSpec;
+  subCategory?: CsvHeaderSpec;
+  productType?: CsvHeaderSpec;
+  gender?: CsvHeaderSpec;
+  ageGroup?: CsvHeaderSpec;
+  colors?: CsvHeaderSpec;
+  occasions?: CsvHeaderSpec;
+  style?: CsvHeaderSpec;
+  fit?: CsvHeaderSpec;
+  allTags?: CsvHeaderSpec;
+  shortDescription?: CsvHeaderSpec;
   /** Free-text hint mapped through mapCategory() → ProductCategory enum */
-  categoryHint?: string;
+  categoryHint?: CsvHeaderSpec;
 }
 
 export interface BulkCatalogDefaults {
@@ -101,11 +104,56 @@ export function loadBulkCatalogMapping(filePath: string): BulkCatalogMappingFile
   );
 }
 
-function cell(row: Record<string, unknown>, header: string | undefined): string {
-  if (!header?.trim()) return '';
-  const v = row[header.trim()];
-  if (v == null) return '';
-  return String(v).trim();
+export function barcodeColumnSpecified(spec: CsvHeaderSpec | undefined): boolean {
+  if (spec == null) return false;
+  if (typeof spec === 'string') return spec.trim().length > 0;
+  return spec.some((s) => typeof s === 'string' && s.trim().length > 0);
+}
+
+export function cell(row: Record<string, unknown>, header: CsvHeaderSpec | undefined): string {
+  if (header == null) return '';
+  const keys = Array.isArray(header) ? header : [header];
+  for (const raw of keys) {
+    const k = typeof raw === 'string' ? raw.trim() : '';
+    if (!k) continue;
+    const v = row[k];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+
+/** Trim stray punctuation from heuristic captures */
+function tidyCapturedBrand(raw: string): string {
+  return raw
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s"'([{:-]+/, '')
+    .replace(/[\s"')\]}:]+$/g, '')
+    .trim();
+}
+
+/**
+ * When CSV brand is empty/missing, derive from typical merchandising patterns
+ * ("Rareism Women's ...", "... from RAREISM ...", "... by Vendor ...").
+ */
+export function inferBrandFromNameAndDescription(name: string, description: string): string {
+  const n = (name || '').trim();
+
+  let m = /^\s*([A-Za-z0-9][A-Za-z0-9&.'\-\s]{1,54}?)\s+women'?s\b/i.exec(n);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+  m = /^\s*([A-Za-z0-9][A-Za-z0-9&.'\-\s]{1,54}?)\s+men'?s\b/i.exec(n);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+
+  const d = description || '';
+  m = /\bfrom\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/.exec(d);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+  m = /\bfrom\s+([A-Z]{2,30})\b/.exec(d);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+  m = /\bfrom\s+([A-Z][a-z]{1,29})\b/.exec(d);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+  m = /\bby\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,4})\b/.exec(d);
+  if (m?.[1]) return tidyCapturedBrand(m[1]);
+
+  return '';
 }
 
 export function splitCommaList(s: string): string[] {
@@ -217,7 +265,15 @@ export function rowToSeedProductInput(
     (description ? description.replace(/\s+/g, ' ').trim().slice(0, 120) : '') ||
     `Product ${barcode}`;
 
-  const brand = cell(row, m.brand) || defaults.brand || 'Unknown';
+  const csvBrand = cell(row, m.brand).trim();
+  const defaultBrand = (defaults.brand ?? '').trim();
+  let brand =
+    csvBrand && !/^unknown$/i.test(csvBrand)
+      ? csvBrand
+      : inferBrandFromNameAndDescription(name, description);
+  if (!brand?.trim()) {
+    brand = defaultBrand && !/^unknown$/i.test(defaultBrand) ? defaultBrand : 'Unknown';
+  }
   const categoryHintRaw = cell(row, m.categoryHint);
   const categoryHintNorm = taxonomy?.normalize(categoryHintRaw) ?? categoryHintRaw.trim();
 
