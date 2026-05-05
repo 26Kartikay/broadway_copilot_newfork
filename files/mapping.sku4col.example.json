@@ -1,10 +1,12 @@
 {
   "taxonomyPath": "catalogTaxonomy.json",
   "columnMap": {
-    "barcode": "barCode",
+    "skuId": "id",
+    "barcode": "barcode",
+    "name": "name",
     "description": "description",
-    "imageUrl": "imageUrl",
-    "skuId": "skuId"
+    "imageUrl": "primary_image_url",
+    "brand": "brand"
   },
   "defaults": {
     "brand": "Unknown",

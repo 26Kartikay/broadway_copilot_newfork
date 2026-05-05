@@ -5,6 +5,7 @@
       "name": "name",
       "description": "description",
       "imageUrl": "primary_image_url",
+      "brand": "brand",
       "skuId": "id"
     },
     "defaults": {

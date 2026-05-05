@@ -90,7 +90,7 @@ services:
     volumes:
       - .:/usr/src/app
       - node_modules:/usr/src/app/node_modules
-      - dist:/usr/src/app/dist
+      # Do not mount a separate dist volume: it hides repo dist/ and breaks `node dist/...` unless you build only inside the volume.
       - uploads_data:/usr/src/app/uploads
     networks:
       - broadway-network
@@ -207,7 +207,6 @@ networks:
 
 volumes:
   node_modules:
-  dist:
   uploads_data:
   postgres_data_v0_8_0:
   redis_data:

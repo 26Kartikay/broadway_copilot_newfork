@@ -11,7 +11,10 @@ import {
 import { normalizeCsvImageUrl } from './visionImageUrl';
 import type { ExtractedTags } from './types';
 
-/** CSV header → logical field (maps into Product / ExtractedTags). */
+/**
+ * Keys are logical roles; JSON values are the CSV column headers (must match export exactly).
+ * Description-bulk row: id, barcode, name, description, primary_image_url, brand — e.g. `"skuId": "id"`, `"imageUrl": "primary_image_url"`.
+ */
 export interface BulkCatalogColumnMap {
   barcode?: string;
   /** Product title; if omitted, name is derived from skuId, description, or barcode. */

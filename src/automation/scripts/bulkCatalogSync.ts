@@ -123,6 +123,7 @@ async function main(): Promise<number> {
   if ((args.seed || args.tag) && !args.csvPath) {
     console.error('Usage: --csv <file.csv> --mapping <mapping.json> [--seed] [--tag] [--embed]\n' +
       '  Omit step flags with --csv to run seed+tag+embed.\n' +
+      '  Example CSV columns (see files/catalogTaxonomy.json _bulkCatalog.columnMap): id, barcode, name, description, primary_image_url, brand\n' +
       '  --embed alone: pending products from DB → embed (CSV/DB tags by default; add --llm-tags for OpenAI tags first). No Broadway API.\n' +
       '  --no-reset-embedding: on seed/update, do not force embeddingStatus back to pending.\n' +
       '  --retry-failed-embed: include failed rows in embed step.\n' +
@@ -140,7 +141,7 @@ async function main(): Promise<number> {
     }
     mapping = loadBulkCatalogMapping(args.mappingPath);
     if (!mapping.columnMap.barcode?.trim()) {
-      console.error('mapping.json columnMap.barcode is required (CSV header name, e.g. "barCode")');
+      console.error('mapping.json columnMap.barcode is required (CSV header name, e.g. "barcode")');
       return 1;
     }
   }

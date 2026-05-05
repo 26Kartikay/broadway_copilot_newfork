@@ -124,6 +124,12 @@ export async function bulkApplyTags(rows: SeedRowProductInput[]): Promise<{ upda
       const r = await prisma.product.updateMany({
         where: { barcode: input.barcode },
         data: {
+          name: input.name,
+          brand: input.brand,
+          category: input.category,
+          generalTag: input.generalTag,
+          imageUrl: input.imageUrl,
+          productLink: input.productLink,
           componentTags: input.componentTags as Prisma.InputJsonValue,
           legacyCategory: input.legacyCategory,
           subCategory: input.subCategory,
