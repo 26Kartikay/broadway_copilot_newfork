@@ -288,8 +288,21 @@ export async function runRecommendationEngine(
       search_mode: searchMode,
       gender_filter: genderFilterUsed,
       profile_used: profileUsed,
+      /** One entry per returned row — verify config-level dedupe (csvConfigId / csvSkuId). */
+      recommended_items: results.map((r) => ({
+        id: r.id,
+        name: r.name.length > 100 ? `${r.name.slice(0, 100)}…` : r.name,
+        configId: r.configId || null,
+        skuId: r.skuId || null,
+        relevance_score: r.relevance_score,
+      })),
       top_result: results[0]
-        ? { name: results[0].name, score: results[0].relevance_score }
+        ? {
+            name: results[0].name,
+            score: results[0].relevance_score,
+            configId: results[0].configId || null,
+            skuId: results[0].skuId || null,
+          }
         : null,
     },
     '[RecEng] ═══ Recommendation engine complete ═══',
