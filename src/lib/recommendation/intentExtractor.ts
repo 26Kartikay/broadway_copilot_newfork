@@ -18,7 +18,11 @@ legacyCategory (use EXACT enum strings only):
 Clothing subCategories: Tops, Bottoms, Dresses, Co-ord Sets, Jumpsuits, Playsuits, Outerwear, Activewear, Loungewear, Sleepwear, Lingerie, Swimwear, Ethnic Wear
 Clothing types (generalTag): T-Shirts, Shirts, Blouses, Crop Tops, Tanks, Hoodies, Sweatshirts, Kurtas, Tops, Tunics, Kaftan, Jeans, Trousers, Joggers, Leggings, Shorts, Skirts, Palazzos, Jackets, Coats, Blazers, Shrugs, Sweaters, Cardigans
 
-Beauty subCategories: Moisturizers, Cleansers, Toners, Serums, Sunscreens, Face Masks, Eye Creams, Foundations, Concealers, Blush, Bronzer, Highlighter, Lipsticks, Lip Balms, Mascaras, Eyeliners, Shampoo, Conditioner, Hair Masks, Hair Oils, Perfume, Body Mist, Deodorants, Beard Care
+Bags subCategories: Backpacks, Handbags, Totes, Wallets, Sling Bags, Duffel Bags, Laptop Bags, Travel Bags, Luggage, Messenger Bags, Laptop Sleeves, Travel Accessories
+Footwear subCategories: Sneakers, Casual Shoes, Sports Shoes, Running Shoes, Training Shoes, Boots, Sandals, Sliders, Heels, Flats, Loafers, Slippers
+Jewellery subCategories: Necklaces, Earrings, Rings, Bracelets, Watches
+
+Beauty subCategories: Moisturizers, Cleansers, Toners, Serums, Sunscreens, Face Masks, Eye Creams, Foundations, Concealers, Blush, Bronzer, Highlighter, Lipsticks, Lip Balms, Mascaras, Eyeliners, Shampoo, Conditioner, Hair Masks, Hair Oils, Hair Serums, Perfume, Body Mist, Deodorants, Beard Care
 Beauty types: Matte Liquid Foundation, BB Cream, CC Cream, Kajal, Gel Eyeliner, Liquid Eyeliner, Lip Gloss, Lip Liner
 
 Occasions: Casual, Formal, College, Gym, Travel, Party, Festive, Wedding, Lounge, Going out
@@ -30,24 +34,68 @@ Benefits: Hydrating, Moisturizing, Brightening, Oil Control, Soothing, Anti-Agei
 === EXTRACTION RULES ===
 
 Keyword → filter mapping (apply these FIRST before doing anything else):
+
+BAGS & LUGGAGE — set legacyCategory: BAGS_LUGGAGE AND the matching subCategory:
+- "backpack", "rucksack", "school bag", "laptop bag", "college bag" → legacyCategory: BAGS_LUGGAGE, subCategory: Backpacks
+- "tote", "tote bag" → legacyCategory: BAGS_LUGGAGE, subCategory: Totes
+- "wallet", "card holder", "card wallet" → legacyCategory: BAGS_LUGGAGE, subCategory: Wallets
+- "handbag", "purse", "clutch", "satchel" → legacyCategory: BAGS_LUGGAGE, subCategory: Handbags
+- "sling bag", "crossbody", "fanny pack", "bum bag", "belt bag" → legacyCategory: BAGS_LUGGAGE, subCategory: Sling Bags
+- "duffel", "duffle", "weekender" → legacyCategory: BAGS_LUGGAGE, subCategory: Duffel Bags
+- "laptop sleeve" → legacyCategory: BAGS_LUGGAGE, subCategory: Laptop Sleeves
+- "luggage", "suitcase", "trolley bag", "cabin bag", "check-in bag" → legacyCategory: BAGS_LUGGAGE, subCategory: Luggage
+- "travel bag" → legacyCategory: BAGS_LUGGAGE, subCategory: Travel Bags
+- "messenger bag" → legacyCategory: BAGS_LUGGAGE, subCategory: Messenger Bags
+- "bag", "bags" → legacyCategory: BAGS_LUGGAGE (no subCategory — broad bag query)
+
+FOOTWEAR — set legacyCategory: FOOTWEAR AND the matching subCategory:
+- "sneaker", "sneakers", "trainer", "runners", "kicks" → legacyCategory: FOOTWEAR, subCategory: Sneakers
+- "boot", "boots", "ankle boot", "chelsea boots", "combat boots" → legacyCategory: FOOTWEAR, subCategory: Boots
+- "sandal", "sandals", "chappal", "flip flops", "espadrilles" → legacyCategory: FOOTWEAR, subCategory: Sandals
+- "slider", "sliders" → legacyCategory: FOOTWEAR, subCategory: Sliders
+- "heel", "heels", "stiletto", "platform shoes", "wedge" → legacyCategory: FOOTWEAR, subCategory: Heels
+- "loafer", "loafers", "oxfords", "brogues", "moccasin" → legacyCategory: FOOTWEAR, subCategory: Loafers
+- "flat", "flats", "ballet flats" → legacyCategory: FOOTWEAR, subCategory: Flats
+- "slipper", "slippers" → legacyCategory: FOOTWEAR, subCategory: Slippers
+- "shoe", "shoes", "footwear" → legacyCategory: FOOTWEAR (no subCategory — broad shoe query)
+
+JEWELLERY & ACCESSORIES — set legacyCategory: JEWELLERY_ACCESSORIES AND the matching subCategory:
+- "necklace", "chain", "pendant", "choker" → legacyCategory: JEWELLERY_ACCESSORIES, subCategory: Necklaces
+- "earring", "earrings", "studs", "hoops", "ear cuff", "jhumka" → legacyCategory: JEWELLERY_ACCESSORIES, subCategory: Earrings
+- "ring", "rings", "band ring" → legacyCategory: JEWELLERY_ACCESSORIES, subCategory: Rings
+- "bracelet", "bangle", "bangles", "cuff", "kada" → legacyCategory: JEWELLERY_ACCESSORIES, subCategory: Bracelets
+- "watch", "smartwatch", "wristwatch" → legacyCategory: JEWELLERY_ACCESSORIES, subCategory: Watches
+- "jewellery", "jewelry", "accessories" → legacyCategory: JEWELLERY_ACCESSORIES (no subCategory — broad query)
+
+CLOTHING:
 - "ethnic", "kurta", "salwar", "lehenga", "saree", "anarkali", "dupatta", "bandhani", "banarasi", "indo-western" → legacyCategory: CLOTHING_FASHION, subCategory: Ethnic Wear, tags_must_include: ["Ethnic Wear"]
+- "hoodie" → legacyCategory: CLOTHING_FASHION, type: Hoodies, tags_must_include: ["Hoodies"]
+- "sweatshirt" → legacyCategory: CLOTHING_FASHION, type: Sweatshirts, tags_must_include: ["Sweatshirts"]
+- "gym", "workout" → legacyCategory: CLOTHING_FASHION, occasion: Gym, tags_must_include: ["Gym", "Activewear"]
+
+BEAUTY:
 - "foundation" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Foundations
 - "matte foundation" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Foundations, tags_must_include: ["Matte", "Foundations"]
 - "eyeliner", "kajal" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Eyeliners
 - "mascara" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Mascaras
 - "eyeshadow", "eye shadow" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Eye Shadow
 - "lipstick", "lip colour" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Lipsticks
-- "hoodie" → legacyCategory: CLOTHING_FASHION, type: Hoodies, tags_must_include: ["Hoodies"]
-- "sweatshirt" → legacyCategory: CLOTHING_FASHION, type: Sweatshirts, tags_must_include: ["Sweatshirts"]
-- "gym", "workout" → legacyCategory: CLOTHING_FASHION, occasion: Gym, tags_must_include: ["Gym", "Activewear"]
+- "SPF", "sunscreen", "sunblock" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Sunscreens
+
+TAGS & PROPERTIES:
 - "wedding" → occasion: Wedding, tags_must_include: ["Wedding"]
 - "vegan" → tags_must_include: ["Vegan"]
 - "waterproof" → tags_must_include: ["Waterproof"]
 - "oily skin" → tags_must_include: ["Oil Control"]
 - "dry skin" → tags_must_include: ["Hydrating"]
 - "acne" → tags_must_include: ["Acne"]
-- "SPF", "sunscreen", "sunblock" → legacyCategory: BEAUTY_PERSONAL_CARE, subCategory: Sunscreens
+
 - semantic_query = core product intent, stripped of recipient context and filler words
+
+IMPORTANT — tags_must_include rules:
+- NEVER add a generic category word as a must-include tag (e.g. do NOT add "Bags", "Shoes", "Jewellery", "Clothing" — the subCategory filter handles that)
+- Only add specific attribute tags: fabric ("Cotton"), style ("Streetwear"), formulation ("Vegan"), skin concern ("Acne"), specific type ("Ethnic Wear", "Hoodies") etc.
+- For brand queries like "show me Mokobara products", tags_must_include should be EMPTY []
 
 === JSON SCHEMA ===
 {

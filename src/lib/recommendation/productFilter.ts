@@ -6,6 +6,40 @@ import type { ExtractedIntent, RawProductRow } from './types';
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const VECTOR_RECALL_LIMIT = 500;
 
+/**
+ * All products share category = CLOTHING_FASHION in the DB — the ProductCategory enum
+ * is not a reliable filter signal for non-clothing verticals.
+ * Real differentiation lives in componentTags->>'subCategory' and allTags.
+ * These patterns are ILIKE wildcards matched against those fields.
+ * CLOTHING_FASHION has no entry here — it relies on type/tag filters, not category.
+ */
+const CATEGORY_SUBCATEGORY_PATTERNS: Record<string, string[]> = {
+  BAGS_LUGGAGE: [
+    '%Backpack%', '%Handbag%', '%Tote%', '%Wallet%', '%Sling Bag%',
+    '%Duffel%', '%Laptop Bag%', '%Travel Bag%', '%Luggage%',
+    '%Messenger%', '%Laptop Sleeve%', '%Travel Accessor%',
+  ],
+  FOOTWEAR: [
+    '%Sneaker%', '%Shoe%', '%Boot%', '%Sandal%', '%Slider%',
+    '%Heel%', '%Flat%', '%Loafer%', '%Slipper%', '%Flip Flop%',
+    '%Running Shoe%', '%Training Shoe%', '%Sports Shoe%',
+  ],
+  JEWELLERY_ACCESSORIES: [
+    '%Necklace%', '%Earring%', '%Ring%', '%Bracelet%', '%Watch%',
+  ],
+  BEAUTY_PERSONAL_CARE: [
+    '%Moisturizer%', '%Cleanser%', '%Toner%', '%Serum%', '%Sunscreen%',
+    '%Foundation%', '%Concealer%', '%Blush%', '%Lipstick%', '%Lip Balm%',
+    '%Mascara%', '%Eyeliner%', '%Shampoo%', '%Conditioner%',
+    '%Hair Mask%', '%Hair Oil%', '%Perfume%', '%Body Mist%',
+    '%Deodorant%', '%Beard Care%',
+  ],
+  HEALTH_WELLNESS: [
+    '%Protein%', '%Vitamin%', '%Supplement%', '%Smart Ring%',
+    '%Smart Band%', '%Fitness Tracker%', '%Whey%', '%Probiotic%',
+  ],
+};
+
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI | null {
   const key = process.env.OPENAI_API_KEY?.trim();
@@ -59,16 +93,26 @@ function buildHardFilterClauses(
   const params: unknown[] = [];
   let p = 1;
 
-  // Category hard filter (always applied, even in relaxed mode)
+  // Category filter — translated to subCategory/allTags patterns because all products in the DB
+  // share category = CLOTHING_FASHION regardless of vertical (bags, shoes, jewellery, etc.).
+  // Always applied even in relaxed mode.
   if (intent.legacyCategory) {
-    clauses.push(`"category"::text = $${p++}`);
-    params.push(intent.legacyCategory);
+    const subCatPatterns = CATEGORY_SUBCATEGORY_PATTERNS[intent.legacyCategory];
+    if (subCatPatterns?.length) {
+      clauses.push(
+        `EXISTS (SELECT 1 FROM unnest($${p++}::text[]) AS term WHERE "componentTags"->>'subCategory' ILIKE term OR "componentTags"->>'allTags' ILIKE term OR "subCategory" ILIKE term OR "allTags" ILIKE term)`,
+      );
+      params.push(subCatPatterns);
+    }
+    // CLOTHING_FASHION: no pattern filter — all products share this enum, so a filter
+    // would be redundant. Type and tag filters below handle clothing-specific discrimination.
   }
 
-  // Brand hard filter (always applied when user explicitly named a brand)
+  // Brand hard filter (always applied when user explicitly named a brand; partial ILIKE so
+  // "Mokobara" also matches "Mokobara India" and handles any casing variations)
   if (brand?.trim()) {
-    clauses.push(`LOWER("brand") = LOWER($${p++})`);
-    params.push(brand.trim());
+    clauses.push(`"brand" ILIKE $${p++}`);
+    params.push(`%${brand.trim()}%`);
   }
 
   if (!relaxed) {
@@ -188,6 +232,74 @@ async function vectorSearch(
   return rows;
 }
 
+/** Bare-minimum vector search: only gender + brand hard filters + exclude lists.
+ * Used as a third-tier fallback when category + relaxed filters both return 0 rows.
+ * Lets pure semantic similarity do the heavy lifting with minimal SQL constraints. */
+async function vectorSearchBareMinimum(
+  intent: ExtractedIntent,
+  excludeIds: string[],
+  excludeHandleIds: string[],
+  brand?: string | null,
+): Promise<RawProductRow[]> {
+  const embedding = await embedText(intent.semantic_query);
+  if (!embedding) return [];
+
+  const clauses: string[] = ['"isActive" = true', '"embedding" IS NOT NULL'];
+  const params: unknown[] = [];
+  let p = 1;
+
+  if (brand?.trim()) {
+    clauses.push(`"brand" ILIKE $${p++}`);
+    params.push(`%${brand.trim()}%`);
+  }
+
+  if (intent.gender) {
+    clauses.push(
+      `("componentTags" IS NULL OR "componentTags"->>'gender' IS NULL OR LOWER("componentTags"->>'gender') = 'unisex' OR LOWER("componentTags"->>'gender') = $${p++})`,
+    );
+    params.push(intent.gender.toLowerCase());
+  }
+
+  const cleanExcludeIds = excludeIds.filter(Boolean);
+  if (cleanExcludeIds.length > 0) {
+    clauses.push(`id != ALL($${p++}::text[])`);
+    params.push(cleanExcludeIds);
+  }
+
+  const cleanExcludeHandleIds = excludeHandleIds.filter(Boolean);
+  if (cleanExcludeHandleIds.length > 0) {
+    clauses.push(`"handleId" != ALL($${p++}::text[])`);
+    params.push(cleanExcludeHandleIds);
+  }
+
+  const vectorJson = JSON.stringify(embedding);
+  const vp = p;
+  params.push(vectorJson);
+
+  const sql = `
+    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags",
+           (1 - ("embedding" <=> $${vp}::vector)) AS similarity
+    FROM "Product"
+    WHERE ${clauses.join(' AND ')}
+    ORDER BY "embedding" <=> $${vp}::vector
+    LIMIT ${VECTOR_RECALL_LIMIT}
+  `;
+
+  const tSql = Date.now();
+  const raw = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params);
+  logger.info(
+    { ms: Date.now() - tSql, rowCount: raw.length },
+    '[RecEng Stage2] Bare-minimum vector query complete',
+  );
+
+  const rows: RawProductRow[] = [];
+  for (const r of raw) {
+    const mapped = mapRow(r);
+    if (mapped) rows.push(mapped);
+  }
+  return rows;
+}
+
 async function ilikeSearch(
   intent: ExtractedIntent,
   excludeIds: string[],
@@ -199,8 +311,14 @@ async function ilikeSearch(
   let p = 1;
 
   if (intent.legacyCategory) {
-    clauses.push(`"category"::text = $${p++}`);
-    params.push(intent.legacyCategory);
+    const subCatPatterns = CATEGORY_SUBCATEGORY_PATTERNS[intent.legacyCategory];
+    if (subCatPatterns?.length) {
+      clauses.push(
+        `EXISTS (SELECT 1 FROM unnest($${p++}::text[]) AS term WHERE "componentTags"->>'subCategory' ILIKE term OR "componentTags"->>'allTags' ILIKE term OR "subCategory" ILIKE term OR "allTags" ILIKE term)`,
+      );
+      params.push(subCatPatterns);
+    }
+    // CLOTHING_FASHION: no filter (all products share this category)
   }
 
   const searchTerm = intent.subCategory ?? intent.type ?? intent.semantic_query;
@@ -255,10 +373,12 @@ async function ilikeSearch(
 }
 
 /**
- * Main search entry point.
- * 1. Vector search with hard filters (category, brand, gender, fit, tags)
- * 2. Relaxed vector search (drop subCategory/type/tag/fit filters, keep category+brand+gender) if 0 rows
- * 3. ILIKE fallback if still 0 rows
+ * Main search entry point — 4-tier fallback:
+ * 1. Strict:       all filters (subCategory patterns + brand + gender + type/tags/colors/fit)
+ * 2. Relaxed:      drop subCategory/type/tags/colors/fit; keep category patterns + brand + gender
+ * 3. Bare-minimum: drop everything except brand + gender; pure semantic similarity
+ *                  (catches cases where category patterns don't match stored subCategory values)
+ * 4. ILIKE:        last resort text search, no embeddings required
  */
 export async function runFilteredSearch(
   intent: ExtractedIntent,
@@ -274,22 +394,32 @@ export async function runFilteredSearch(
     return { rows, searchMode: 'ilike_no_openai' };
   }
 
-  // Stage 2a: strict vector search
+  // Tier 1: strict vector search (all filters)
   let rows = await vectorSearch(intent, excludeIds, excludeHandleIds, false, brand, fitPreference);
   if (rows.length > 0) return { rows, searchMode: 'vector_strict' };
 
-  const hasStrictFilters = Boolean(
-    intent.subCategory || intent.type || intent.tags_must_include.length > 0 || (intent.colors && intent.colors.length > 0) || fitPreference,
+  const hasNonCategoryFilters = Boolean(
+    intent.subCategory || intent.type || intent.tags_must_include.length > 0 ||
+    (intent.colors && intent.colors.length > 0) || fitPreference,
   );
 
-  // Stage 2b: relaxed vector search (drop subCategory/type/tag/fit filters, keep category+brand+gender)
-  if (hasStrictFilters) {
+  // Tier 2: relaxed vector (drop subCategory/type/tags/colors/fit, keep category pattern + brand + gender)
+  if (hasNonCategoryFilters) {
     logger.info('[RecEng Stage2] Strict vector returned 0 rows — trying relaxed vector search');
     rows = await vectorSearch(intent, excludeIds, excludeHandleIds, true, brand);
     if (rows.length > 0) return { rows, searchMode: 'vector_relaxed' };
   }
 
-  // Stage 2c: ILIKE fallback
+  // Tier 3: bare-minimum vector (drop category patterns too — only brand + gender)
+  // Handles the case where the category filter itself is the bottleneck (e.g. subCategory
+  // values in DB don't match our ILIKE patterns, or product is miscategorised).
+  if (intent.legacyCategory) {
+    logger.info('[RecEng Stage2] Category-filtered vector returned 0 rows — trying bare-minimum vector (brand+gender only)');
+    rows = await vectorSearchBareMinimum(intent, excludeIds, excludeHandleIds, brand);
+    if (rows.length > 0) return { rows, searchMode: 'vector_bare_minimum' };
+  }
+
+  // Tier 4: ILIKE text fallback (no embeddings required)
   logger.info('[RecEng Stage2] Vector search returned 0 rows — trying ILIKE fallback');
   rows = await ilikeSearch(intent, excludeIds, excludeHandleIds, limit);
   return { rows, searchMode: rows.length > 0 ? 'ilike_fallback' : 'empty' };
