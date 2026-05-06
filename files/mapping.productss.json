@@ -1,0 +1,17 @@
+{
+  "taxonomyPath": "catalogTaxonomy.json",
+  "csvBrandOnly": true,
+  "columnMap": {
+    "name": "name",
+    "configId": "config_id",
+    "barcode": "barcode",
+    "description": "description",
+    "imageUrl": "primary_image_url",
+    "skuId": "sku_id",
+    "brand": "brand_name"
+  },
+  "defaults": {
+    "category": "CLOTHING_FASHION",
+    "generalTag": "Product"
+  }
+}

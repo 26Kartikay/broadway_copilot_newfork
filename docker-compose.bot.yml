@@ -12,6 +12,9 @@
 #
 # Optional tunnel:
 #   docker compose -f docker-compose.bot.yml --profile tunnel up -d
+#
+# Faster rebuilds (BuildKit caches npm inside the Dockerfile):
+#   echo 'NGROK_DOMAIN=' >> .env   # silences NGROK_DOMAIN unset warning if you do not use ngrok profile
 
 name: broadway-bot
 
@@ -191,7 +194,7 @@ services:
       - tunnel
     command:
       - http
-      - --domain=${NGROK_DOMAIN}
+      - --domain=${NGROK_DOMAIN:-}
       - "app:${PORT:-8080}"
       - --log=stdout
       - --log-level=warn

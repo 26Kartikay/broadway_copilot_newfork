@@ -38,6 +38,7 @@
     "automation:bulk-sync": "node dist/automation/scripts/bulkCatalogSync.js",
     "automation:bulk-sync:dev": "ts-node --transpile-only src/automation/scripts/bulkCatalogSync.ts",
     "automation:patch-metadata:dev": "ts-node --transpile-only src/automation/scripts/patchProductMetadataFromCsv.ts",
+    "automation:count-pending-embed:dev": "ts-node --transpile-only src/automation/scripts/countPendingEmbeddingProducts.ts",
     "automation:bulk-10k": "bash scripts/bulk-tag-embed-10k.sh"
   },
   "keywords": [],

@@ -9,7 +9,8 @@
  *   npx ts-node --transpile-only src/automation/scripts/patchProductMetadataFromCsv.ts \\
  *     --csv ./files/productss.csv \\
  *     --mapping ./files/catalogTaxonomy.json \\
- *     [--limit N]  # only first N data rows from the CSV
+ *     [--limit N]           # only first N data rows from the CSV
+ *     [--minimal]           # only set name + componentTags.csvConfigId from CSV; leave other columns as-is (no searchDoc rewrite)
  */
 
 import 'dotenv/config';
@@ -17,7 +18,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import Papa from 'papaparse';
 import type { Prisma } from '@prisma/client';
-import { loadBulkCatalogMapping, rowToSeedProductInput } from '../../lib/automation/bulkCatalogMapping';
+import {
+  cell,
+  loadBulkCatalogMapping,
+  rowToSeedProductInput,
+  type BulkCatalogMappingFile,
+} from '../../lib/automation/bulkCatalogMapping';
 import {
   loadCatalogTaxonomyJson,
   resolveTaxonomyFilePath,
@@ -30,12 +36,14 @@ function parseArgs(argv: string[]) {
   let mappingPath: string | undefined;
   let dryRun = false;
   let limit: number | undefined;
+  let minimal = false;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] ?? '';
     if (a === '--csv') csvPath = argv[++i];
     else if (a === '--mapping') mappingPath = argv[++i];
     else if (a === '--dry-run') dryRun = true;
+    else if (a === '--minimal') minimal = true;
     else if (a === '--limit' || a === '--max') {
       const n = parseInt(argv[++i] ?? '', 10);
       if (!Number.isNaN(n) && n > 0) limit = n;
@@ -47,6 +55,7 @@ function parseArgs(argv: string[]) {
     mappingPath: mappingPath ?? path.resolve(process.cwd(), 'files/catalogTaxonomy.json'),
     dryRun,
     limit,
+    minimal,
   };
 }
 
@@ -71,6 +80,80 @@ function parseCsvFile(resolved: string): Record<string, unknown>[] {
   return parsed.data.filter((row) => Object.keys(row).some((k) => String(row[k] ?? '').trim()));
 }
 
+async function patchOneRowMinimal(
+  row: Record<string, unknown>,
+  mapping: BulkCatalogMappingFile,
+  args: { dryRun: boolean },
+): Promise<
+  | { kind: 'skip'; reason: 'no_barcode' | 'nothing_to_apply' | 'missing_product' | 'unchanged' }
+  | { kind: 'update'; needsEmbed: boolean; barcode: string; dryLine: string }
+> {
+  const m = mapping.columnMap;
+  const barcode = cell(row, m.barcode);
+  if (!barcode) return { kind: 'skip', reason: 'no_barcode' };
+
+  const nameCsvRaw = cell(row, m.name).trim();
+  const configCsvRaw = cell(row, m.configId).trim();
+  if (!nameCsvRaw && !configCsvRaw) return { kind: 'skip', reason: 'nothing_to_apply' };
+
+  const existing = await prisma.product.findFirst({
+    where: { barcode },
+    select: {
+      id: true,
+      name: true,
+      componentTags: true,
+    },
+  });
+  if (!existing) return { kind: 'skip', reason: 'missing_product' };
+
+  const prevTags =
+    existing.componentTags &&
+    typeof existing.componentTags === 'object' &&
+    !Array.isArray(existing.componentTags)
+      ? (existing.componentTags as Record<string, unknown>)
+      : {};
+
+  const prevConfig = typeof prevTags.csvConfigId === 'string' ? prevTags.csvConfigId.trim() : '';
+  let mergedTags = { ...prevTags };
+  let configApplied = false;
+  if (configCsvRaw && configCsvRaw !== prevConfig) {
+    mergedTags = { ...mergedTags, csvConfigId: configCsvRaw };
+    configApplied = true;
+  }
+
+  const nextName = nameCsvRaw || existing.name;
+  const nameChanged = Boolean(nameCsvRaw) && nextName !== existing.name;
+
+  if (!configApplied && !nameChanged) {
+    return { kind: 'skip', reason: 'unchanged' };
+  }
+
+  /** Config is for dedupe; DB-only embed rebuilds doc from title/fields — only name changes force re-vector. */
+  const needsEmbed = nameChanged;
+
+  const dryLine = `[dry-run] ${barcode} name=${nameChanged} configApplied=${configApplied} embed_pending=${needsEmbed}`;
+
+  if (args.dryRun) {
+    return { kind: 'update', needsEmbed, barcode, dryLine };
+  }
+
+  await prisma.product.update({
+    where: { id: existing.id },
+    data: {
+      ...(nameChanged ? { name: nextName } : {}),
+      componentTags: mergedTags as Prisma.InputJsonValue,
+      ...(needsEmbed
+        ? {
+            embeddingStatus: 'pending',
+            automationErrors: { set: [] },
+          }
+        : {}),
+    },
+  });
+
+  return { kind: 'update', needsEmbed, barcode, dryLine };
+}
+
 function stableJson(obj: unknown): string {
   if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
   if (Array.isArray(obj)) return JSON.stringify(obj);
@@ -85,9 +168,10 @@ async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (!args.csvPath) {
     console.error(
-      'Usage: patchProductMetadataFromCsv --csv <file.csv> [--mapping mapping.json] [--limit N] [--dry-run]\n' +
+      'Usage: patchProductMetadataFromCsv --csv <file.csv> [--mapping mapping.json] [--limit N] [--minimal] [--dry-run]\n' +
         '  Uses the same bulk mapping as automation:bulk-sync; rows keyed by barcode.\n' +
-        '  --limit N: process only the first N data rows from the CSV.',
+        '  --limit N: process only the first N data rows from the CSV.\n' +
+        '  --minimal: only updates name + csvConfigId from CSV (does not overwrite other DB fields).',
     );
     return 1;
   }
@@ -127,12 +211,28 @@ async function main(): Promise<number> {
   let updated = 0;
   let skippedNoBarcode = 0;
   let skippedMissingProduct = 0;
+  let skippedNothingToApply = 0;
   let unchanged = 0;
   let pendingEmbed = 0;
 
-  const applyTags = Boolean(taxonomy);
+  const applyTags = Boolean(taxonomy) && !args.minimal;
 
   for (const row of rows) {
+    if (args.minimal) {
+      const res = await patchOneRowMinimal(row, mapping, { dryRun: args.dryRun });
+      if (res.kind === 'skip') {
+        if (res.reason === 'no_barcode') skippedNoBarcode++;
+        else if (res.reason === 'missing_product') skippedMissingProduct++;
+        else if (res.reason === 'nothing_to_apply') skippedNothingToApply++;
+        else unchanged++;
+        continue;
+      }
+      if (args.dryRun && res.dryLine) console.log(res.dryLine);
+      updated++;
+      if (res.needsEmbed) pendingEmbed++;
+      continue;
+    }
+
     const input = rowToSeedProductInput(row, mapping, applyTags, taxonomy);
     if (!input) {
       skippedNoBarcode++;
@@ -201,8 +301,8 @@ async function main(): Promise<number> {
   }
 
   console.log(
-    `[patchProductMetadata] csv_rows=${rows.length}${args.limit != null ? ` (of ${totalInFile} in file)` : ''} updated=${updated} unchanged=${unchanged} ` +
-      `skip_no_barcode=${skippedNoBarcode} skip_missing_product=${skippedMissingProduct} ` +
+    `[patchProductMetadata] mode=${args.minimal ? 'minimal' : 'full'} csv_rows=${rows.length}${args.limit != null ? ` (of ${totalInFile} in file)` : ''} updated=${updated} unchanged=${unchanged} ` +
+      `skip_no_barcode=${skippedNoBarcode} skip_missing_product=${skippedMissingProduct} skip_empty_row=${skippedNothingToApply} ` +
       `rows_needing_embed=${pendingEmbed}${args.dryRun ? ' (dry-run)' : ''}`,
   );
   if (pendingEmbed > 0 && !args.dryRun) {
