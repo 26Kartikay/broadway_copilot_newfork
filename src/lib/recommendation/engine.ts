@@ -3,7 +3,11 @@ import { logger } from '../../utils/logger';
 import { detectRecipient } from './recipientDetector';
 import { extractIntent } from './intentExtractor';
 import { runFilteredSearch } from './productFilter';
-import { dedupeKeyFromProduct } from './configDedupe';
+import {
+  configIdFromComponentTags,
+  dedupeKeyFromProduct,
+  skuIdFromComponentTags,
+} from './configDedupe';
 import { computeScore } from './scorer';
 import type {
   ExtractedIntent,
@@ -59,18 +63,6 @@ function buildProductSummary(s: ScoredRow): string {
   ]
     .filter(Boolean)
     .join(' | ');
-}
-
-function skuIdFromTags(tags: Record<string, unknown>): string {
-  const raw = tags.csvSkuId ?? tags.skuId ?? tags.sku_id;
-  if (raw == null) return '';
-  return String(raw).trim();
-}
-
-function configIdFromTags(tags: Record<string, unknown>): string {
-  const raw = tags.csvConfigId ?? tags.configId;
-  if (raw == null) return '';
-  return String(raw).trim();
 }
 
 function summarizeFilters(intent: ExtractedIntent): string {
@@ -244,8 +236,9 @@ export async function runRecommendationEngine(
     colors: s.colors,
     imageUrl: s.imageUrl,
     productLink: s.productLink,
-    skuId: skuIdFromTags(s.componentTags),
-    configId: configIdFromTags(s.componentTags),
+    skuId: skuIdFromComponentTags(s.componentTags),
+    configId: configIdFromComponentTags(s.componentTags),
+    dedupeKey: dedupeKeyFromProduct(s.componentTags, s.handleId),
     relevance_score: Math.round(s.final_score * 1000) / 1000,
     match_reason: s.match_reason,
   }));
@@ -275,25 +268,23 @@ export async function runRecommendationEngine(
     result_count: results.length,
   };
 
-  const suggestedHandleIds = results.map((r) => r.handleId);
-  const uniqueHandles = new Set(suggestedHandleIds.filter(Boolean));
+  const uniqueDedupeKeys = new Set(results.map((r) => r.dedupeKey).filter(Boolean));
 
   logger.info(
     {
       ms: Date.now() - tStart,
       result_count: results.length,
-      suggested_handle_ids: suggestedHandleIds,
-      unique_handle_id_count: uniqueHandles.size,
-      duplicate_handle_ids_present: suggestedHandleIds.length !== uniqueHandles.size,
+      unique_dedupe_key_count: uniqueDedupeKeys.size,
       search_mode: searchMode,
       gender_filter: genderFilterUsed,
       profile_used: profileUsed,
-      /** One entry per returned row — verify config-level dedupe (csvConfigId / csvSkuId). */
+      /** Dedupe is by `dedupeKey` (`cfg:configId` or fallback `hid:handleId`), not by handle alone. */
       recommended_items: results.map((r) => ({
         id: r.id,
         name: r.name.length > 100 ? `${r.name.slice(0, 100)}…` : r.name,
         configId: r.configId || null,
         skuId: r.skuId || null,
+        dedupeKey: r.dedupeKey,
         relevance_score: r.relevance_score,
       })),
       top_result: results[0]
@@ -302,6 +293,7 @@ export async function runRecommendationEngine(
             score: results[0].relevance_score,
             configId: results[0].configId || null,
             skuId: results[0].skuId || null,
+            dedupeKey: results[0].dedupeKey,
           }
         : null,
     },

@@ -2,7 +2,11 @@ import OpenAI from 'openai';
 import { getPaletteData, resolveSeasonalPalette } from '../../data/seasonalPalettes';
 import { openaiRerankByQuery } from '../../lib/openaiRerank';
 import { prisma } from '../../lib/prisma';
-import { dedupeKeyFromProduct } from '../../lib/recommendation/configDedupe';
+import {
+  configIdFromComponentTags,
+  dedupeKeyFromProduct,
+  skuIdFromComponentTags,
+} from '../../lib/recommendation/configDedupe';
 import { logger } from '../../utils/logger';
 
 export interface SearchCatalogInput {
@@ -36,6 +40,12 @@ export interface FormattedProduct {
   occasions: string[];
   imageUrl: string;
   productLink: string;
+  /** From `componentTags.csvSkuId` — which SKU was chosen after config dedupe. */
+  skuId?: string;
+  /** From `componentTags.csvConfigId` — dedupe groups by this when set. */
+  configId?: string;
+  /** Internal dedupe key (`cfg:…` or `hid:…`). If `hid:`, each row is separate (no cross-SKU merge). */
+  dedupeKey?: string;
 }
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -376,20 +386,27 @@ async function searchCatalogVector(
         `${c.name} | ${c.brand} | ${c.generalTag} | cat:${c.category} | colors:${c.colors.slice(0, 6).join(',')}`,
     )) ?? scored;
 
-  return reranked.slice(0, Math.min(limit, MAX_LIMIT)).map((r) => ({
-    id: r.id,
-    handleId: r.handleId,
-    name: r.name,
-    brand: r.brand,
-    category: r.category,
-    generalTag: r.generalTag,
-    style: r.style,
-    fit: r.fit,
-    colors: r.colors,
-    occasions: r.occasions,
-    imageUrl: r.imageUrl,
-    productLink: r.productLink,
-  }));
+  return reranked.slice(0, Math.min(limit, MAX_LIMIT)).map((r) => {
+    const sku = skuIdFromComponentTags(r.componentTags);
+    const cfg = configIdFromComponentTags(r.componentTags);
+    return {
+      id: r.id,
+      handleId: r.handleId,
+      name: r.name,
+      brand: r.brand,
+      category: r.category,
+      generalTag: r.generalTag,
+      style: r.style,
+      fit: r.fit,
+      colors: r.colors,
+      occasions: r.occasions,
+      imageUrl: r.imageUrl,
+      productLink: r.productLink,
+      dedupeKey: dedupeKeyFromProduct(r.componentTags, r.handleId),
+      ...(sku ? { skuId: sku } : {}),
+      ...(cfg ? { configId: cfg } : {}),
+    };
+  });
 }
 
 /** Legacy substring fallback when embeddings unavailable or recall empty. */
@@ -471,20 +488,29 @@ async function searchCatalogIlike(
       seenKeys.add(key);
       return true;
     })
-    .map((p) => ({
-      id: String(p.id),
-      handleId: String(p.handleId ?? p.handleid ?? ''),
-      name: String(p.name),
-      brand: String(p.brand),
-      category: String(p.category),
-      generalTag: String(p.generalTag ?? ''),
-      style: (p.style as string | null) ?? null,
-      fit: (p.fit as string | null) ?? null,
-      colors: Array.isArray(p.colors) ? (p.colors as string[]) : [],
-      occasions: Array.isArray(p.occasions) ? (p.occasions as string[]) : [],
-      imageUrl: String(p.imageUrl ?? ''),
-      productLink: String(p.productLink ?? ''),
-    }));
+    .map((p) => {
+      const ct = p.componentTags ?? p.componenttags;
+      const hid = String(p.handleId ?? p.handleid ?? '');
+      const sku = skuIdFromComponentTags(ct);
+      const cfg = configIdFromComponentTags(ct);
+      return {
+        id: String(p.id),
+        handleId: hid,
+        name: String(p.name),
+        brand: String(p.brand),
+        category: String(p.category),
+        generalTag: String(p.generalTag ?? ''),
+        style: (p.style as string | null) ?? null,
+        fit: (p.fit as string | null) ?? null,
+        colors: Array.isArray(p.colors) ? (p.colors as string[]) : [],
+        occasions: Array.isArray(p.occasions) ? (p.occasions as string[]) : [],
+        imageUrl: String(p.imageUrl ?? ''),
+        productLink: String(p.productLink ?? ''),
+        dedupeKey: dedupeKeyFromProduct(ct, hid),
+        ...(sku ? { skuId: sku } : {}),
+        ...(cfg ? { configId: cfg } : {}),
+      };
+    });
 }
 
 export type SearchCatalogResult = {
@@ -538,18 +564,24 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
     }
 
     if (products.length > 0) {
-      const suggestedHandleIds = products.map((p) => p.handleId);
-      const uniqueHandles = new Set(suggestedHandleIds.filter(Boolean));
+      const dedupeHidOnly = products.filter((p) => (p.dedupeKey ?? '').startsWith('hid:')).length;
       logger.info(
         {
           resultCount: products.length,
           limit,
-          suggested_handle_ids: suggestedHandleIds,
-          unique_handle_id_count: uniqueHandles.size,
-          empty_handle_id_count: suggestedHandleIds.filter((h) => !h).length,
-          duplicate_handle_ids_present: suggestedHandleIds.filter(Boolean).length !== uniqueHandles.size,
+          dedupe_note:
+            dedupeHidOnly > 0
+              ? `${dedupeHidOnly} row(s) use dedupeKey hid:* (no csvConfigId on Product — unique handle per SKU, not merged by style). Seed/patch csvConfigId onto componentTags.csvConfigId to collapse variants.`
+              : 'Dedupe keys use cfg:* (csvConfigId present).',
+          catalog_items: products.map((p) => ({
+            id: p.id,
+            name: p.name.length > 100 ? `${p.name.slice(0, 100)}…` : p.name,
+            configId: p.configId ?? null,
+            skuId: p.skuId ?? null,
+            dedupeKey: p.dedupeKey ?? null,
+          })),
         },
-        'Catalog: suggested products (handle id audit)',
+        'Catalog: suggested products (config + sku + dedupe key)',
       );
       if (resolvedViaEmbedding) {
         logger.info(

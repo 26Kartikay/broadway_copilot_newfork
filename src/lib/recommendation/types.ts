@@ -73,6 +73,8 @@ export interface RecommendedProduct {
   skuId: string;
   /** Style/config key for dedupe (`componentTags.csvConfigId`). */
   configId: string;
+  /** Actual dedupe group: `cfg:*` when config present, else `hid:*`. */
+  dedupeKey: string;
   relevance_score: number;
   match_reason: string;
 }

@@ -13,3 +13,25 @@ export function dedupeKeyFromProduct(componentTags: unknown, handleId: string): 
   const h = (handleId ?? '').trim();
   return `hid:${h || '_'}`;
 }
+
+/** External SKU from sheet → `componentTags.csvSkuId`. */
+export function skuIdFromComponentTags(componentTags: unknown): string {
+  const tags =
+    componentTags && typeof componentTags === 'object' && !Array.isArray(componentTags)
+      ? (componentTags as Record<string, unknown>)
+      : {};
+  const raw = tags.csvSkuId ?? tags.skuId ?? tags.sku_id;
+  if (raw == null) return '';
+  return String(raw).trim();
+}
+
+/** Style/config group from sheet → `componentTags.csvConfigId`. */
+export function configIdFromComponentTags(componentTags: unknown): string {
+  const tags =
+    componentTags && typeof componentTags === 'object' && !Array.isArray(componentTags)
+      ? (componentTags as Record<string, unknown>)
+      : {};
+  const raw = tags.csvConfigId ?? tags.configId;
+  if (raw == null) return '';
+  return String(raw).trim();
+}
