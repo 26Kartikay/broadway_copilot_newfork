@@ -24,6 +24,11 @@ export interface BulkCatalogColumnMap {
   name?: CsvHeaderSpec;
   /** External SKU id from your sheet (stored in componentTags.csvSkuId). */
   skuId?: CsvHeaderSpec;
+  /**
+   * Style/config group id — multiple SKUs can share one value.
+   * Stored as componentTags.csvConfigId for deduping recommendations to one SKU per config.
+   */
+  configId?: CsvHeaderSpec;
   brand?: CsvHeaderSpec;
   imageUrl?: CsvHeaderSpec;
   productLink?: CsvHeaderSpec;
@@ -343,6 +348,7 @@ export function rowToSeedProductInput(
   if (!barcode) return null;
 
   const skuId = cell(row, m.skuId);
+  const configId = cell(row, m.configId);
   const descriptionRaw = cell(row, m.description);
   const description = sanitizeDescriptionForProductText(descriptionRaw);
   const nameFromCsvRaw = cell(row, m.name);
@@ -393,11 +399,13 @@ export function rowToSeedProductInput(
       : {}),
     csvDescription: descriptionRaw || undefined,
     ...(skuId ? { csvSkuId: skuId } : {}),
+    ...(configId ? { csvConfigId: configId } : {}),
   };
 
   const parts: string[] = [];
   parts.push(name);
   parts.push(`Brand: ${brand}`);
+  if (configId) parts.push(`Config: ${configId}`);
   if (skuId) parts.push(`SKU: ${skuId}`);
   if (applyTags && tags.legacyCategory) {
     parts.push(`Category: ${tags.legacyCategory}`);

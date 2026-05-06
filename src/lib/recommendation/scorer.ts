@@ -4,12 +4,70 @@ function getField(componentTags: Record<string, unknown>, key: string): string {
   return String(componentTags[key] ?? '').toLowerCase();
 }
 
+const STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'your',
+  'this',
+  'that',
+  'some',
+  'any',
+  'you',
+  'are',
+  'was',
+  'has',
+  'have',
+  'but',
+  'not',
+]);
+
+function tokenizeForTitleMatch(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+/** True when catalog name overlaps the shopper query enough to call out a title match. */
+export function productTitleMatchesSearch(name: string, ...queries: (string | undefined | null)[]): boolean {
+  const n = (name ?? '').trim();
+  if (!n) return false;
+  const titleTok = new Set(tokenizeForTitleMatch(n));
+  if (titleTok.size === 0) return false;
+  const lowerName = n.toLowerCase();
+
+  for (const raw of queries) {
+    const q = (raw ?? '').trim();
+    if (q.length < 2) continue;
+    const lowerQ = q.toLowerCase();
+
+    if (lowerName.length >= 4 && lowerQ.includes(lowerName)) return true;
+    if (lowerQ.length >= 4 && lowerName.includes(lowerQ)) return true;
+
+    const qTok = tokenizeForTitleMatch(q);
+    let overlap = 0;
+    for (const t of qTok) {
+      if (titleTok.has(t)) overlap++;
+    }
+    if (overlap >= 2) return true;
+  }
+  return false;
+}
+
 /**
  * Compute final_score = (0.7 * vector_similarity) + (0.3 * tag_match_bonus)
  * tag_match_bonus = soft filter hits / total soft filters set (0–1)
  * Soft filters: occasion, colorPalette, ageGroup (never hard filters)
  */
-export function computeScore(row: RawProductRow, intent: ExtractedIntent): ScoredRow {
+export function computeScore(
+  row: RawProductRow,
+  intent: ExtractedIntent,
+  opts?: { rawUserQuery?: string },
+): ScoredRow {
   const vectorSim = Math.max(0, Math.min(1, row.similarity));
   const allTags = getField(row.componentTags, 'allTags');
 
@@ -37,8 +95,14 @@ export function computeScore(row: RawProductRow, intent: ExtractedIntent): Score
   const tag_match_bonus = softChecks.length > 0 ? matchedSoft / softChecks.length : 1.0;
   const final_score = 0.7 * vectorSim + 0.3 * tag_match_bonus;
 
+  const titleMatches = productTitleMatchesSearch(row.name, intent.semantic_query, opts?.rawUserQuery);
+
   // Build human-readable match reason
   const reasonParts: string[] = [];
+  if (titleMatches) {
+    const snippet = `${row.name.slice(0, 80)}${row.name.length > 80 ? '…' : ''}`;
+    reasonParts.push(`product title "${snippet}" matches your search`);
+  }
   if (intent.legacyCategory) reasonParts.push(intent.legacyCategory.replace(/_/g, ' ').toLowerCase());
   if (intent.subCategory) reasonParts.push(intent.subCategory);
   if (intent.type) reasonParts.push(intent.type);

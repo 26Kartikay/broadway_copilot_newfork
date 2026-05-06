@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger';
 import { detectRecipient } from './recipientDetector';
 import { extractIntent } from './intentExtractor';
 import { runFilteredSearch } from './productFilter';
+import { dedupeKeyFromProduct } from './configDedupe';
 import { computeScore } from './scorer';
 import type {
   ExtractedIntent,
@@ -153,14 +154,15 @@ export async function runRecommendationEngine(
   }
 
   // ── Stage 2: Scoring ─────────────────────────────────────────────────────────
-  const scoredAll = rawRows.map((row) => computeScore(row, intent));
+  const scoredAll = rawRows.map((row) => computeScore(row, intent, { rawUserQuery: input.user_query }));
   scoredAll.sort((a, b) => b.final_score - a.final_score);
 
-  // Deduplicate by handleId — keep the highest-scored variant of each product
-  const seenHandles = new Set<string>();
+  // Deduplicate by config id when present (one SKU per style/config); else fall back to handleId.
+  const seenKeys = new Set<string>();
   const scored = scoredAll.filter((s) => {
-    if (!s.handleId || seenHandles.has(s.handleId)) return false;
-    seenHandles.add(s.handleId);
+    const key = dedupeKeyFromProduct(s.componentTags, s.handleId);
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 

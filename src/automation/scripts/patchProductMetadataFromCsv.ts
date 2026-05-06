@@ -1,0 +1,222 @@
+/**
+ * Apply name + config_id (and other mapped CSV columns) to existing Product rows by barcode
+ * without a full catalog re-import or re-tagging.
+ *
+ * Sets embeddingStatus=pending only when searchDoc or merged tags materially change
+ * (same behavior as editing title/config would affect embeddings).
+ *
+ * Usage:
+ *   npx ts-node --transpile-only src/automation/scripts/patchProductMetadataFromCsv.ts \\
+ *     --csv ./files/productss.csv \\
+ *     --mapping ./files/catalogTaxonomy.json \\
+ *     [--limit N]  # only first N data rows from the CSV
+ */
+
+import 'dotenv/config';
+import * as fs from 'fs';
+import * as path from 'path';
+import Papa from 'papaparse';
+import type { Prisma } from '@prisma/client';
+import { loadBulkCatalogMapping, rowToSeedProductInput } from '../../lib/automation/bulkCatalogMapping';
+import {
+  loadCatalogTaxonomyJson,
+  resolveTaxonomyFilePath,
+  type CatalogTaxonomyIndex,
+} from '../../lib/automation/catalogTaxonomy';
+import { prisma } from '../../lib/prisma';
+
+function parseArgs(argv: string[]) {
+  let csvPath: string | undefined;
+  let mappingPath: string | undefined;
+  let dryRun = false;
+  let limit: number | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i] ?? '';
+    if (a === '--csv') csvPath = argv[++i];
+    else if (a === '--mapping') mappingPath = argv[++i];
+    else if (a === '--dry-run') dryRun = true;
+    else if (a === '--limit' || a === '--max') {
+      const n = parseInt(argv[++i] ?? '', 10);
+      if (!Number.isNaN(n) && n > 0) limit = n;
+    }
+  }
+
+  return {
+    csvPath,
+    mappingPath: mappingPath ?? path.resolve(process.cwd(), 'files/catalogTaxonomy.json'),
+    dryRun,
+    limit,
+  };
+}
+
+function parseCsvFile(resolved: string): Record<string, unknown>[] {
+  const file = fs.readFileSync(resolved, 'utf8');
+  const firstLine = file.split(/\r?\n/)[0] ?? '';
+  const delimiter =
+    firstLine.includes('\t') && !firstLine.includes(',') ? '\t' : ',';
+
+  const parsed = Papa.parse<Record<string, unknown>>(file, {
+    header: true,
+    skipEmptyLines: true,
+    delimiter,
+    transformHeader: (h) => h.replace(/^\uFEFF/, '').replace(/\s+$/, '').trim(),
+  });
+
+  const fatalErrors = parsed.errors.filter((e) => e.code !== 'UndetectableDelimiter');
+  if (fatalErrors.length > 0) {
+    throw new Error(`CSV parse errors: ${JSON.stringify(fatalErrors)}`);
+  }
+
+  return parsed.data.filter((row) => Object.keys(row).some((k) => String(row[k] ?? '').trim()));
+}
+
+function stableJson(obj: unknown): string {
+  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) return JSON.stringify(obj);
+  const o = obj as Record<string, unknown>;
+  const keys = Object.keys(o).sort();
+  const sorted: Record<string, unknown> = {};
+  for (const k of keys) sorted[k] = o[k];
+  return JSON.stringify(sorted);
+}
+
+async function main(): Promise<number> {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.csvPath) {
+    console.error(
+      'Usage: patchProductMetadataFromCsv --csv <file.csv> [--mapping mapping.json] [--limit N] [--dry-run]\n' +
+        '  Uses the same bulk mapping as automation:bulk-sync; rows keyed by barcode.\n' +
+        '  --limit N: process only the first N data rows from the CSV.',
+    );
+    return 1;
+  }
+
+  const resolvedCsv = path.resolve(args.csvPath);
+  if (!fs.existsSync(resolvedCsv)) {
+    console.error(`File not found: ${resolvedCsv}`);
+    return 1;
+  }
+
+  const mappingResolved = path.resolve(args.mappingPath);
+  if (!fs.existsSync(mappingResolved)) {
+    console.error(`Mapping not found: ${mappingResolved}`);
+    return 1;
+  }
+
+  const mapping = loadBulkCatalogMapping(mappingResolved);
+
+  let taxonomy: CatalogTaxonomyIndex | undefined;
+  if (mapping.taxonomyPath?.trim()) {
+    const taxPath = resolveTaxonomyFilePath(mappingResolved, mapping.taxonomyPath.trim());
+    taxonomy = loadCatalogTaxonomyJson(taxPath);
+  } else if (mapping.taxonomyInline) {
+    taxonomy = loadCatalogTaxonomyJson(mappingResolved);
+  }
+
+  const allRows = parseCsvFile(resolvedCsv);
+  const totalInFile = allRows.length;
+  let rows = allRows;
+  if (args.limit != null) {
+    rows = allRows.slice(0, args.limit);
+    console.log(
+      `[patchProductMetadata] --limit ${args.limit}: using ${rows.length} of ${totalInFile} CSV rows`,
+    );
+  }
+
+  let updated = 0;
+  let skippedNoBarcode = 0;
+  let skippedMissingProduct = 0;
+  let unchanged = 0;
+  let pendingEmbed = 0;
+
+  const applyTags = Boolean(taxonomy);
+
+  for (const row of rows) {
+    const input = rowToSeedProductInput(row, mapping, applyTags, taxonomy);
+    if (!input) {
+      skippedNoBarcode++;
+      continue;
+    }
+
+    const existing = await prisma.product.findFirst({
+      where: { barcode: input.barcode },
+      select: {
+        id: true,
+        name: true,
+        searchDoc: true,
+        componentTags: true,
+      },
+    });
+
+    if (!existing) {
+      skippedMissingProduct++;
+      continue;
+    }
+
+    const prevTags =
+      existing.componentTags &&
+      typeof existing.componentTags === 'object' &&
+      !Array.isArray(existing.componentTags)
+        ? (existing.componentTags as Record<string, unknown>)
+        : {};
+    const mergedTags: Record<string, unknown> = { ...prevTags, ...input.componentTags };
+
+    const tagsChanged = stableJson(mergedTags) !== stableJson(prevTags);
+    const nameChanged = existing.name !== input.name;
+    const searchDocChanged = existing.searchDoc !== input.searchDoc;
+
+    if (!tagsChanged && !nameChanged && !searchDocChanged) {
+      unchanged++;
+      continue;
+    }
+
+    const needsEmbed = searchDocChanged || nameChanged;
+
+    if (args.dryRun) {
+      console.log(
+        `[dry-run] ${input.barcode} name=${nameChanged} searchDoc=${searchDocChanged} tags=${tagsChanged} embed=${needsEmbed}`,
+      );
+      updated++;
+      if (needsEmbed) pendingEmbed++;
+      continue;
+    }
+
+    await prisma.product.update({
+      where: { id: existing.id },
+      data: {
+        name: input.name,
+        searchDoc: input.searchDoc,
+        componentTags: mergedTags as Prisma.InputJsonValue,
+        ...(needsEmbed
+          ? {
+              embeddingStatus: 'pending',
+              automationErrors: { set: [] },
+            }
+          : {}),
+      },
+    });
+    updated++;
+    if (needsEmbed) pendingEmbed++;
+  }
+
+  console.log(
+    `[patchProductMetadata] csv_rows=${rows.length}${args.limit != null ? ` (of ${totalInFile} in file)` : ''} updated=${updated} unchanged=${unchanged} ` +
+      `skip_no_barcode=${skippedNoBarcode} skip_missing_product=${skippedMissingProduct} ` +
+      `rows_needing_embed=${pendingEmbed}${args.dryRun ? ' (dry-run)' : ''}`,
+  );
+  if (pendingEmbed > 0 && !args.dryRun) {
+    console.log(
+      '[patchProductMetadata] Run embedding for pending rows only, e.g. automation:bulk-sync --embed --no-reset-embedding … or your db embedding runner with maxProducts.',
+    );
+  }
+
+  return 0;
+}
+
+main()
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

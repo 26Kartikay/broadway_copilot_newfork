@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { getPaletteData, resolveSeasonalPalette } from '../../data/seasonalPalettes';
 import { openaiRerankByQuery } from '../../lib/openaiRerank';
 import { prisma } from '../../lib/prisma';
+import { dedupeKeyFromProduct } from '../../lib/recommendation/configDedupe';
 import { logger } from '../../utils/logger';
 
 export interface SearchCatalogInput {
@@ -19,7 +20,7 @@ export interface SearchCatalogInput {
   priceRange?: { min: number; max: number };
   limit?: number;
   excludeProductIds?: string[]; // Never return these (already shown this session)
-  excludeHandleIds?: string[];  // Never return products with these handleIds (variant-level dedup)
+  excludeHandleIds?: string[];  // Exclude these handleIds; results are also deduped by componentTags.csvConfigId when set
 }
 
 export interface FormattedProduct {
@@ -358,11 +359,12 @@ async function searchCatalogVector(
 
   scoredAll.sort((a, b) => b.rerankScore - a.rerankScore);
 
-  // Deduplicate by handleId — keep the highest-scored variant of each product
-  const seenHandles = new Set<string>();
+  // Deduplicate by config id when present (one SKU per style/config); else handleId.
+  const seenKeys = new Set<string>();
   const scored = scoredAll.filter((c) => {
-    if (!c.handleId || seenHandles.has(c.handleId)) return false;
-    seenHandles.add(c.handleId);
+    const key = dedupeKeyFromProduct(c.componentTags, c.handleId);
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 
@@ -450,7 +452,7 @@ async function searchCatalogIlike(
   }
 
   const sql = `
-    SELECT id, "handleId", name, brand, category::text, "generalTag", style, fit, colors, occasions, "imageUrl", "productLink"
+    SELECT id, "handleId", name, brand, category::text, "generalTag", style, fit, colors, occasions, "imageUrl", "productLink", "componentTags"
     FROM "Product"
     WHERE ${baseConditions.join(' AND ')}
     ORDER BY "createdAt" DESC
@@ -460,13 +462,13 @@ async function searchCatalogIlike(
 
   const products = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(sql, ...params);
 
-  // Deduplicate by handleId — keep first (most recent) per product
-  const seenHandles = new Set<string>();
+  const seenKeys = new Set<string>();
   return products
     .filter((p) => {
       const hid = String(p.handleId ?? p.handleid ?? '');
-      if (!hid || seenHandles.has(hid)) return false;
-      seenHandles.add(hid);
+      const key = dedupeKeyFromProduct(p.componentTags ?? p.componenttags, hid);
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
       return true;
     })
     .map((p) => ({
