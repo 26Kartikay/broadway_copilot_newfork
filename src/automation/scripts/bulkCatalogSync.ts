@@ -33,6 +33,8 @@ function parseArgs(argv: string[]) {
   let resetEmbeddingOnSeed = true;
   /** Use OpenAI (same as API orchestrator tagExtractor) for tags + embeddings; omit for CSV-only tags. */
   let llmTags = false;
+  /** After parsing the full CSV, use only the first N data rows (for smoke tests; avoids fragile `head` on multiline fields). */
+  let maxCsvRows: number | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] ?? '';
@@ -52,6 +54,10 @@ function parseArgs(argv: string[]) {
     } else if (a === '--no-reset-embedding') resetEmbeddingOnSeed = false;
     else if (a === '--retry-failed-embed') embedPendingOnly = false;
     else if (a === '--llm-tags') llmTags = true;
+    else if (a === '--max-rows') {
+      const n = parseInt(argv[++i] ?? '', 10);
+      if (!Number.isNaN(n) && n > 0) maxCsvRows = n;
+    }
   }
 
   if (!seed && !tag && !embed && csvPath) {
@@ -71,6 +77,7 @@ function parseArgs(argv: string[]) {
     embedPendingOnly,
     resetEmbeddingOnSeed,
     llmTags,
+    maxCsvRows,
   };
 }
 
@@ -93,6 +100,19 @@ function parseCsvFile(resolved: string): Record<string, unknown>[] {
   }
 
   return parsed.data.filter((row) => Object.keys(row).some((k) => String(row[k] ?? '').trim()));
+}
+
+/** Keep first N parsed data rows (Papa already handles quoted newlines in fields). */
+function limitDataRows(
+  rows: Record<string, unknown>[],
+  maxRows: number | undefined,
+): Record<string, unknown>[] {
+  if (maxRows == null || maxRows <= 0) return rows;
+  if (rows.length <= maxRows) return rows;
+  console.log(
+    `[BulkCatalogSync] --max-rows ${maxRows}: using ${maxRows} of ${rows.length} parsed data rows`,
+  );
+  return rows.slice(0, maxRows);
 }
 
 function dedupeByBarcode(
@@ -119,6 +139,7 @@ async function main(): Promise<number> {
     llmTags: args.embed ? args.llmTags : false,
     mapping: args.mappingPath,
     csv: args.csvPath ?? '(embed-only)',
+    maxCsvRows: args.maxCsvRows ?? null,
   });
 
   if ((args.seed || args.tag) && !args.csvPath) {
@@ -130,7 +151,8 @@ async function main(): Promise<number> {
       '  --retry-failed-embed: include failed rows in embed step.\n' +
       '  Mapping: files/catalogTaxonomy.json (taxonomy + optional _bulkCatalog columnMap) or files/mapping.example.json.\n' +
       '  Optional separate taxonomy via "taxonomyPath" relative to the mapping file.\n' +
-      '  --llm-tags: embed step uses OpenAI tagExtractor + embeddings (same DB shape as API runProductAutomation).');
+      '  --llm-tags: embed step uses OpenAI tagExtractor + embeddings (same DB shape as API runProductAutomation).\n' +
+      '  --max-rows N: seed/tag from first N data rows only (use instead of head; descriptions may span multiple lines).');
     return 1;
   }
 
@@ -162,7 +184,7 @@ async function main(): Promise<number> {
 
   if (args.seed && mapping && args.csvPath) {
     const resolved = path.resolve(args.csvPath);
-    const data = parseCsvFile(resolved);
+    const data = limitDataRows(parseCsvFile(resolved), args.maxCsvRows);
     const applyTagsInSeed = args.tag;
     const inputs = dedupeByBarcode(data, mapping, applyTagsInSeed, taxonomy);
     console.log(`[BulkCatalogSync] Seed: ${inputs.length} unique barcodes from ${resolved}`);
@@ -175,7 +197,7 @@ async function main(): Promise<number> {
 
   if (args.tag && mapping && args.csvPath && !args.seed) {
     const resolved = path.resolve(args.csvPath);
-    const data = parseCsvFile(resolved);
+    const data = limitDataRows(parseCsvFile(resolved), args.maxCsvRows);
     const inputs = dedupeByBarcode(data, mapping, true, taxonomy);
     console.log(`[BulkCatalogSync] Tag-only: ${inputs.length} rows`);
     const r = await bulkApplyTags(inputs);
