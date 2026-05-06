@@ -14,6 +14,10 @@
 # SKIP_PRISMA_DB_PUSH=true to never run db push on startup.
 # UPLOADS_HOST_DIR: host dir → /app/uploads (default ./uploads).
 # UPLOADS_ROOT: must match in-container mount (default /app/uploads in Dockerfile).
+#
+# Optional (faster repeat builds): BuildKit cache — requires a BuildKit-capable daemon:
+#   export DOCKER_BUILDKIT=1
+# Dockerfile stays compatible without it (works on Ubuntu 20.04 / older docker-compose).
 
 name: broadway-bot-prod
 

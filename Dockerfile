@@ -1,5 +1,5 @@
-# syntax=docker/dockerfile:1.4
-# BuildKit: enables npm cache mount (DOCKER_BUILDKIT=1; Compose v2 enables by default).
+# Compatible with classic `docker build` (no BuildKit required). Optional: export DOCKER_BUILDKIT=1
+# for faster rebuilds locally; omit --mount directives so prod hosts without BuildKit still build.
 
 # ── Build (full devDependencies for tsc / prisma generate) ───────────────────
 FROM node:22-bookworm AS build
@@ -12,8 +12,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 COPY prisma ./prisma
 RUN npx prisma generate
