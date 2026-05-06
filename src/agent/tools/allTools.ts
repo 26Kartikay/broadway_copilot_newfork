@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { Tool } from '../../lib/ai/core/tools';
 import { MessageInput } from '../../lib/chat/types';
-import { SearchSession } from '../memory/redis';
+import { runRecommendationEngine } from '../../lib/recommendation/engine';
+import type { UserProfile } from '../../lib/recommendation/types';
+import { SearchSession, UserContext } from '../memory/redis';
 import { beautyAdvisor } from './beautyAdvisor';
 import { runLookupBrandsTool } from './brandsLookup';
-import { searchCatalog } from './catalog';
 import { analyzeColorSeason } from './colorAnalysis';
 import { recallUserPreferences, saveUserPreference } from './memory';
 import { getOutfitSuggestion } from './styling';
@@ -25,6 +26,7 @@ export function getTools(
   messageInput: MessageInput,
   searchSession?: SearchSession,
   gender?: string,
+  userContext?: UserContext,
 ): Tool[] {
   const sourceImageUrl = messageInput.MediaUrl0;
 
@@ -73,44 +75,59 @@ export function getTools(
       func: async (args) => {
         const cleaned = cleanArgs(args);
 
-        // ── Hybrid recommendation context injection ──────────────────────────
-        if (searchSession) {
-          // Inject palette from post-service context ONLY if:
-          //   • a post-service color season exists
-          //   • palette has NOT been normalized (no dislike)
-          //   • LLM didn't already specify a colorSeason
-          if (
-            searchSession.postServiceColorSeason &&
-            !searchSession.paletteNormalized &&
-            !cleaned.colorSeason
-          ) {
-            cleaned.colorSeason = searchSession.postServiceColorSeason;
-          }
-
-          // If palette was normalized after dislike, strip colorSeason even if LLM passed one
-          if (searchSession.paletteNormalized) {
-            delete cleaned.colorSeason;
-          }
-
-          // Always exclude already-seen products (dedup across "show more" calls)
-          if (searchSession.lastProductIds.length > 0) {
-            cleaned.excludeProductIds = searchSession.lastProductIds;
-          }
-          if ((searchSession.lastHandleIds ?? []).length > 0) {
-            cleaned.excludeHandleIds = searchSession.lastHandleIds;
-          }
-
-          if (searchSession.guestCatalogGenderMix) {
-            cleaned.genderMix = true;
-          }
+        // ── Resolve color season ─────────────────────────────────────────────
+        // Post-service palette takes precedence; dislike flag strips it entirely.
+        let resolvedColorSeason = userContext?.colorSeason ?? null;
+        if (searchSession?.postServiceColorSeason && !searchSession.paletteNormalized) {
+          resolvedColorSeason = searchSession.postServiceColorSeason;
+        }
+        if (searchSession?.paletteNormalized) {
+          resolvedColorSeason = null;
         }
 
-        // Inject gender for hard SQL filtering — only if LLM didn't explicitly set one
-        if (gender && !cleaned.gender) {
-          cleaned.gender = gender;
-        }
+        // ── Build user profile for the recommendation engine ────────────────
+        // Pass the user's OWN gender here. The engine's Stage 0 (recipient detection)
+        // will override gender/ageGroup internally when the query is about someone else
+        // (e.g. "suggest something for my gf" → engine detects FEMALE, ignores user gender).
+        const engineProfile: UserProfile = {
+          gender: searchSession?.guestCatalogGenderMix ? null : (userContext?.gender ?? gender ?? null),
+          ageGroup: userContext?.ageGroup ?? null,
+          fitPreference: userContext?.fitPreference ?? null,
+          colorsSuited: searchSession?.paletteNormalized
+            ? null
+            : (userContext?.colorPalette?.suited ?? null),
+          colorSeason: resolvedColorSeason,
+        };
 
-        return searchCatalog(cleaned);
+        const excludeProductIds = (searchSession?.lastProductIds ?? []).filter(Boolean);
+        const excludeHandleIds = (searchSession?.lastHandleIds ?? []).filter(Boolean);
+
+        const result = await runRecommendationEngine({
+          user_query: String(cleaned.query ?? ''),
+          user_profile: engineProfile,
+          brand: cleaned.brand ?? null,
+          exclude_product_ids: excludeProductIds,
+          exclude_handle_ids: excludeHandleIds,
+          limit: cleaned.limit,
+        });
+
+        return {
+          products: result.results.map((r) => ({
+            id: r.id,
+            handleId: r.handleId,
+            name: r.name,
+            brand: r.brand,
+            generalTag: r.type,
+            subCategory: r.subCategory,
+            colors: r.colors,
+            imageUrl: r.imageUrl,
+            productLink: r.productLink,
+            skuId: r.skuId,
+            configId: r.configId,
+            dedupeKey: r.dedupeKey,
+          })),
+          totalFound: result.result_count,
+        };
       },
     }),
     new Tool({

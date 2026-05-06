@@ -61,12 +61,12 @@ export function productTitleMatchesSearch(name: string, ...queries: (string | un
 /**
  * Compute final_score = (0.7 * vector_similarity) + (0.3 * tag_match_bonus)
  * tag_match_bonus = soft filter hits / total soft filters set (0–1)
- * Soft filters: occasion, colorPalette, ageGroup (never hard filters)
+ * Soft filters: occasion, colorPalette, ageGroup, colorsSuited (never hard filters)
  */
 export function computeScore(
   row: RawProductRow,
   intent: ExtractedIntent,
-  opts?: { rawUserQuery?: string },
+  opts?: { rawUserQuery?: string; colorsSuited?: string[] | null },
 ): ScoredRow {
   const vectorSim = Math.max(0, Math.min(1, row.similarity));
   const allTags = getField(row.componentTags, 'allTags');
@@ -89,6 +89,14 @@ export function computeScore(
     const ag = getField(row.componentTags, 'ageGroup');
     const matched = ag.includes(intent.ageGroup.toLowerCase()) || ag === 'n/a';
     softChecks.push({ label: `ageGroup:${intent.ageGroup}`, matched });
+  }
+
+  // Boost when product colors overlap with user's color-analysis suited colors
+  if (opts?.colorsSuited && opts.colorsSuited.length > 0) {
+    const productColors = row.colors.map((c) => c.toLowerCase());
+    const suited = opts.colorsSuited.map((c) => c.toLowerCase());
+    const matched = productColors.some((pc) => suited.some((sc) => pc.includes(sc) || sc.includes(pc)));
+    softChecks.push({ label: 'suited_colors', matched });
   }
 
   const matchedSoft = softChecks.filter((c) => c.matched).length;

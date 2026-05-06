@@ -208,7 +208,7 @@ export class ChatOrchestrator {
     );
     const systemPrompt = buildSystemPrompt(userContext, intent, entities, isFollowUp) + sessionContext;
 
-    const allAvailableTools = getTools(userId, userImages, messageInput, activeSession, genderForSearch);
+    const allAvailableTools = getTools(userId, userImages, messageInput, activeSession, genderForSearch, userContext);
     // Intent-based tool filtering paused — expose full main chat tool set
     const CHAT_TOOL_NAMES = [
       'search_catalog',

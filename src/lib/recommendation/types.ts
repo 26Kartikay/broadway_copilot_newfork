@@ -1,8 +1,10 @@
 export interface UserProfile {
-  gender?: string | null;   // 'MALE' | 'FEMALE' | 'OTHER'
-  ageGroup?: string | null; // 'ADULT' | 'TEEN' | 'SENIOR'
+  gender?: string | null;        // 'MALE' | 'FEMALE' | 'OTHER'
+  ageGroup?: string | null;      // 'ADULT' | 'TEEN' | 'SENIOR'
   preferences?: string[];
   colorSeason?: string | null;
+  fitPreference?: string | null; // e.g. 'Slim' | 'Regular' | 'Oversized'
+  colorsSuited?: string[] | null; // from ColorAnalysis.colors_suited
 }
 
 // ── Stage 0 output ──────────────────────────────────────────────────────────
@@ -99,6 +101,8 @@ export interface RecommendationResult {
 export interface RecommendationEngineInput {
   user_query: string;
   user_profile: UserProfile;
+  /** Explicit brand name — set only when the user names a specific brand. Applied as a hard SQL filter. */
+  brand?: string | null;
   exclude_product_ids?: string[];
   exclude_handle_ids?: string[];
   limit?: number;

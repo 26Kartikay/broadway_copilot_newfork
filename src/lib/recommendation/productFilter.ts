@@ -52,6 +52,8 @@ function buildHardFilterClauses(
   excludeIds: string[],
   excludeHandleIds: string[],
   relaxed = false,
+  brand?: string | null,
+  fitPreference?: string | null,
 ): { clauses: string[]; params: unknown[]; nextP: number } {
   const clauses: string[] = ['"isActive" = true', '"embedding" IS NOT NULL'];
   const params: unknown[] = [];
@@ -61,6 +63,12 @@ function buildHardFilterClauses(
   if (intent.legacyCategory) {
     clauses.push(`"category"::text = $${p++}`);
     params.push(intent.legacyCategory);
+  }
+
+  // Brand hard filter (always applied when user explicitly named a brand)
+  if (brand?.trim()) {
+    clauses.push(`LOWER("brand") = LOWER($${p++})`);
+    params.push(brand.trim());
   }
 
   if (!relaxed) {
@@ -101,6 +109,12 @@ function buildHardFilterClauses(
       clauses.push(`"colors" && $${p++}::text[]`);
       params.push(intent.colors);
     }
+
+    // Fit preference: keep products with no fit data OR matching fit
+    if (fitPreference?.trim()) {
+      clauses.push(`("fit" IS NULL OR "fit" ILIKE $${p++})`);
+      params.push(`%${fitPreference.trim()}%`);
+    }
   }
 
   // Gender hard filter (always applied, even in relaxed mode)
@@ -133,6 +147,8 @@ async function vectorSearch(
   excludeIds: string[],
   excludeHandleIds: string[],
   relaxed: boolean,
+  brand?: string | null,
+  fitPreference?: string | null,
 ): Promise<RawProductRow[]> {
   const tEmbed = Date.now();
   const embedding = await embedText(intent.semantic_query);
@@ -143,7 +159,7 @@ async function vectorSearch(
     '[RecEng Stage2] Embedding generated',
   );
 
-  const { clauses, params, nextP } = buildHardFilterClauses(intent, excludeIds, excludeHandleIds, relaxed);
+  const { clauses, params, nextP } = buildHardFilterClauses(intent, excludeIds, excludeHandleIds, relaxed, brand, fitPreference);
   const vectorJson = JSON.stringify(embedding);
   const vp = nextP;
   params.push(vectorJson);
@@ -240,8 +256,8 @@ async function ilikeSearch(
 
 /**
  * Main search entry point.
- * 1. Vector search with hard filters
- * 2. Relaxed vector search (drop subCategory/type/tag filters, keep category+gender) if 0 rows
+ * 1. Vector search with hard filters (category, brand, gender, fit, tags)
+ * 2. Relaxed vector search (drop subCategory/type/tag/fit filters, keep category+brand+gender) if 0 rows
  * 3. ILIKE fallback if still 0 rows
  */
 export async function runFilteredSearch(
@@ -249,6 +265,8 @@ export async function runFilteredSearch(
   excludeIds: string[],
   excludeHandleIds: string[],
   limit: number,
+  brand?: string | null,
+  fitPreference?: string | null,
 ): Promise<{ rows: RawProductRow[]; searchMode: string }> {
   if (!getOpenAI()) {
     logger.warn('[RecEng Stage2] No OPENAI_API_KEY — falling back to ILIKE');
@@ -257,17 +275,17 @@ export async function runFilteredSearch(
   }
 
   // Stage 2a: strict vector search
-  let rows = await vectorSearch(intent, excludeIds, excludeHandleIds, false);
+  let rows = await vectorSearch(intent, excludeIds, excludeHandleIds, false, brand, fitPreference);
   if (rows.length > 0) return { rows, searchMode: 'vector_strict' };
 
   const hasStrictFilters = Boolean(
-    intent.subCategory || intent.type || intent.tags_must_include.length > 0 || (intent.colors && intent.colors.length > 0),
+    intent.subCategory || intent.type || intent.tags_must_include.length > 0 || (intent.colors && intent.colors.length > 0) || fitPreference,
   );
 
-  // Stage 2b: relaxed vector search (drop subCategory/type/tag filters)
+  // Stage 2b: relaxed vector search (drop subCategory/type/tag/fit filters, keep category+brand+gender)
   if (hasStrictFilters) {
     logger.info('[RecEng Stage2] Strict vector returned 0 rows — trying relaxed vector search');
-    rows = await vectorSearch(intent, excludeIds, excludeHandleIds, true);
+    rows = await vectorSearch(intent, excludeIds, excludeHandleIds, true, brand);
     if (rows.length > 0) return { rows, searchMode: 'vector_relaxed' };
   }
 

@@ -137,15 +137,20 @@ export async function runRecommendationEngine(
   );
 
   // ── Stage 2: Filtered search ─────────────────────────────────────────────────
+  const fitPreference = input.user_profile.fitPreference ?? null;
+  const brand = input.brand ?? null;
+
   logger.info(
     {
       query: intent.semantic_query,
       filters: summarizeFilters(intent),
+      brand: brand ?? 'none',
+      fitPreference: fitPreference ?? 'none',
     },
     '[RecEng] ─── Stage 2: Filtered vector search — query: "' + intent.semantic_query + '"',
   );
 
-  const { rows: rawRows, searchMode } = await runFilteredSearch(intent, excludeIds, excludeHandleIds, limit);
+  const { rows: rawRows, searchMode } = await runFilteredSearch(intent, excludeIds, excludeHandleIds, limit, brand, fitPreference);
 
   logger.info(
     { recall_count: rawRows.length, search_mode: searchMode },
@@ -158,7 +163,10 @@ export async function runRecommendationEngine(
   }
 
   // ── Stage 2: Scoring ─────────────────────────────────────────────────────────
-  const scoredAll = rawRows.map((row) => computeScore(row, intent, { rawUserQuery: input.user_query }));
+  const colorsSuited = input.user_profile.colorsSuited ?? null;
+  const scoredAll = rawRows.map((row) =>
+    computeScore(row, intent, { rawUserQuery: input.user_query, colorsSuited }),
+  );
   scoredAll.sort((a, b) => b.final_score - a.final_score);
 
   // Deduplicate by config id when present (one SKU per style/config); else fall back to handleId.
