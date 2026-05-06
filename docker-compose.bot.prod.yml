@@ -26,6 +26,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: broadway-bot-prod-app
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}
@@ -92,9 +93,7 @@ services:
         exec node dist/index.js
 
   guest-cleanup-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: broadway-bot-prod-app
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}

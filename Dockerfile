@@ -35,10 +35,11 @@ ENV UPLOADS_ROOT=/app/uploads
 
 COPY package*.json ./
 
-COPY --from=build /app/node_modules ./node_modules
+RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 
-RUN NODE_ENV=production npm prune --omit=dev --legacy-peer-deps \
-    && npm cache clean --force
+# Restore the prisma-generated client (built in the build stage)
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prompts ./prompts
