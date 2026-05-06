@@ -20,8 +20,8 @@ import type {
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
-const SCORE_THRESHOLD = 0.65;
-const FALLBACK_THRESHOLD = 0.50;
+const SCORE_THRESHOLD = 0.50;
+const FALLBACK_THRESHOLD = 0.35;
 
 /** Build a structured shopping-intent string passed to the reranker for anchoring. */
 function buildRerankContext(intent: ExtractedIntent, recipientCtx: RecipientContext): string {

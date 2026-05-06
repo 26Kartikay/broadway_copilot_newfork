@@ -20,6 +20,7 @@ export type HttpReplyPayload =
         name: string;
         brand: string;
         imageUrl: string;
+        skuId?: string;
         description?: string;
         colors?: string[];
         reason?: string;

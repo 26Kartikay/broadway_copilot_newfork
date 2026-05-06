@@ -140,9 +140,10 @@ export function formatReplies(
       products: result.products.map((p: any) => {
         const link = p.productLink ?? p.product_link;
         return {
-          name: '',
+          name: p.name ?? '',
           brand: p.brand ?? '',
           imageUrl: p.imageUrl ?? p.image_url,
+          ...(p.skuId ? { skuId: p.skuId } : {}),
           ...(typeof link === 'string' && link.trim() !== '' ? { productLink: link } : {}),
         };
       }),
