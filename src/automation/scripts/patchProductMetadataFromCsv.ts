@@ -10,7 +10,7 @@
  *     --csv ./files/productss.csv \\
  *     --mapping ./files/catalogTaxonomy.json \\
  *     [--limit N]           # only first N data rows from the CSV
- *     [--minimal]           # only set name + componentTags.csvConfigId from CSV; leave other columns as-is (no searchDoc rewrite)
+ *     [--minimal]           # only merge name, csvConfigId, csvSkuId from CSV into componentTags; leave other DB columns as-is (no searchDoc rewrite)
  */
 
 import 'dotenv/config';
@@ -94,7 +94,8 @@ async function patchOneRowMinimal(
 
   const nameCsvRaw = cell(row, m.name).trim();
   const configCsvRaw = cell(row, m.configId).trim();
-  if (!nameCsvRaw && !configCsvRaw) return { kind: 'skip', reason: 'nothing_to_apply' };
+  const skuCsvRaw = cell(row, m.skuId).trim();
+  if (!nameCsvRaw && !configCsvRaw && !skuCsvRaw) return { kind: 'skip', reason: 'nothing_to_apply' };
 
   const existing = await prisma.product.findFirst({
     where: { barcode },
@@ -114,24 +115,30 @@ async function patchOneRowMinimal(
       : {};
 
   const prevConfig = typeof prevTags.csvConfigId === 'string' ? prevTags.csvConfigId.trim() : '';
+  const prevSku = typeof prevTags.csvSkuId === 'string' ? prevTags.csvSkuId.trim() : '';
   let mergedTags = { ...prevTags };
   let configApplied = false;
+  let skuApplied = false;
   if (configCsvRaw && configCsvRaw !== prevConfig) {
     mergedTags = { ...mergedTags, csvConfigId: configCsvRaw };
     configApplied = true;
+  }
+  if (skuCsvRaw && skuCsvRaw !== prevSku) {
+    mergedTags = { ...mergedTags, csvSkuId: skuCsvRaw };
+    skuApplied = true;
   }
 
   const nextName = nameCsvRaw || existing.name;
   const nameChanged = Boolean(nameCsvRaw) && nextName !== existing.name;
 
-  if (!configApplied && !nameChanged) {
+  if (!configApplied && !skuApplied && !nameChanged) {
     return { kind: 'skip', reason: 'unchanged' };
   }
 
   /** Config is for dedupe; DB-only embed rebuilds doc from title/fields — only name changes force re-vector. */
   const needsEmbed = nameChanged;
 
-  const dryLine = `[dry-run] ${barcode} name=${nameChanged} configApplied=${configApplied} embed_pending=${needsEmbed}`;
+  const dryLine = `[dry-run] ${barcode} name=${nameChanged} config=${configApplied} sku=${skuApplied} embed_pending=${needsEmbed}`;
 
   if (args.dryRun) {
     return { kind: 'update', needsEmbed, barcode, dryLine };
@@ -171,7 +178,7 @@ async function main(): Promise<number> {
       'Usage: patchProductMetadataFromCsv --csv <file.csv> [--mapping mapping.json] [--limit N] [--minimal] [--dry-run]\n' +
         '  Uses the same bulk mapping as automation:bulk-sync; rows keyed by barcode.\n' +
         '  --limit N: process only the first N data rows from the CSV.\n' +
-        '  --minimal: only updates name + csvConfigId from CSV (does not overwrite other DB fields).',
+        '  --minimal: merges name, csvConfigId, csvSkuId into componentTags (+ name column if provided; does not rewrite searchDoc).',
     );
     return 1;
   }
