@@ -9,7 +9,6 @@ coverage
 dashboard
 functions
 *.log
-.env
 Dockerfile
 README.md
 *.md
