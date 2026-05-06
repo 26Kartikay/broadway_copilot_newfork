@@ -61,6 +61,18 @@ function buildProductSummary(s: ScoredRow): string {
     .join(' | ');
 }
 
+function skuIdFromTags(tags: Record<string, unknown>): string {
+  const raw = tags.csvSkuId ?? tags.skuId ?? tags.sku_id;
+  if (raw == null) return '';
+  return String(raw).trim();
+}
+
+function configIdFromTags(tags: Record<string, unknown>): string {
+  const raw = tags.csvConfigId ?? tags.configId;
+  if (raw == null) return '';
+  return String(raw).trim();
+}
+
 function summarizeFilters(intent: ExtractedIntent): string {
   const parts: string[] = [];
   if (intent.legacyCategory) parts.push(`cat=${intent.legacyCategory}`);
@@ -232,6 +244,8 @@ export async function runRecommendationEngine(
     colors: s.colors,
     imageUrl: s.imageUrl,
     productLink: s.productLink,
+    skuId: skuIdFromTags(s.componentTags),
+    configId: configIdFromTags(s.componentTags),
     relevance_score: Math.round(s.final_score * 1000) / 1000,
     match_reason: s.match_reason,
   }));

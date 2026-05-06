@@ -69,6 +69,10 @@ export interface RecommendedProduct {
   colors: string[];
   imageUrl: string;
   productLink: string;
+  /** One row per config; this is the SKU id for the chosen variant (`componentTags.csvSkuId`). */
+  skuId: string;
+  /** Style/config key for dedupe (`componentTags.csvConfigId`). */
+  configId: string;
   relevance_score: number;
   match_reason: string;
 }
