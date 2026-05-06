@@ -2,6 +2,7 @@ import { createId } from '@paralleldrive/cuid2';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import type { SeedRowProductInput } from './bulkCatalogMapping';
+import { mergeSeedComponentTags } from './componentTagsMerge';
 
 const BATCH = 250;
 
@@ -87,16 +88,22 @@ export async function bulkUpsertProducts(
     const barcodes = chunk.map((r) => r.barcode);
     const existing = await prisma.product.findMany({
       where: { barcode: { in: barcodes } },
-      select: { id: true, barcode: true },
+      select: { id: true, barcode: true, componentTags: true },
     });
-    const byBarcode = new Map(existing.map((e) => [e.barcode ?? '', e.id]));
+    const byBarcode = new Map(
+      existing.map((e) => [e.barcode ?? '', { id: e.id, componentTags: e.componentTags }]),
+    );
 
     for (const input of chunk) {
-      const id = byBarcode.get(input.barcode);
-      if (id) {
+      const row = byBarcode.get(input.barcode);
+      if (row) {
+        const mergedInput: SeedRowProductInput = {
+          ...input,
+          componentTags: mergeSeedComponentTags(row.componentTags, input.componentTags),
+        };
         await prisma.product.update({
-          where: { id },
-          data: toUpdateData(input, options.resetEmbeddingQueue, options.markTagged),
+          where: { id: row.id },
+          data: toUpdateData(mergedInput, options.resetEmbeddingQueue, options.markTagged),
         });
         updated++;
       } else {
@@ -120,7 +127,15 @@ export async function bulkApplyTags(rows: SeedRowProductInput[]): Promise<{ upda
   let updated = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const chunk = rows.slice(i, i + BATCH);
+    const barcodes = chunk.map((r) => r.barcode);
+    const existingRows = await prisma.product.findMany({
+      where: { barcode: { in: barcodes } },
+      select: { barcode: true, componentTags: true },
+    });
+    const tagsByBarcode = new Map(existingRows.map((e) => [e.barcode ?? '', e.componentTags]));
+
     for (const input of chunk) {
+      const mergedTags = mergeSeedComponentTags(tagsByBarcode.get(input.barcode), input.componentTags);
       const r = await prisma.product.updateMany({
         where: { barcode: input.barcode },
         data: {
@@ -130,7 +145,7 @@ export async function bulkApplyTags(rows: SeedRowProductInput[]): Promise<{ upda
           generalTag: input.generalTag,
           imageUrl: input.imageUrl,
           productLink: input.productLink,
-          componentTags: input.componentTags as Prisma.InputJsonValue,
+          componentTags: mergedTags as Prisma.InputJsonValue,
           legacyCategory: input.legacyCategory,
           subCategory: input.subCategory,
           productType: input.productType,

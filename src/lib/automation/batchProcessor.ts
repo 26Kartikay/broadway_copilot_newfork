@@ -1,5 +1,6 @@
 import { logger } from '../../utils/logger';
 import { prisma } from '../prisma';
+import { mergeAutomationComponentTags } from './componentTagsMerge';
 import { EMBEDDING_MODEL, EMBEDDING_DIM } from './embeddingGenerator';
 import type { BatchItem } from './types';
 
@@ -54,7 +55,12 @@ async function commitProduct(item: BatchItem): Promise<void> {
   const now = new Date();
   const vectorStr = `[${item.embedding.join(',')}]`;
 
-  const componentTagsUpdate: Record<string, unknown> = {
+  const existingRow = await prisma.product.findUnique({
+    where: { id: item.productId },
+    select: { componentTags: true },
+  });
+
+  const automationTags: Record<string, unknown> = {
     subCategory: item.tags.subCategory,
     productType: item.tags.productType,
     gender: item.tags.gender,
@@ -68,6 +74,8 @@ async function commitProduct(item: BatchItem): Promise<void> {
     shortDescription: item.tags.shortDescription,
     formattedDescription: item.tags.formattedDescription,
   };
+
+  const componentTagsMerged = mergeAutomationComponentTags(existingRow?.componentTags, automationTags);
 
   await prisma.$executeRawUnsafe(
     `UPDATE "Product"
@@ -100,7 +108,7 @@ async function commitProduct(item: BatchItem): Promise<void> {
     item.tags.allTags,
     item.tags.formattedDescription,
     now,
-    JSON.stringify(componentTagsUpdate),
+    JSON.stringify(componentTagsMerged),
     now,
     item.productId,
   );

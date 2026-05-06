@@ -29,6 +29,7 @@ import {
   resolveTaxonomyFilePath,
   type CatalogTaxonomyIndex,
 } from '../../lib/automation/catalogTaxonomy';
+import { mergeSeedComponentTags } from '../../lib/automation/componentTagsMerge';
 import { prisma } from '../../lib/prisma';
 
 function parseArgs(argv: string[]) {
@@ -119,13 +120,18 @@ async function patchOneRowMinimal(
   let mergedTags = { ...prevTags };
   let configApplied = false;
   let skuApplied = false;
-  if (configCsvRaw && configCsvRaw !== prevConfig) {
-    mergedTags = { ...mergedTags, csvConfigId: configCsvRaw };
-    configApplied = true;
+  /** Sticky: once csvConfigId / csvSkuId are set, do not overwrite from later CSV runs. */
+  if (configCsvRaw) {
+    if (!prevConfig) {
+      mergedTags = { ...mergedTags, csvConfigId: configCsvRaw };
+      configApplied = true;
+    }
   }
-  if (skuCsvRaw && skuCsvRaw !== prevSku) {
-    mergedTags = { ...mergedTags, csvSkuId: skuCsvRaw };
-    skuApplied = true;
+  if (skuCsvRaw) {
+    if (!prevSku) {
+      mergedTags = { ...mergedTags, csvSkuId: skuCsvRaw };
+      skuApplied = true;
+    }
   }
 
   const nextName = nameCsvRaw || existing.name;
@@ -224,7 +230,18 @@ async function main(): Promise<number> {
 
   const applyTags = Boolean(taxonomy) && !args.minimal;
 
+  const progressEvery = 250;
+  console.log(
+    `[patchProductMetadata] Starting ${args.minimal ? 'minimal' : 'full'} patch: ${rows.length} CSV row(s) → one DB round-trip per row (use --limit N for a smoke test).`,
+  );
+
+  let rowIndex = 0;
   for (const row of rows) {
+    rowIndex++;
+    if (rowIndex === 1 || rowIndex % progressEvery === 0 || rowIndex === rows.length) {
+      console.log(`[patchProductMetadata] progress ${rowIndex}/${rows.length}…`);
+    }
+
     if (args.minimal) {
       const res = await patchOneRowMinimal(row, mapping, { dryRun: args.dryRun });
       if (res.kind === 'skip') {
@@ -267,7 +284,7 @@ async function main(): Promise<number> {
       !Array.isArray(existing.componentTags)
         ? (existing.componentTags as Record<string, unknown>)
         : {};
-    const mergedTags: Record<string, unknown> = { ...prevTags, ...input.componentTags };
+    const mergedTags = mergeSeedComponentTags(prevTags, input.componentTags);
 
     const tagsChanged = stableJson(mergedTags) !== stableJson(prevTags);
     const nameChanged = existing.name !== input.name;
