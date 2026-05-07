@@ -49,6 +49,8 @@ export interface RawProductRow {
   colors: string[];
   imageUrl: string;
   productLink: string;
+  /** From Product.db_id — feed `id` column (distinct from CUID id and from skuId). */
+  dbId?: string;
   componentTags: Record<string, unknown>;
   similarity: number;
 }
@@ -71,6 +73,8 @@ export interface RecommendedProduct {
   colors: string[];
   imageUrl: string;
   productLink: string;
+  /** Feed row id (`Product.db_id`). */
+  dbId?: string;
   /** One row per config; this is the SKU id for the chosen variant (`componentTags.csvSkuId`). */
   skuId: string;
   /** Style/config key for dedupe (`componentTags.csvConfigId`). */

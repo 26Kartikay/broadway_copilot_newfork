@@ -279,6 +279,13 @@
       overflow: hidden;
     }
 
+    .product-card-meta {
+      font-size: 10px;
+      color: var(--broadway-text-light);
+      line-height: 1.35;
+      margin-top: 4px;
+    }
+
     .product-card-reason {
       font-size: 10px;
       color: var(--broadway-text-light);
@@ -1215,6 +1222,7 @@
             ${nm ? `<div class="product-card-name">${nm}</div>` : ''}
             ${product.description ? `<div class="product-card-description">${product.description.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
             ${product.colors && product.colors.length > 0 ? `<div class="product-card-colors">Colors: ${product.colors.join(', ').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+            ${product.dbId || product.skuId ? `<div class="product-card-meta">${product.dbId ? `ID: ${String(product.dbId).replace(/</g, '&lt;').replace(/>/g, '&gt;')}` : ''}${product.dbId && product.skuId ? ' · ' : ''}${product.skuId ? `SKU: ${String(product.skuId).replace(/</g, '&lt;').replace(/>/g, '&gt;')}` : ''}</div>` : ''}
             ${product.reason ? `<div class="product-card-reason">${product.reason.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
           `;
           

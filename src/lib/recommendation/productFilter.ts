@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { prisma } from '../prisma';
 import { logger } from '../../utils/logger';
+import { dbIdFromProductRow } from './configDedupe';
 import type { ExtractedIntent, RawProductRow } from './types';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -66,6 +67,7 @@ async function embedText(text: string): Promise<number[] | null> {
 function mapRow(r: Record<string, unknown>, fallbackSimilarity = 0): RawProductRow | null {
   const imageUrl = String(r.imageUrl ?? r.imageurl ?? '').trim();
   if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) return null;
+  const dbId = dbIdFromProductRow(r);
   return {
     id: String(r.id),
     handleId: String(r.handleId ?? r.handleid ?? ''),
@@ -75,6 +77,7 @@ function mapRow(r: Record<string, unknown>, fallbackSimilarity = 0): RawProductR
     colors: Array.isArray(r.colors) ? (r.colors as string[]) : [],
     imageUrl,
     productLink: String(r.productLink ?? r.productlink ?? ''),
+    ...(dbId ? { dbId } : {}),
     componentTags: ((r.componentTags ?? r.componenttags ?? {}) as Record<string, unknown>),
     similarity: typeof r.similarity === 'number' ? r.similarity : fallbackSimilarity,
   };
@@ -209,7 +212,7 @@ async function vectorSearch(
   params.push(vectorJson);
 
   const sql = `
-    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags",
+    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "db_id", "componentTags",
            (1 - ("embedding" <=> $${vp}::vector)) AS similarity
     FROM "Product"
     WHERE ${clauses.join(' AND ')}
@@ -277,7 +280,7 @@ async function vectorSearchBareMinimum(
   params.push(vectorJson);
 
   const sql = `
-    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags",
+    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "db_id", "componentTags",
            (1 - ("embedding" <=> $${vp}::vector)) AS similarity
     FROM "Product"
     WHERE ${clauses.join(' AND ')}
@@ -353,7 +356,7 @@ async function ilikeSearch(
   params.push(Math.min(limit * 10, VECTOR_RECALL_LIMIT));
 
   const sql = `
-    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "componentTags"
+    SELECT id, "handleId", name, brand, "generalTag", colors, "imageUrl", "productLink", "db_id", "componentTags"
     FROM "Product"
     WHERE ${clauses.join(' AND ')}
     ORDER BY "createdAt" DESC

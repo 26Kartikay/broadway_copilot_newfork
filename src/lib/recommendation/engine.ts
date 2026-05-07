@@ -244,6 +244,7 @@ export async function runRecommendationEngine(
     colors: s.colors,
     imageUrl: s.imageUrl,
     productLink: s.productLink,
+    ...(s.dbId?.trim() ? { dbId: s.dbId.trim() } : {}),
     skuId: skuIdFromComponentTags(s.componentTags),
     configId: configIdFromComponentTags(s.componentTags),
     dedupeKey: dedupeKeyFromProduct(s.componentTags, s.handleId),
@@ -290,6 +291,7 @@ export async function runRecommendationEngine(
       recommended_items: results.map((r) => ({
         id: r.id,
         name: r.name.length > 100 ? `${r.name.slice(0, 100)}…` : r.name,
+        dbId: r.dbId ?? null,
         configId: r.configId || null,
         skuId: r.skuId || null,
         dedupeKey: r.dedupeKey,
@@ -299,6 +301,7 @@ export async function runRecommendationEngine(
         ? {
             name: results[0].name,
             score: results[0].relevance_score,
+            dbId: results[0].dbId ?? null,
             configId: results[0].configId || null,
             skuId: results[0].skuId || null,
             dedupeKey: results[0].dedupeKey,

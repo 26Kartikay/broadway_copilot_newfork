@@ -122,6 +122,7 @@ export function getTools(
             colors: r.colors,
             imageUrl: r.imageUrl,
             productLink: r.productLink,
+            ...(r.dbId ? { dbId: r.dbId } : {}),
             skuId: r.skuId,
             configId: r.configId,
             dedupeKey: r.dedupeKey,

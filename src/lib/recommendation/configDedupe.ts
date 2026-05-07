@@ -35,3 +35,10 @@ export function configIdFromComponentTags(componentTags: unknown): string {
   if (raw == null) return '';
   return String(raw).trim();
 }
+
+/** Feed row id from `Product.db_id` (CSV column `id`). */
+export function dbIdFromProductRow(row: Record<string, unknown>): string {
+  const v = row.dbId ?? row.dbid ?? row.db_id;
+  if (v == null) return '';
+  return String(v).trim();
+}

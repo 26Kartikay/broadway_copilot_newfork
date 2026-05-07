@@ -20,6 +20,8 @@ export type HttpReplyPayload =
         name: string;
         brand: string;
         imageUrl: string;
+        /** Feed row id (`Product.db_id` / CSV `id`). */
+        dbId?: string;
         skuId?: string;
         description?: string;
         colors?: string[];

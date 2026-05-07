@@ -4,6 +4,7 @@ import { openaiRerankByQuery } from '../../lib/openaiRerank';
 import { prisma } from '../../lib/prisma';
 import {
   configIdFromComponentTags,
+  dbIdFromProductRow,
   dedupeKeyFromProduct,
   skuIdFromComponentTags,
 } from '../../lib/recommendation/configDedupe';
@@ -40,6 +41,8 @@ export interface FormattedProduct {
   occasions: string[];
   imageUrl: string;
   productLink: string;
+  /** From `Product.db_id` — feed column `id` (not the CUID `id`). */
+  dbId?: string;
   /** From `componentTags.csvSkuId` — which SKU was chosen after config dedupe. */
   skuId?: string;
   /** From `componentTags.csvConfigId` — dedupe groups by this when set. */
@@ -160,6 +163,7 @@ interface VectorRow {
   occasions: string[];
   imageUrl: string;
   productLink: string;
+  dbId?: string;
   componentTags: unknown;
   similarity: number;
 }
@@ -167,6 +171,7 @@ interface VectorRow {
 function mapRow(r: Record<string, unknown>): VectorRow | null {
   const imageUrl = String(r.imageUrl ?? r.imageurl ?? r['imageUrl'] ?? r['imageurl'] ?? '').trim();
   if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) return null;
+  const dbId = dbIdFromProductRow(r);
   return {
     id: String(r.id),
     handleId: String(r.handleId ?? r.handleid ?? ''),
@@ -180,6 +185,7 @@ function mapRow(r: Record<string, unknown>): VectorRow | null {
     occasions: Array.isArray(r.occasions) ? (r.occasions as string[]) : [],
     imageUrl,
     productLink: String(r.productLink ?? r.productlink ?? ''),
+    ...(dbId ? { dbId } : {}),
     componentTags: r.componentTags ?? r.componenttags,
     similarity: Number(r.similarity ?? 0),
   };
@@ -327,7 +333,7 @@ async function searchCatalogVector(
 
   const sql = `
     SELECT id, "handleId", name, brand, category::text AS category, "generalTag", style, fit, colors, occasions,
-           "imageUrl", "productLink", "componentTags",
+           "imageUrl", "productLink", "db_id", "componentTags",
            (1 - ("embedding" <=> $${vectorParam}::vector)) AS similarity
     FROM "Product"
     WHERE ${clauses.join(' AND ')}
@@ -403,6 +409,7 @@ async function searchCatalogVector(
       imageUrl: r.imageUrl,
       productLink: r.productLink,
       dedupeKey: dedupeKeyFromProduct(r.componentTags, r.handleId),
+      ...(r.dbId ? { dbId: r.dbId } : {}),
       ...(sku ? { skuId: sku } : {}),
       ...(cfg ? { configId: cfg } : {}),
     };
@@ -469,7 +476,7 @@ async function searchCatalogIlike(
   }
 
   const sql = `
-    SELECT id, "handleId", name, brand, category::text, "generalTag", style, fit, colors, occasions, "imageUrl", "productLink", "componentTags"
+    SELECT id, "handleId", name, brand, category::text, "generalTag", style, fit, colors, occasions, "imageUrl", "productLink", "db_id", "componentTags"
     FROM "Product"
     WHERE ${baseConditions.join(' AND ')}
     ORDER BY "createdAt" DESC
@@ -493,6 +500,7 @@ async function searchCatalogIlike(
       const hid = String(p.handleId ?? p.handleid ?? '');
       const sku = skuIdFromComponentTags(ct);
       const cfg = configIdFromComponentTags(ct);
+      const dbId = dbIdFromProductRow(p as Record<string, unknown>);
       return {
         id: String(p.id),
         handleId: hid,
@@ -507,6 +515,7 @@ async function searchCatalogIlike(
         imageUrl: String(p.imageUrl ?? ''),
         productLink: String(p.productLink ?? ''),
         dedupeKey: dedupeKeyFromProduct(ct, hid),
+        ...(dbId ? { dbId } : {}),
         ...(sku ? { skuId: sku } : {}),
         ...(cfg ? { configId: cfg } : {}),
       };
@@ -576,6 +585,7 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
           catalog_items: products.map((p) => ({
             id: p.id,
             name: p.name.length > 100 ? `${p.name.slice(0, 100)}…` : p.name,
+            dbId: p.dbId ?? null,
             configId: p.configId ?? null,
             skuId: p.skuId ?? null,
             dedupeKey: p.dedupeKey ?? null,

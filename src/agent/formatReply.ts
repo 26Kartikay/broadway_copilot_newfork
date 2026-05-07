@@ -143,6 +143,7 @@ export function formatReplies(
           name: p.name ?? '',
           brand: p.brand ?? '',
           imageUrl: p.imageUrl ?? p.image_url,
+          ...(p.dbId ? { dbId: p.dbId } : {}),
           ...(p.skuId ? { skuId: p.skuId } : {}),
           ...(typeof link === 'string' && link.trim() !== '' ? { productLink: link } : {}),
         };
