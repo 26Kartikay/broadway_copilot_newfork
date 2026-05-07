@@ -128,6 +128,13 @@ export async function runRecommendationEngine(
   logger.info('[RecEng] ─── Stage 1: Intent extraction ───');
   const intent = await extractIntent(input.user_query, recipientCtx, input.user_profile);
 
+  // When not shopping for someone else and the query has no gender signal,
+  // default to the user's own gender so profile-aware queries don't bleed across genders.
+  if (!intent.gender && recipientCtx.shopping_for !== 'other' && input.user_profile.gender) {
+    intent.gender = input.user_profile.gender as 'MALE' | 'FEMALE' | 'OTHER';
+    logger.info({ gender: intent.gender }, '[RecEng] Stage 1 — defaulting gender from user profile');
+  }
+
   logger.info(
     {
       filters: summarizeFilters(intent),
