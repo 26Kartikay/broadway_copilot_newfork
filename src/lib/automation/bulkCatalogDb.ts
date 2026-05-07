@@ -19,6 +19,7 @@ function toUpdateData(
     imageUrl: input.imageUrl,
     productLink: input.productLink,
     searchDoc: input.searchDoc,
+    ...(input.dbId !== undefined ? { dbId: input.dbId } : {}),
     componentTags: input.componentTags as Prisma.InputJsonValue,
     legacyCategory: input.legacyCategory,
     subCategory: input.subCategory,
@@ -49,6 +50,7 @@ function toCreateData(
   const base: Prisma.ProductCreateInput = {
     handleId,
     barcode: input.barcode,
+    dbId: input.dbId ?? null,
     name: input.name,
     brand: input.brand,
     category: input.category,
@@ -145,6 +147,7 @@ export async function bulkApplyTags(rows: SeedRowProductInput[]): Promise<{ upda
           generalTag: input.generalTag,
           imageUrl: input.imageUrl,
           productLink: input.productLink,
+          ...(input.dbId !== undefined ? { dbId: input.dbId } : {}),
           componentTags: mergedTags as Prisma.InputJsonValue,
           legacyCategory: input.legacyCategory,
           subCategory: input.subCategory,

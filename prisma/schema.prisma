@@ -179,6 +179,8 @@ model Product {
   id               String                 @id @default(cuid())
   handleId         String                 @unique
   barcode          String?
+  /// External row id from your feed (CSV column often `id`). Stored as db_id; distinct from Product.id (CUID).
+  dbId             String?                @map("db_id")
   name             String
   brand            String
   category         ProductCategory
@@ -226,6 +228,7 @@ model Product {
   @@index([subCategory])
   @@index([embeddingStatus])
   @@index([taggedAt])
+  @@index([dbId])
 }
 
 model AvailableBarcode {

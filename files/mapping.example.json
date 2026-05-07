@@ -1,7 +1,8 @@
 {
   "taxonomyPath": "catalogTaxonomy.json",
   "columnMap": {
-    "skuId": ["sku_id", "skuId", "id"],
+    "dbId": "id",
+    "skuId": ["sku_id", "skuId"],
     "configId": ["config_id", "configId"],
     "barcode": "barcode",
     "name": "name",

@@ -10,7 +10,7 @@
  *     --csv ./files/productss.csv \\
  *     --mapping ./files/catalogTaxonomy.json \\
  *     [--limit N]           # only first N data rows from the CSV
- *     [--minimal]           # only merge name, csvConfigId, csvSkuId from CSV into componentTags; leave other DB columns as-is (no searchDoc rewrite)
+ *     [--minimal]           # only merge name, csvConfigId, csvSkuId, dbId from CSV; leave other DB columns as-is (no searchDoc rewrite)
  */
 
 import 'dotenv/config';
@@ -19,6 +19,7 @@ import * as path from 'path';
 import Papa from 'papaparse';
 import type { Prisma } from '@prisma/client';
 import {
+  barcodeColumnSpecified,
   cell,
   loadBulkCatalogMapping,
   rowToSeedProductInput,
@@ -96,13 +97,18 @@ async function patchOneRowMinimal(
   const nameCsvRaw = cell(row, m.name).trim();
   const configCsvRaw = cell(row, m.configId).trim();
   const skuCsvRaw = cell(row, m.skuId).trim();
-  if (!nameCsvRaw && !configCsvRaw && !skuCsvRaw) return { kind: 'skip', reason: 'nothing_to_apply' };
+  const dbIdCsvRaw =
+    m.dbId != null && barcodeColumnSpecified(m.dbId) ? cell(row, m.dbId).trim() : '';
+  if (!nameCsvRaw && !configCsvRaw && !skuCsvRaw && !dbIdCsvRaw) {
+    return { kind: 'skip', reason: 'nothing_to_apply' };
+  }
 
   const existing = await prisma.product.findFirst({
     where: { barcode },
     select: {
       id: true,
       name: true,
+      dbId: true,
       componentTags: true,
     },
   });
@@ -120,6 +126,16 @@ async function patchOneRowMinimal(
   let mergedTags = { ...prevTags };
   let configApplied = false;
   let skuApplied = false;
+  let dbIdApplied = false;
+  /** Sticky: once dbId is set, do not overwrite from later CSV runs. */
+  const prevDbId = (existing.dbId ?? '').trim();
+  let nextDbId = existing.dbId;
+  if (dbIdCsvRaw) {
+    if (!prevDbId) {
+      nextDbId = dbIdCsvRaw;
+      dbIdApplied = true;
+    }
+  }
   /** Sticky: once csvConfigId / csvSkuId are set, do not overwrite from later CSV runs. */
   if (configCsvRaw) {
     if (!prevConfig) {
@@ -137,14 +153,14 @@ async function patchOneRowMinimal(
   const nextName = nameCsvRaw || existing.name;
   const nameChanged = Boolean(nameCsvRaw) && nextName !== existing.name;
 
-  if (!configApplied && !skuApplied && !nameChanged) {
+  if (!configApplied && !skuApplied && !nameChanged && !dbIdApplied) {
     return { kind: 'skip', reason: 'unchanged' };
   }
 
   /** Config is for dedupe; DB-only embed rebuilds doc from title/fields — only name changes force re-vector. */
   const needsEmbed = nameChanged;
 
-  const dryLine = `[dry-run] ${barcode} name=${nameChanged} config=${configApplied} sku=${skuApplied} embed_pending=${needsEmbed}`;
+  const dryLine = `[dry-run] ${barcode} name=${nameChanged} config=${configApplied} sku=${skuApplied} dbId=${dbIdApplied} embed_pending=${needsEmbed}`;
 
   if (args.dryRun) {
     return { kind: 'update', needsEmbed, barcode, dryLine };
@@ -154,6 +170,7 @@ async function patchOneRowMinimal(
     where: { id: existing.id },
     data: {
       ...(nameChanged ? { name: nextName } : {}),
+      ...(dbIdApplied ? { dbId: nextDbId } : {}),
       componentTags: mergedTags as Prisma.InputJsonValue,
       ...(needsEmbed
         ? {
@@ -184,7 +201,7 @@ async function main(): Promise<number> {
       'Usage: patchProductMetadataFromCsv --csv <file.csv> [--mapping mapping.json] [--limit N] [--minimal] [--dry-run]\n' +
         '  Uses the same bulk mapping as automation:bulk-sync; rows keyed by barcode.\n' +
         '  --limit N: process only the first N data rows from the CSV.\n' +
-        '  --minimal: merges name, csvConfigId, csvSkuId into componentTags (+ name column if provided; does not rewrite searchDoc).',
+        '  --minimal: merges name, csvConfigId, csvSkuId, dbId (+ name if provided; does not rewrite searchDoc).',
     );
     return 1;
   }
@@ -269,6 +286,7 @@ async function main(): Promise<number> {
         id: true,
         name: true,
         searchDoc: true,
+        dbId: true,
         componentTags: true,
       },
     });
@@ -289,8 +307,12 @@ async function main(): Promise<number> {
     const tagsChanged = stableJson(mergedTags) !== stableJson(prevTags);
     const nameChanged = existing.name !== input.name;
     const searchDocChanged = existing.searchDoc !== input.searchDoc;
+    const dbIdWillApply =
+      typeof input.dbId === 'string' &&
+      input.dbId.trim() !== '' &&
+      !(existing.dbId ?? '').trim();
 
-    if (!tagsChanged && !nameChanged && !searchDocChanged) {
+    if (!tagsChanged && !nameChanged && !searchDocChanged && !dbIdWillApply) {
       unchanged++;
       continue;
     }
@@ -299,7 +321,7 @@ async function main(): Promise<number> {
 
     if (args.dryRun) {
       console.log(
-        `[dry-run] ${input.barcode} name=${nameChanged} searchDoc=${searchDocChanged} tags=${tagsChanged} embed=${needsEmbed}`,
+        `[dry-run] ${input.barcode} name=${nameChanged} searchDoc=${searchDocChanged} tags=${tagsChanged} dbId=${dbIdWillApply} embed=${needsEmbed}`,
       );
       updated++;
       if (needsEmbed) pendingEmbed++;
@@ -311,6 +333,7 @@ async function main(): Promise<number> {
       data: {
         name: input.name,
         searchDoc: input.searchDoc,
+        ...(dbIdWillApply ? { dbId: input.dbId!.trim() } : {}),
         componentTags: mergedTags as Prisma.InputJsonValue,
         ...(needsEmbed
           ? {

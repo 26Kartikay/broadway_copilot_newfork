@@ -2,12 +2,13 @@
   "_bulkCatalog": {
     "csvBrandOnly": true,
     "columnMap": {
+      "dbId": ["id", "Id", "ID"],
       "name": ["name", "Name", "title", "Title", "product_title", "product_name", "Product Name"],
       "configId": ["config_id", "configId", "CONFIG_ID"],
       "barcode": ["barcode", "Barcode", "BARCODE", "ean", "EAN"],
       "description": ["description", "Description", "desc", "long_description", "details", "body"],
       "imageUrl": ["primary_image_url", "primary_image_uri", "image_url", "imageUrl", "image", "img", "Image URL"],
-      "skuId": ["sku_id", "SKU_ID", "skuId", "id", "Id", "product_id"],
+      "skuId": ["sku_id", "SKU_ID", "skuId"],
       "brand": ["brand_name", "Brand_Name", "BRAND_NAME", "brand", "Brand", "brandName", "Brand Name"]
     },
     "defaults": {

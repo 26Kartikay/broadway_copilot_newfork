@@ -16,7 +16,7 @@ export type CsvHeaderSpec = string | string[];
 
 /**
  * Keys are logical roles; values are header name(s) — must match the CSV header row (after trim).
- * Typical bulk row: id, barcode, name, description, primary_image_url, brand — e.g. `"skuId": "id"`.
+ * Feed column `id` (row key) maps to `dbId` → Product.db_id; `sku_id` maps to `skuId` — different columns.
  */
 export interface BulkCatalogColumnMap {
   barcode?: CsvHeaderSpec;
@@ -24,6 +24,11 @@ export interface BulkCatalogColumnMap {
   name?: CsvHeaderSpec;
   /** External SKU id from your sheet (stored in componentTags.csvSkuId). */
   skuId?: CsvHeaderSpec;
+  /**
+   * Row id from your feed (stored on Product.dbId / column db_id). Map CSV header `id` here.
+   * Distinct from Product.id (CUID) and from skuId.
+   */
+  dbId?: CsvHeaderSpec;
   /**
    * Style/config group id — multiple SKUs can share one value.
    * Stored as componentTags.csvConfigId for deduping recommendations to one SKU per config.
@@ -318,6 +323,8 @@ export function rowToExtractedTags(
 
 export interface SeedRowProductInput {
   barcode: string;
+  /** Set when mapping includes dbId and CSV cell is non-empty. */
+  dbId?: string;
   name: string;
   brand: string;
   category: ProductCategory;
@@ -349,6 +356,8 @@ export function rowToSeedProductInput(
 
   const skuId = cell(row, m.skuId);
   const configId = cell(row, m.configId);
+  const dbIdFromCsv =
+    m.dbId != null && barcodeColumnSpecified(m.dbId) ? cell(row, m.dbId).trim() || undefined : undefined;
   const descriptionRaw = cell(row, m.description);
   const description = sanitizeDescriptionForProductText(descriptionRaw);
   const nameFromCsvRaw = cell(row, m.name);
@@ -416,6 +425,7 @@ export function rowToSeedProductInput(
 
   return {
     barcode,
+    ...(dbIdFromCsv ? { dbId: dbIdFromCsv } : {}),
     name,
     brand,
     category,

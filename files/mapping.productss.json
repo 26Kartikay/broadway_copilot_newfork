@@ -2,6 +2,7 @@
   "taxonomyPath": "catalogTaxonomy.json",
   "csvBrandOnly": true,
   "columnMap": {
+    "dbId": "id",
     "name": "name",
     "configId": "config_id",
     "barcode": "barcode",
