@@ -1,21 +1,26 @@
 # Build stage
 FROM node:22 AS build
 
+# Install build dependencies for canvas/other native modules
 RUN apt-get update && apt-get install -y \
     build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Cache dependencies separately
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
+# Generate Prisma client before copying full source to maximize cache
 COPY prisma ./prisma
 RUN npx prisma generate
 
+# Copy source and build
 COPY . .
 RUN npm run build
 
-# Runtime stage — minimal, automation only
+# Runtime stage — minimal
 FROM node:22-slim AS runtime
 
 RUN apt-get update && apt-get install -y \
@@ -27,6 +32,7 @@ WORKDIR /app
 
 RUN groupadd -g 1001 automation && useradd -u 1001 -g automation -s /bin/sh automation
 
+# Copy only production dependencies and built assets
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps --omit=dev
 
@@ -38,4 +44,5 @@ RUN chown -R automation:automation /app
 USER automation
 
 ENTRYPOINT ["dumb-init", "--"]
+# Default command (can be overridden in compose)
 CMD ["node", "dist/automation/cron/productTaggerCron.js"]

@@ -2,131 +2,57 @@ version: '3.8'
 
 name: broadway-automation
 
-# Automation services — run alongside the main stack.
-# Prerequisites: main stack running (broadway-network must exist).
-#   docker compose -f docker-compose.stack.yml --env-file .env up -d
-#   docker compose -f docker-compose.automation.yml --env-file .env up -d
+# Common configurations to avoid repetition
+x-common-env: &common-env
+  NODE_ENV: production
+  DATABASE_URL: ${DATABASE_URL}
+  BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
+  BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}
+  BROADWAY_LIVE_PAGE_SIZE: ${BROADWAY_LIVE_PAGE_SIZE:-100}
 
 services:
-  barcode-sync:
+  # This service handles the build for EVERYONE else
+  automation-base:
     build:
       context: .
       dockerfile: Dockerfile.automation
-    container_name: broadway_barcode_sync
-    command: ["node", "dist/automation/scripts/barcodeSynchronizer.js"]
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
-      BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
-      BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}
-      BROADWAY_LIVE_PAGE_SIZE: ${BROADWAY_LIVE_PAGE_SIZE:-100}
-      BARCODE_SYNC_BATCH_SIZE: ${BARCODE_SYNC_BATCH_SIZE:-500}
+    image: broadway-automation:latest
+    container_name: broadway_automation_builder
+    # We don't need this container to actually run, just to build the image
+    entrypoint: ["echo", "Build complete"]
     networks:
       - broadway-network
-    restart: on-failure:3
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   product-automation:
-    build:
-      context: .
-      dockerfile: Dockerfile.automation
+    image: broadway-automation:latest
     container_name: broadway_product_automation
-    # Default CMD runs the cron loop; override for one-shot runs
+    depends_on:
+      - automation-base
     env_file:
       - ${ENV_FILE:-.env}
     environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
+      <<: *common-env
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
-      BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}
       PRODUCT_AUTOMATION_ENABLED: ${PRODUCT_AUTOMATION_ENABLED:-true}
       PRODUCT_AUTOMATION_CONCURRENCY: ${PRODUCT_AUTOMATION_CONCURRENCY:-10}
-      PRODUCT_AUTOMATION_BATCH_SIZE: ${PRODUCT_AUTOMATION_BATCH_SIZE:-100}
       PRODUCT_AUTOMATION_MAX_PER_RUN: ${PRODUCT_AUTOMATION_MAX_PER_RUN:-1000}
-      PRODUCT_AUTOMATION_TIMEOUT_MS: ${PRODUCT_AUTOMATION_TIMEOUT_MS:-30000}
-      PRODUCT_AUTOMATION_RETRY_ATTEMPTS: ${PRODUCT_AUTOMATION_RETRY_ATTEMPTS:-3}
-      PRODUCT_AUTOMATION_SKIP_EMBEDDED: ${PRODUCT_AUTOMATION_SKIP_EMBEDDED:-true}
       CRON_PRODUCT_TAGGER_SCHEDULE: ${CRON_PRODUCT_TAGGER_SCHEDULE:-0 2 * * *}
       CRON_PRODUCT_TAGGER_ENABLED: ${CRON_PRODUCT_TAGGER_ENABLED:-true}
     networks:
       - broadway-network
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
-
-  log-purge-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile.automation
-    container_name: broadway_log_purge_cron
-    command: ["node", "dist/automation/cron/logPurgeCron.js"]
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
-      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-7}
-      CRON_LOG_PURGE_SCHEDULE: ${CRON_LOG_PURGE_SCHEDULE:-15 3 * * *}
-      CRON_LOG_PURGE_ENABLED: ${CRON_LOG_PURGE_ENABLED:-true}
-    networks:
-      - broadway-network
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
-
-  barcode-sync-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile.automation
-    container_name: broadway_barcode_sync_cron
-    command: ["node", "dist/automation/cron/barcodeSyncCron.js"]
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
-      BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
-      BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}
-      BROADWAY_LIVE_PAGE_SIZE: ${BROADWAY_LIVE_PAGE_SIZE:-100}
-      BARCODE_SYNC_BATCH_SIZE: ${BARCODE_SYNC_BATCH_SIZE:-500}
-      CRON_BARCODE_SYNC_SCHEDULE: ${CRON_BARCODE_SYNC_SCHEDULE:-0 1 * * *}
-      CRON_BARCODE_SYNC_ENABLED: ${CRON_BARCODE_SYNC_ENABLED:-true}
-    networks:
-      - broadway-network
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
 
   recent-product-sync:
-    build:
-      context: .
-      dockerfile: Dockerfile.automation
+    image: broadway-automation:latest
     container_name: broadway_recent_product_sync
     command: ["node", "dist/automation/cron/recentProductCron.js"]
+    depends_on:
+      - automation-base
     env_file:
       - ${ENV_FILE:-.env}
     environment:
-      NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
+      <<: *common-env
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
-      BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}
       BROADWAY_LIVE_RECENT_SKUS_ENDPOINT: ${BROADWAY_LIVE_RECENT_SKUS_ENDPOINT:-/product_service/v1/skus/sku-variants-recent-limited}
       BROADWAY_LIVE_LOOKBACK_HOURS: ${BROADWAY_LIVE_LOOKBACK_HOURS:-3}
       CRON_RECENT_PRODUCT_SYNC_SCHEDULE: ${CRON_RECENT_PRODUCT_SYNC_SCHEDULE:-0 */2 * * *}
@@ -134,11 +60,40 @@ services:
     networks:
       - broadway-network
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
+  barcode-sync-cron:
+    image: broadway-automation:latest
+    container_name: broadway_barcode_sync_cron
+    command: ["node", "dist/automation/cron/barcodeSyncCron.js"]
+    depends_on:
+      - automation-base
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      <<: *common-env
+      BARCODE_SYNC_BATCH_SIZE: ${BARCODE_SYNC_BATCH_SIZE:-500}
+      CRON_BARCODE_SYNC_SCHEDULE: ${CRON_BARCODE_SYNC_SCHEDULE:-0 1 * * *}
+      CRON_BARCODE_SYNC_ENABLED: ${CRON_BARCODE_SYNC_ENABLED:-true}
+    networks:
+      - broadway-network
+    restart: unless-stopped
+
+  log-purge-cron:
+    image: broadway-automation:latest
+    container_name: broadway_log_purge_cron
+    command: ["node", "dist/automation/cron/logPurgeCron.js"]
+    depends_on:
+      - automation-base
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      <<: *common-env
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-7}
+      CRON_LOG_PURGE_SCHEDULE: ${CRON_LOG_PURGE_SCHEDULE:-15 3 * * *}
+      CRON_LOG_PURGE_ENABLED: ${CRON_LOG_PURGE_ENABLED:-true}
+    networks:
+      - broadway-network
+    restart: unless-stopped
 
 networks:
   broadway-network:
