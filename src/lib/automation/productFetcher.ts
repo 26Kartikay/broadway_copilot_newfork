@@ -63,9 +63,7 @@ function normalizeProduct(raw: Record<string, unknown>): BroadwayApiProduct {
     category,
     description,
     imageUrl,
-    image_url: undefined,
     productLink,
-    product_link: undefined,
   };
 }
 

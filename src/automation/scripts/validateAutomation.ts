@@ -85,9 +85,7 @@ async function runValidation() {
       category: tc.product.category,
       description: tc.product.description,
       imageUrl: undefined,
-      image_url: undefined,
       productLink: undefined,
-      product_link: undefined,
     };
 
     process.stdout.write(`Testing "${product.name}"... `);
