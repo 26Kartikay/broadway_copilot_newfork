@@ -31,6 +31,11 @@ export const broadwayApiConfig = {
   /** Optional; omit from requests when empty (sku-details-limited is often public). */
   apiKey: process.env.BROADWAY_LIVE_API_KEY ?? '',
   barcodeEndpoint: process.env.BROADWAY_LIVE_BARCODE_ENDPOINT ?? '/product_service/v1/skus/list',
+  recentSkusEndpoint: process.env.BROADWAY_LIVE_RECENT_SKUS_ENDPOINT ?? '/product_service/v1/skus/sku-variants-recent-limited',
+  /** Fields requested for recent SKUs fetch */
+  recentSkusFields: 'id,name,barcode,description,primary_image_url,brand,category',
+  /** How far back to look in hours (e.g., 3 hours for a 2-hour cron) */
+  recentSkusLookbackHours: parseInt(process.env.BROADWAY_LIVE_LOOKBACK_HOURS ?? '3', 10),
   /** Path segment before barcode, e.g. sku-details-limited → .../skus/sku-details-limited/{barcode} */
   skuDetailSegment:
     process.env.BROADWAY_LIVE_SKU_DETAIL_SEGMENT ?? 'sku-details-limited',
@@ -39,6 +44,7 @@ export const broadwayApiConfig = {
 
 export const cronConfig = {
   productTaggerSchedule: process.env.CRON_PRODUCT_TAGGER_SCHEDULE ?? '0 2 * * *',
+  recentProductSyncSchedule: process.env.CRON_RECENT_PRODUCT_SYNC_SCHEDULE ?? '0 */2 * * *',
   productTaggerEnabled: process.env.CRON_PRODUCT_TAGGER_ENABLED !== 'false',
   barcodeSyncSchedule: process.env.CRON_BARCODE_SYNC_SCHEDULE ?? '0 1 * * *',
   barcodeSyncEnabled: process.env.CRON_BARCODE_SYNC_ENABLED !== 'false',

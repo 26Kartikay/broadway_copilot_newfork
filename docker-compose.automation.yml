@@ -113,6 +113,33 @@ services:
         max-size: "5m"
         max-file: "3"
 
+  recent-product-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.automation
+    container_name: broadway_recent_product_sync
+    command: ["node", "dist/automation/cron/recentProductCron.js"]
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      BROADWAY_LIVE_API_BASE: ${BROADWAY_LIVE_API_BASE:-https://api.broadwaylive.in}
+      BROADWAY_LIVE_API_KEY: ${BROADWAY_LIVE_API_KEY}
+      BROADWAY_LIVE_RECENT_SKUS_ENDPOINT: ${BROADWAY_LIVE_RECENT_SKUS_ENDPOINT:-/product_service/v1/skus/sku-variants-recent-limited}
+      BROADWAY_LIVE_LOOKBACK_HOURS: ${BROADWAY_LIVE_LOOKBACK_HOURS:-3}
+      CRON_RECENT_PRODUCT_SYNC_SCHEDULE: ${CRON_RECENT_PRODUCT_SYNC_SCHEDULE:-0 */2 * * *}
+      CRON_PRODUCT_TAGGER_ENABLED: ${CRON_PRODUCT_TAGGER_ENABLED:-true}
+    networks:
+      - broadway-network
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   broadway-network:
     external: true

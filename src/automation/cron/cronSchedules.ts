@@ -4,11 +4,20 @@ export function getProductTaggerSchedule(): string {
   return cronConfig.productTaggerSchedule;
 }
 
+export function getRecentProductSyncSchedule(): string {
+  return cronConfig.recentProductSyncSchedule;
+}
+
 export function getBarcodeSyncSchedule(): string {
   return cronConfig.barcodeSyncSchedule;
 }
 
 export function isProductTaggerEnabled(): boolean {
+  return cronConfig.productTaggerEnabled;
+}
+
+export function isRecentProductSyncEnabled(): boolean {
+  // Reuse product tagger enable flag or add a specific one if needed
   return cronConfig.productTaggerEnabled;
 }
 
