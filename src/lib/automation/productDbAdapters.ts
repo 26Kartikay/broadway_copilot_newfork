@@ -42,8 +42,8 @@ export function prismaProductToBroadwayShape(p: Product): BroadwayApiProduct {
     name: p.name,
     brand: p.brand,
     category: p.legacyCategory ?? undefined,
-    description: desc,
-    imageUrl: p.imageUrl || undefined,
-    productLink: p.productLink || undefined,
+    description: desc ?? undefined,
+    imageUrl: p.imageUrl ?? undefined,
+    productLink: p.productLink ?? undefined,
   };
 }

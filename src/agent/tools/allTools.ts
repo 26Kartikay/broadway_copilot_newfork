@@ -148,7 +148,7 @@ export function getTools(
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return analyzeColorSeason({ ...input, userId, sourceImageUrl });
+        return analyzeColorSeason({ ...input, userId, sourceImageUrl, sessionId: messageInput.MessageSid });
       },
     }),
     new Tool({
@@ -183,7 +183,7 @@ export function getTools(
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return vibeCheck({ ...input, userId, sourceImageUrl });
+        return vibeCheck({ ...input, userId, sourceImageUrl, sessionId: messageInput.MessageSid });
       },
     }),
     new Tool({

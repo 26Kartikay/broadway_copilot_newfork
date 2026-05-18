@@ -1,8 +1,5 @@
-version: '3.8'
-
 name: broadway-automation
 
-# Common configurations to avoid repetition
 x-common-env: &common-env
   NODE_ENV: production
   DATABASE_URL: ${DATABASE_URL}
@@ -11,23 +8,13 @@ x-common-env: &common-env
   BROADWAY_LIVE_PAGE_SIZE: ${BROADWAY_LIVE_PAGE_SIZE:-100}
 
 services:
-  # This service handles the build for EVERYONE else
-  automation-base:
+  # DESIGNATED BUILDER: Only this service has the 'build' block
+  product-automation:
     build:
       context: .
       dockerfile: Dockerfile.automation
     image: broadway-automation:latest
-    container_name: broadway_automation_builder
-    # We don't need this container to actually run, just to build the image
-    entrypoint: ["echo", "Build complete"]
-    networks:
-      - broadway-network
-
-  product-automation:
-    image: broadway-automation:latest
     container_name: broadway_product_automation
-    depends_on:
-      - automation-base
     env_file:
       - ${ENV_FILE:-.env}
     environment:
@@ -46,8 +33,9 @@ services:
     image: broadway-automation:latest
     container_name: broadway_recent_product_sync
     command: ["node", "dist/automation/cron/recentProductCron.js"]
+    # Wait for the builder to finish
     depends_on:
-      - automation-base
+      - product-automation
     env_file:
       - ${ENV_FILE:-.env}
     environment:
@@ -66,7 +54,7 @@ services:
     container_name: broadway_barcode_sync_cron
     command: ["node", "dist/automation/cron/barcodeSyncCron.js"]
     depends_on:
-      - automation-base
+      - product-automation
     env_file:
       - ${ENV_FILE:-.env}
     environment:
@@ -83,7 +71,7 @@ services:
     container_name: broadway_log_purge_cron
     command: ["node", "dist/automation/cron/logPurgeCron.js"]
     depends_on:
-      - automation-base
+      - product-automation
     env_file:
       - ${ENV_FILE:-.env}
     environment:

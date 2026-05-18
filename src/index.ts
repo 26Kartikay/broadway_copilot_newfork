@@ -22,6 +22,8 @@ import { dbLog } from './utils/dbLogger';
 import { logger } from './utils/logger';
 import { ensureDir, staticUploadsMount } from './utils/paths';
 import { getServerUrlBase } from './utils/serverUrl';
+import analyticsRouter from './routes/analytics';
+import { analyticsService } from './services/analyticsService';
 
 /** Purge container-local upload files periodically (see scripts/clear-uploads.mjs for manual run). */
 const UPLOADS_PURGE_INTERVAL_MS = 30 * 60 * 1000;
@@ -164,6 +166,22 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
       String(userId),
     );
 
+    // Track style_chat_initiated if this is a fresh conversation (within last 30 seconds)
+    if (Date.now() - conversation.createdAt.getTime() < 30000) {
+      analyticsService.track({
+        eventName: 'style_chat_initiated',
+        userId: user.id,
+        sessionId: sid,
+        vibeSessionId: sid,
+        flowType: 'home',
+        platform: 'web',
+        properties: {
+          entry_flow: 'home',
+          has_prior_result: !!(user.lastColorAnalysisAt || user.lastVibeCheckAt),
+        },
+      });
+    }
+
     await prisma.conversation.update({
       where: { id: conversation.id },
       data: { updatedAt: new Date() },
@@ -264,6 +282,20 @@ void (async function bootstrap() {
         );
       });
     }, UPLOADS_PURGE_INTERVAL_MS);
+
+    // Graceful shutdown
+    const shutdown = async () => {
+      logger.info('Shutting down gracefully...');
+      await analyticsService.shutdown();
+      process.exit(0);
+    };
+
+    process.on('SIGINT', () => {
+      void shutdown();
+    });
+    process.on('SIGTERM', () => {
+      void shutdown();
+    });
   } catch (err: unknown) {
     logger.error(
       {

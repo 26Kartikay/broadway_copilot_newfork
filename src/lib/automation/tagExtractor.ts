@@ -135,7 +135,6 @@ async function callOpenAI(
   const imageUrl =
     normalizeCsvImageUrl(visionImageUrl) ||
     normalizeCsvImageUrl(product.imageUrl) ||
-    normalizeCsvImageUrl(product.image_url) ||
     '';
 
   const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [{ type: 'text', text }];
@@ -173,8 +172,7 @@ async function resolveVisionInput(rawImageUrl: string): Promise<string | undefin
 }
 
 export async function extractTagsFromProduct(product: BroadwayApiProduct): Promise<ExtractedTags> {
-  const rawImageUrl =
-    normalizeCsvImageUrl(product.imageUrl) || normalizeCsvImageUrl(product.image_url);
+  const rawImageUrl = normalizeCsvImageUrl(product.imageUrl);
 
   try {
     if (rawImageUrl) {

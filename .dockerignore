@@ -6,8 +6,6 @@ node_modules
 dist
 uploads
 coverage
-dashboard
-functions
 *.log
 Dockerfile
 README.md

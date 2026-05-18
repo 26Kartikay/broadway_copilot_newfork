@@ -9,6 +9,7 @@ import { tryHandleHttpChatFlows } from './httpChatFlows';
 import { buildMainMenuReplies, isMainMenuTrigger, type HttpReplyPayload } from './httpReplies';
 import { clearHttpPendingFlow } from './memory/redis';
 import { ChatOrchestrator } from './orchestrator';
+import { analyticsService } from '../services/analyticsService';
 
 export type { HttpReplyPayload } from './httpReplies';
 
@@ -99,6 +100,21 @@ export async function runAgentForHttp(
         user: refreshedUser ?? user,
         requestProfileName: guestRecGate.messageInput.ProfileName,
       });
+
+      analyticsService.track({
+        eventName: 'style_chat_message_sent',
+        userId: prismaUserId,
+        sessionId: messageInput.MessageSid, // Use MessageSid as a fallback for sessionId if not provided elsewhere
+        vibeSessionId: messageInput.MessageSid, // Use MessageSid as a fallback for vibeSessionId
+        flowType: 'ask_ai',
+        platform: 'web',
+        properties: {
+          message_index: 0,
+          char_count: messageInput.Body.length,
+          has_image_attachment: parseInt(messageInput.NumMedia) > 0,
+        },
+      });
+
       dbLog(
         Severity.INFO,
         'agent',
@@ -123,6 +139,21 @@ export async function runAgentForHttp(
 
     const result = await orchestrator.handleTurn(prismaUserId, messageInput);
     const replies = formatReplies(result, { user, requestProfileName: messageInput.ProfileName });
+
+    analyticsService.track({
+      eventName: 'style_chat_message_sent',
+      userId: prismaUserId,
+      sessionId: messageInput.MessageSid,
+      vibeSessionId: messageInput.MessageSid,
+      flowType: (result.intent as any) || 'ask_ai',
+      platform: 'web',
+      properties: {
+        message_index: 0,
+        char_count: messageInput.Body.length,
+        has_image_attachment: parseInt(messageInput.NumMedia) > 0,
+      },
+    });
+
     dbLog(
       Severity.INFO,
       'agent',

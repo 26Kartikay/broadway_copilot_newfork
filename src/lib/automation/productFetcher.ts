@@ -60,10 +60,10 @@ function normalizeProduct(raw: Record<string, unknown>): BroadwayApiProduct {
     barcode: String(raw['barcode'] ?? raw['sku'] ?? ''),
     name: String(raw['name'] ?? raw['article_name'] ?? ''),
     brand: String(raw['brand'] ?? raw['brand_name'] ?? ''),
-    category,
-    description,
-    imageUrl,
-    productLink,
+    category: category ?? undefined,
+    description: description ?? undefined,
+    imageUrl: imageUrl ?? undefined,
+    productLink: productLink ?? undefined,
   };
 }
 

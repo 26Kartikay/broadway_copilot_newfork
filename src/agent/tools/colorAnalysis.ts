@@ -10,6 +10,8 @@ import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user';
 import { openaiVisionCompletion } from '../openaiVision';
 import { setStagedColorAnalysis } from '../memory/redis';
+import { analyticsService } from '../../services/analyticsService';
+import { randomUUID } from 'crypto';
 
 const COLOR_ANALYSIS_VISION_PROMPT = `
 Analyze this person's coloring for seasonal color analysis.
@@ -48,10 +50,27 @@ export interface ColorAnalysisInput {
   eyeColor?: string;
   userId: string;
   sourceImageUrl?: string;
+  sessionId?: string;
 }
 
 export async function analyzeColorSeason(input: ColorAnalysisInput) {
-  const { imageBase64, mimeType, userId, skinTone, hairColor, eyeColor, sourceImageUrl } = input;
+  const { imageBase64, mimeType, userId, skinTone, hairColor, eyeColor, sourceImageUrl, sessionId: providedSessionId } = input;
+  const startTime = Date.now();
+  const sessionId = providedSessionId || randomUUID();
+
+  analyticsService.track({
+    eventName: 'ai_analysis_requested',
+    userId,
+    sessionId,
+    vibeSessionId: sessionId,
+    flowType: 'color_analysis',
+    platform: 'web',
+    properties: {
+      model_version: 'gpt-4o',
+      image_count: imageBase64 ? 1 : 0,
+      user_text_included: !!(skinTone || hairColor || eyeColor),
+    },
+  });
 
   try {
     let result: Record<string, unknown>;
@@ -67,6 +86,19 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
 
       const qOk = result.quality_ok !== false && String(result.quality_ok) !== 'false';
       if (!qOk) {
+        analyticsService.track({
+          eventName: 'ai_analysis_failed',
+          userId,
+          sessionId,
+          vibeSessionId: sessionId,
+          flowType: 'color_analysis',
+          platform: 'web',
+          properties: {
+            error_code: 'QUALITY_REJECT',
+            retry_attempted: false,
+            latency_ms: Date.now() - startTime,
+          },
+        });
         return {
           error: String(result.quality_issue || "This photo isn't quite usable for a color read."),
           quality_reject: true,
@@ -85,10 +117,42 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
 
     if (!canonical || !isValidPalette(canonical)) {
       logger.error({ userId, rawPalette }, 'Invalid palette from color analysis vision model');
+      analyticsService.track({
+        eventName: 'ai_analysis_failed',
+        userId,
+        sessionId,
+        vibeSessionId: sessionId,
+        flowType: 'color_analysis',
+        platform: 'web',
+        properties: {
+          error_code: 'INVALID_PALETTE',
+          retry_attempted: false,
+          latency_ms: Date.now() - startTime,
+        },
+      });
       return { error: `Invalid palette_name from model: ${rawPalette}` };
     }
 
     const paletteData = getPaletteData(canonical);
+
+    analyticsService.track({
+      eventName: 'ai_analysis_completed',
+      userId,
+      sessionId,
+      vibeSessionId: sessionId,
+      flowType: 'color_analysis',
+      platform: 'web',
+      properties: {
+        latency_ms: Date.now() - startTime,
+        score_overall: 100,
+        score_drip_fit: 0,
+        score_hair_skin: 0,
+        score_accessories: 0,
+        palette_name: canonical,
+        top_colors: Array.isArray(result.colors_suited) ? (result.colors_suited as any[]).map(String) : [],
+      },
+    });
+
     let userImageUrl: string | null = null;
     if (sourceImageUrl?.trim()) {
       userImageUrl = normalizeHttpUrlReference(sourceImageUrl.trim()) || null;
@@ -128,6 +192,19 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
     };
   } catch (err) {
     logger.error({ err, userId }, 'Error in analyzeColorSeason tool');
+    analyticsService.track({
+      eventName: 'ai_analysis_failed',
+      userId,
+      sessionId,
+      vibeSessionId: sessionId,
+      flowType: 'color_analysis',
+      platform: 'web',
+      properties: {
+        error_code: 'COLOR_ANALYSIS_ERROR',
+        retry_attempted: false,
+        latency_ms: Date.now() - startTime,
+      },
+    });
     return { error: String(err) };
   }
 }

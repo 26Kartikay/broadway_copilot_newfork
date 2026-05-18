@@ -4,6 +4,8 @@ import { logger } from '../../utils/logger';
 import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user';
 import { openaiVisionCompletion } from '../openaiVision';
+import { analyticsService } from '../../services/analyticsService';
+import { randomUUID } from 'crypto';
 
 const VIBE_CHECK_PROMPT = `
 Analyze this outfit as a Broadway fashion stylist.
@@ -30,6 +32,7 @@ export interface VibeCheckInput {
   description?: string;
   sourceImageUrl?: string;
   tonality?: string;
+  sessionId?: string;
 }
 
 function clampScore(n: unknown): number {
@@ -46,8 +49,24 @@ function parseTonality(raw: string | undefined): Tonality | null {
 }
 
 export async function vibeCheck(input: VibeCheckInput) {
-  const { userId, imageBase64, mimeType, description, sourceImageUrl, tonality: tonalityRaw } = input;
+  const { userId, imageBase64, mimeType, description, sourceImageUrl, tonality: tonalityRaw, sessionId: providedSessionId } = input;
   const tonality = parseTonality(tonalityRaw);
+  const startTime = Date.now();
+  const sessionId = providedSessionId || randomUUID();
+
+  analyticsService.track({
+    eventName: 'ai_analysis_requested',
+    userId,
+    sessionId,
+    vibeSessionId: sessionId,
+    flowType: 'vibe_check',
+    platform: 'web',
+    properties: {
+      model_version: 'gpt-4o',
+      image_count: imageBase64 ? 1 : 0,
+      user_text_included: !!description,
+    },
+  });
 
   try {
     let result: Record<string, unknown>;
@@ -88,6 +107,24 @@ export async function vibeCheck(input: VibeCheckInput) {
     const recommendations = Array.isArray(result.recommendations)
       ? (result.recommendations as unknown[]).map((x) => String(x))
       : [];
+
+    analyticsService.track({
+      eventName: 'ai_analysis_completed',
+      userId,
+      sessionId,
+      vibeSessionId: sessionId,
+      flowType: 'vibe_check',
+      platform: 'web',
+      properties: {
+        latency_ms: Date.now() - startTime,
+        score_overall: vibeCheckResult * 10,
+        score_drip_fit: clampedFit.score * 10,
+        score_hair_skin: clampedHairAndSkin.score * 10,
+        score_accessories: clampedAccessories.score * 10,
+        palette_name: undefined,
+        top_colors: undefined,
+      },
+    });
 
     let userImageUrl: string | null = null;
     if (sourceImageUrl?.trim()) {
@@ -130,6 +167,19 @@ export async function vibeCheck(input: VibeCheckInput) {
     };
   } catch (err) {
     logger.error({ err, userId }, 'Error in vibeCheck tool');
+    analyticsService.track({
+      eventName: 'ai_analysis_failed',
+      userId,
+      sessionId,
+      vibeSessionId: sessionId,
+      flowType: 'vibe_check',
+      platform: 'web',
+      properties: {
+        error_code: 'VIBE_CHECK_ERROR',
+        retry_attempted: false,
+        latency_ms: Date.now() - startTime,
+      },
+    });
     return { error: String(err) };
   }
 }

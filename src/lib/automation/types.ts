@@ -3,10 +3,10 @@ export interface BroadwayApiProduct {
   barcode: string;
   name: string;
   brand: string;
-  category?: string;
-  description?: string;
-  imageUrl?: string;
-  productLink?: string;
+  category?: string | undefined;
+  description?: string | undefined;
+  imageUrl?: string | undefined;
+  productLink?: string | undefined;
 }
 
 export interface BarcodeListItem {

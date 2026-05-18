@@ -1,4 +1,5 @@
 import { createId } from '@paralleldrive/cuid2';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { agentExecutor } from '../lib/ai/agents/executor';
 import { ChatOpenAI } from '../lib/ai/openai/chat_models';
@@ -6,6 +7,7 @@ import { AssistantMessage, MessageContent, SystemMessage, UserMessage } from '..
 import { MessageInput } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
+import { analyticsService } from '../services/analyticsService';
 import { AGENT_MAX_COMPLETION_TOKENS, OPENAI_CHAT_MODEL } from './openaiAgentModels';
 import { classifyIntent, formatIntentV2PlainText } from './intentClassifier';
 import {
@@ -197,7 +199,7 @@ export class ChatOrchestrator {
     const activeSession: SearchSession = { ...searchSession };
 
     // Step 6: Build user images + system prompt + tools
-    const userImages = await this.buildUserImages(messageInput);
+    const userImages = await this.buildUserImages(messageInput, userId);
     const sessionContext = buildSearchSessionContext(
       activeSession,
       isDislikeMore,
@@ -386,14 +388,15 @@ export class ChatOrchestrator {
     return Array.from(new Map(products.map((p) => [p.id, p])).values());
   }
 
-  private async buildUserImages(input: MessageInput): Promise<any[]> {
+  private async buildUserImages(input: MessageInput, userId: string): Promise<any[]> {
     const images: any[] = [];
     const numMedia = parseInt(input.NumMedia || '0', 10);
+    const sessionId = input.MessageSid;
     for (let i = 0; i < numMedia; i++) {
       const url = input[`MediaUrl${i}`];
       if (url) {
         try {
-          const { data, mimeType } = await this.fetchImageAsBase64(url);
+          const { data, mimeType } = await this.fetchImageAsBase64(url, userId, sessionId);
           images.push({ type: 'image', source: { type: 'base64', media_type: mimeType, data } });
         } catch (err) {
           logger.warn({ url, err }, 'Failed to fetch image for orchestrator');
@@ -403,12 +406,50 @@ export class ChatOrchestrator {
     return images;
   }
 
-  private async fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string }> {
-    const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    let mimeType = response.headers.get('content-type') || 'image/jpeg';
-    if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
-    return { data: buffer.toString('base64'), mimeType };
+  private async fetchImageAsBase64(url: string, userId: string, sessionId?: string): Promise<{ data: string; mimeType: string }> {
+    const startTime = Date.now();
+    const sid = sessionId || randomUUID();
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Fetch failed with status ${response.status}`);
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      let mimeType = response.headers.get('content-type') || 'image/jpeg';
+      if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
+      
+      const data = buffer.toString('base64');
+      
+      analyticsService.track({
+        eventName: 'image_upload_completed',
+        userId,
+        sessionId: sid,
+        vibeSessionId: sid,
+        flowType: 'ask_ai',
+        platform: 'web',
+        properties: {
+          image_count: 1,
+          upload_duration_ms: Date.now() - startTime,
+          file_size_kb: buffer.length / 1024,
+        },
+      });
+
+      return { data, mimeType };
+    } catch (err) {
+      analyticsService.track({
+        eventName: 'image_upload_failed',
+        userId,
+        sessionId: sid,
+        vibeSessionId: sid,
+        flowType: 'ask_ai',
+        platform: 'web',
+        properties: {
+          error_type: err instanceof Error ? err.message : String(err),
+          retry_count: 0,
+        },
+      });
+      throw err;
+    }
   }
 }
+

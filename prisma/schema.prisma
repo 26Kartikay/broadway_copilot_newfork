@@ -503,6 +503,25 @@ model AdminAuditLog {
   @@index([createdAt(sort: Desc)])
 }
 
+model AnalyticsEvent {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  eventName     String
+  flowType      String?
+  platform      String?
+  userId        String?
+  sessionId     String?
+  vibeSessionId String?
+  properties    Json
+
+  @@index([createdAt])
+  @@index([eventName])
+  @@index([userId])
+  @@index([sessionId])
+  @@index([vibeSessionId])
+  @@index([flowType])
+}
+
 enum MessageRole {
   USER
   AI
