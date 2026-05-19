@@ -1,8 +1,16 @@
-# Production-style **bot** stack: built app image + Postgres + Redis (no dashboard).
+# Production-style stack: bot + optional dashboard + analytics-api + Postgres + Redis.
 # User/chat images under /app/uploads — mount a host directory so uploads survive restarts.
 #
 # Usage (from repo root):
 #   docker compose -f docker-compose.bot.prod.yml --env-file .env up -d --build
+#
+# Bot only (no dashboard / analytics):
+#   docker compose -f docker-compose.bot.prod.yml up -d app db redis guest-cleanup-cron
+#
+# Bot + dashboard + analytics (no dev bind-mount stack):
+#   docker compose -f docker-compose.bot.prod.yml up -d --build
+#
+# analytics-api image is built from sibling ../analysis_agent (same layout as docker-compose.dashboard.yml).
 #
 # Set PORT / SERVER_URL consistently (same port inside container and in SERVER_URL).
 #   export SERVER_URL=https://api.yourdomain.com
@@ -130,6 +138,65 @@ services:
     depends_on:
       db:
         condition: service_healthy
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+      args:
+        DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/broadway?schema=public}
+        REDIS_URL: redis://redis:6379
+        PORT: ${DASHBOARD_PORT:-8090}
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-broadway}?schema=public}
+      REDIS_URL: redis://redis:6379
+      PORT: ${DASHBOARD_PORT:-8090}
+      ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
+      NODE_ENV: production
+      SERVER_URL: ${SERVER_URL:?Set SERVER_URL in .env or environment (public base URL, no default)}
+      CHAT_API_URL: ${CHAT_API_URL:-http://app:${PORT:-8080}}
+      ANALYTICS_API_URL: http://analytics-api:8000
+    ports:
+      - "${DASHBOARD_PORT:-8090}:${DASHBOARD_PORT:-8090}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      analytics-api:
+        condition: service_healthy
+
+  analytics-api:
+    build:
+      context: ../analysis_agent
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DB_CONNECTION_STRING: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-broadway}?schema=public}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ACCESSIBLE_TABLES: ${ANALYTICS_ACCESSIBLE_TABLES:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${ANALYTICS_API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
 
   db:
     image: pgvector/pgvector:pg16-bookworm
