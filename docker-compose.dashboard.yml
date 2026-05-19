@@ -3,10 +3,9 @@
 # From repo root (broadway_copilot_newfork):
 #   docker compose -f docker-compose.dashboard.yml --env-file .env up -d --build
 #
-# Repo layout (analytics-api image is built from a sibling directory):
-#   broadway/
-#     analysis_agent/              ← required; compose build.context: ../analysis_agent
-#     broadway_copilot_newfork/    ← run compose from here
+# analytics-api build context: ANALYSIS_AGENT_BUILD_CONTEXT in .env (default ../analysis_agent).
+#   Sibling layout: ~/analysis_agent and ~/broadway_copilot_newfork
+#   Or clone into repo: ./analysis_agent with ANALYSIS_AGENT_BUILD_CONTEXT=./analysis_agent
 #
 # You do NOT start the analytics agent separately when using this file — the `analytics-api`
 # service is uvicorn on port 8000. If you run the dashboard on the host (npm) instead of
@@ -74,8 +73,9 @@ services:
 
   analytics-api:
     build:
-      context: ../analysis_agent
+      context: ${ANALYSIS_AGENT_BUILD_CONTEXT:-../analysis_agent}
       dockerfile: Dockerfile.api
+    image: ${ANALYTICS_API_IMAGE:-broadway-dashboard-analytics-api}
     env_file:
       - ${ENV_FILE:-.env}
     environment:

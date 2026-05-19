@@ -10,7 +10,10 @@
 # Bot + dashboard + analytics (no dev bind-mount stack):
 #   docker compose -f docker-compose.bot.prod.yml up -d --build
 #
-# analytics-api image is built from sibling ../analysis_agent (same layout as docker-compose.dashboard.yml).
+# analytics-api: requires the analysis_agent source tree on the host (see ANALYSIS_AGENT_BUILD_CONTEXT in .env).
+#   Default context ../analysis_agent → clone/copy next to this repo, e.g. ~/analysis_agent beside ~/broadway_copilot_newfork
+#   Or clone into this repo and set ANALYSIS_AGENT_BUILD_CONTEXT=./analysis_agent
+#   Bot + event storage only (no SQL analytics API): omit analytics-api from the up command.
 #
 # Set PORT / SERVER_URL consistently (same port inside container and in SERVER_URL).
 #   export SERVER_URL=https://api.yourdomain.com
@@ -171,8 +174,9 @@ services:
 
   analytics-api:
     build:
-      context: ../analysis_agent
+      context: ${ANALYSIS_AGENT_BUILD_CONTEXT:-../analysis_agent}
       dockerfile: Dockerfile.api
+    image: ${ANALYTICS_API_IMAGE:-broadway-bot-prod-analytics-api}
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}
