@@ -35,6 +35,8 @@
     "automation:seed-barcodes:dev": "ts-node --transpile-only src/automation/scripts/seedBarcodesFromCsv.ts",
     "automation:purge-logs": "node dist/automation/scripts/purgeOldLogs.js",
     "automation:purge-logs:dev": "ts-node --transpile-only src/automation/scripts/purgeOldLogs.ts",
+    "automation:vibe-check-reminder": "node dist/automation/cron/vibeCheckReminderCron.js",
+    "automation:vibe-check-reminder:dev": "ts-node --transpile-only src/automation/cron/vibeCheckReminderCron.ts",
     "automation:bulk-sync": "node dist/automation/scripts/bulkCatalogSync.js",
     "automation:bulk-sync:dev": "ts-node --transpile-only src/automation/scripts/bulkCatalogSync.ts",
     "automation:patch-metadata:dev": "ts-node --transpile-only src/automation/scripts/patchProductMetadataFromCsv.ts",

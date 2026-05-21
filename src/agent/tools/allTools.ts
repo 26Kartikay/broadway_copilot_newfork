@@ -70,7 +70,6 @@ export function getTools(
         occasions: z.array(z.string()).optional().describe('filter by occasion'),
         style: z.string().optional().describe('Athleisure | Minimal | Streetwear | etc'),
         colorSeason: z.string().optional().describe("User's color season for filtering colors"),
-        limit: z.number().optional().describe('Number of products to return (max 20)'),
       }),
       func: async (args) => {
         const cleaned = cleanArgs(args);
@@ -108,7 +107,7 @@ export function getTools(
           brand: cleaned.brand ?? null,
           exclude_product_ids: excludeProductIds,
           exclude_handle_ids: excludeHandleIds,
-          limit: Math.max(cleaned.limit ?? 20, 20),
+          limit: 20,
         });
 
         return {

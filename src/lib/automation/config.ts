@@ -51,6 +51,8 @@ export const cronConfig = {
   /** Daily job: delete ServiceLog + ApiRequestLog older than LOG_RETENTION_DAYS (default 7). */
   logPurgeSchedule: process.env.CRON_LOG_PURGE_SCHEDULE ?? '15 3 * * *',
   logPurgeEnabled: process.env.CRON_LOG_PURGE_ENABLED !== 'false',
+  /** Daily 10 AM IST push notification for vibe check and color analysis. */
+  vibeCheckReminderEnabled: process.env.CRON_VIBE_CHECK_REMINDER_ENABLED !== 'false',
   logRetentionDays: Math.min(
     365,
     Math.max(1, parseInt(process.env.LOG_RETENTION_DAYS ?? '7', 10) || 7),

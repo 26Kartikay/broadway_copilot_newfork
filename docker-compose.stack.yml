@@ -136,6 +136,24 @@ services:
     networks:
       - broadway-network
 
+  vibe-check-reminder-cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
+      COMMS_SERVICE_URL: ${COMMS_SERVICE_URL:-http://comms-service:8001}
+      CRON_VIBE_CHECK_REMINDER_ENABLED: ${CRON_VIBE_CHECK_REMINDER_ENABLED:-true}
+    command: ["node", "dist/automation/cron/vibeCheckReminderCron.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - broadway-network
+
   dashboard:
     build:
       context: .

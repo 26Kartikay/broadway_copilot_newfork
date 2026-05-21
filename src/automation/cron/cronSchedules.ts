@@ -36,3 +36,7 @@ export function isLogPurgeEnabled(): boolean {
 export function getLogRetentionDays(): number {
   return cronConfig.logRetentionDays;
 }
+
+export function isVibeCheckReminderEnabled(): boolean {
+  return cronConfig.vibeCheckReminderEnabled;
+}
