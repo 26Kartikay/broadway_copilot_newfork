@@ -9,6 +9,8 @@ const TARGET_MINUTE_UTC = 30;
 const BATCH_SIZE = 500;
 
 const COMMS_SERVICE_URL = (process.env.COMMS_SERVICE_URL ?? 'http://localhost:8001').replace(/\/$/, '');
+const COMMS_PUSH_PATH = '/dispatch/push';
+const COMMS_PUSH_URL = `${COMMS_SERVICE_URL}${COMMS_PUSH_PATH}`;
 
 // Set VIBE_CHECK_REMINDER_INTERVAL_MS=60000 to fire every 1 min (testing only)
 const TEST_INTERVAL_MS = process.env.VIBE_CHECK_REMINDER_INTERVAL_MS
@@ -70,7 +72,18 @@ async function dispatchBatch(userIds: number[], title: string, body: string): Pr
   for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
     const batch = userIds.slice(i, i + BATCH_SIZE);
     try {
-      const res = await fetch(`${COMMS_SERVICE_URL}/dispatch/push`, {
+      logger.info(
+        {
+          endpoint: COMMS_PUSH_URL,
+          commsServiceUrl: COMMS_SERVICE_URL,
+          pushPath: COMMS_PUSH_PATH,
+          method: 'POST',
+          batchStart: i,
+          batchSize: batch.length,
+        },
+        '[VibeCheckReminderCron] Dispatching push batch',
+      );
+      const res = await fetch(COMMS_PUSH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,13 +96,16 @@ async function dispatchBatch(userIds: number[], title: string, body: string): Pr
       });
       if (!res.ok) {
         const text = await res.text();
-        logger.error({ status: res.status, body: text, batchStart: i }, '[VibeCheckReminderCron] Batch failed');
+        logger.error(
+          { status: res.status, body: text, endpoint: COMMS_PUSH_URL, batchStart: i },
+          '[VibeCheckReminderCron] Batch failed',
+        );
       } else {
         logger.info({ batchStart: i, batchSize: batch.length }, '[VibeCheckReminderCron] Batch dispatched');
       }
     } catch (err) {
       logger.error(
-        { err: err instanceof Error ? err.message : String(err), batchStart: i },
+        { err: err instanceof Error ? err.message : String(err), endpoint: COMMS_PUSH_URL, batchStart: i },
         '[VibeCheckReminderCron] Batch request error',
       );
     }
@@ -145,6 +161,16 @@ async function scheduledLoop() {
     logger.info('[VibeCheckReminderCron] Disabled via CRON_VIBE_CHECK_REMINDER_ENABLED. Exiting.');
     process.exit(0);
   }
+
+  logger.info(
+    {
+      commsServiceUrl: COMMS_SERVICE_URL,
+      pushPath: COMMS_PUSH_PATH,
+      endpoint: COMMS_PUSH_URL,
+      commsServiceUrlFromEnv: process.env.COMMS_SERVICE_URL ?? null,
+    },
+    '[VibeCheckReminderCron] Comms push endpoint configured',
+  );
 
   if (TEST_INTERVAL_MS) {
     logger.warn({ intervalMs: TEST_INTERVAL_MS }, '[VibeCheckReminderCron] TEST MODE — running on fixed interval');
