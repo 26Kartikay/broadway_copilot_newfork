@@ -18,7 +18,7 @@ import type {
   ScoredRow,
 } from './types';
 
-const DEFAULT_LIMIT = 8;
+const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 20;
 const SCORE_THRESHOLD = 0.50;
 const FALLBACK_THRESHOLD = 0.35;
@@ -207,7 +207,7 @@ export async function runRecommendationEngine(
       { threshold: SCORE_THRESHOLD, best_score: scored[0]?.final_score?.toFixed(3) ?? 'n/a' },
       '[RecEng] No results above primary threshold — trying fallback threshold',
     );
-    const fallback = scored.filter((s) => s.final_score > FALLBACK_THRESHOLD).slice(0, 1);
+    const fallback = scored.filter((s) => s.final_score > FALLBACK_THRESHOLD).slice(0, limit);
     if (fallback.length > 0) {
       candidateSet = fallback;
       usedFallback = true;

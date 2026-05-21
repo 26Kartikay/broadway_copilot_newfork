@@ -108,7 +108,7 @@ export function getTools(
           brand: cleaned.brand ?? null,
           exclude_product_ids: excludeProductIds,
           exclude_handle_ids: excludeHandleIds,
-          limit: cleaned.limit,
+          limit: Math.max(cleaned.limit ?? 20, 20),
         });
 
         return {
