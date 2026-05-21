@@ -70,7 +70,7 @@ async function dispatchBatch(userIds: number[], title: string, body: string): Pr
   for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
     const batch = userIds.slice(i, i + BATCH_SIZE);
     try {
-      const res = await fetch(`${COMMS_SERVICE_URL}/v1/dispatch/push`, {
+      const res = await fetch(`${COMMS_SERVICE_URL}/dispatch/push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
