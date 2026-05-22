@@ -181,6 +181,7 @@ async function runColorAnalysisOnMedia(
   const sourceImageUrl = input.MediaUrl0;
   const raw = await analyzeColorSeason({
     userId: prismaUserId,
+    appUserId: user?.appUserId ?? input.WaId?.trim() ?? prismaUserId,
     imageBase64: data,
     mimeType,
     ...(sourceImageUrl ? { sourceImageUrl } : {}),
@@ -264,6 +265,7 @@ async function runVibeCheckOnMedia(
   const { data, mimeType } = await fetchImageAsBase64(url);
   const raw = await vibeCheck({
     userId: prismaUserId,
+    appUserId: user?.appUserId ?? input.WaId?.trim() ?? prismaUserId,
     imageBase64: data,
     mimeType,
     sourceImageUrl: url,

@@ -125,8 +125,12 @@ export function getTools(
             skuId: r.skuId,
             configId: r.configId,
             dedupeKey: r.dedupeKey,
+            relevance_score: r.relevance_score,
           })),
           totalFound: result.result_count,
+          recoSource: result.reco_meta?.reco_source,
+          scoreBand: result.reco_meta?.score_band,
+          paletteName: result.reco_meta?.palette_name,
         };
       },
     }),
@@ -147,7 +151,14 @@ export function getTools(
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return analyzeColorSeason({ ...input, userId, sourceImageUrl, sessionId: messageInput.MessageSid });
+        const appUserId = messageInput.WaId?.trim() || userId;
+        return analyzeColorSeason({
+          ...input,
+          userId,
+          appUserId,
+          sourceImageUrl,
+          sessionId: messageInput.MessageSid,
+        });
       },
     }),
     new Tool({
@@ -182,7 +193,14 @@ export function getTools(
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return vibeCheck({ ...input, userId, sourceImageUrl, sessionId: messageInput.MessageSid });
+        const appUserId = messageInput.WaId?.trim() || userId;
+        return vibeCheck({
+          ...input,
+          userId,
+          appUserId,
+          sourceImageUrl,
+          sessionId: messageInput.MessageSid,
+        });
       },
     }),
     new Tool({

@@ -8,6 +8,9 @@ import { MessageInput } from '../lib/chat/types';
 import { prisma } from '../lib/prisma';
 import { logger } from '../utils/logger';
 import { analyticsService } from '../services/analyticsService';
+import { analyticsUserIdFrom } from '../utils/analyticsUserId';
+import type { RecoSource, ScoreBand } from '../types/analytics';
+import { recoSourceFromSearchMode, scoreBandFromScore } from '../types/analytics';
 import { AGENT_MAX_COMPLETION_TOKENS, OPENAI_CHAT_MODEL } from './openaiAgentModels';
 import { classifyIntent, formatIntentV2PlainText } from './intentClassifier';
 import {
@@ -26,12 +29,23 @@ import { getToolsForIntent } from './toolRouter';
 import { getTools } from './tools/allTools';
 import { TraceBuffer } from './tracing';
 
+export interface RecoShelfMeta {
+  productIds: string[];
+  recoSource: RecoSource;
+  scoreBand: ScoreBand;
+  paletteName?: string;
+}
+
 export interface AgentResult {
   text: string;
   toolResults: any[];
   products: any[];
   colorAnalysis: any | null;
   vibeCheck: any | null;
+  /** Set when search_catalog returns products this turn. */
+  recoShelf?: RecoShelfMeta;
+  /** User turns in Redis history before this message (0-based index for the new message). */
+  messageIndex?: number;
   /** Classifier intent slug (e.g. product_search, brand_info). */
   intent?: string;
   /** Classifier inference (plain text); surfaced on HTTP request completion logs. */
@@ -145,12 +159,14 @@ export class ChatOrchestrator {
       llmTraces: [],
     };
 
-    // Step 1: Parallel fetch — history, user context, search session
-    const [history, userContext, searchSession] = await Promise.all([
+    // Step 1: Parallel fetch — history, user context, search session, app user id for analytics
+    const [history, userContext, searchSession, userRow] = await Promise.all([
       getHistory(userId),
       getUserContext(userId),
       getSearchSession(userId),
+      prisma.user.findUnique({ where: { id: userId }, select: { appUserId: true } }),
     ]);
+    const analyticsUserId = analyticsUserIdFrom(userRow, messageInput) ?? userId;
 
     // Step 2: Rolling context for intent classifier
     const rollingContext = buildRollingContext(history);
@@ -199,7 +215,7 @@ export class ChatOrchestrator {
     const activeSession: SearchSession = { ...searchSession };
 
     // Step 6: Build user images + system prompt + tools
-    const userImages = await this.buildUserImages(messageInput, userId);
+    const userImages = await this.buildUserImages(messageInput, analyticsUserId);
     const sessionContext = buildSearchSessionContext(
       activeSession,
       isDislikeMore,
@@ -284,15 +300,19 @@ export class ChatOrchestrator {
         : { raw: tr.result }),
     }));
 
+    const products = this.extractProducts(normalizedToolResults);
+    const recoShelf = this.extractRecoShelf(normalizedToolResults, activeSession);
     const agentResult: AgentResult = {
       text: result.output.reply,
       toolResults: normalizedToolResults,
-      products: this.extractProducts(normalizedToolResults),
+      products,
       colorAnalysis:
         normalizedToolResults.find((t) => t.toolName === 'analyze_color_season') || null,
       vibeCheck: normalizedToolResults.find((t) => t.toolName === 'vibe_check') || null,
+      messageIndex: history.filter((m) => m.role === 'user').length,
       intent,
       intentV2: intentV2Plain,
+      ...(recoShelf ? { recoShelf } : {}),
     };
 
     // Step 12: Update search session (non-blocking)
@@ -388,7 +408,45 @@ export class ChatOrchestrator {
     return Array.from(new Map(products.map((p) => [p.id, p])).values());
   }
 
-  private async buildUserImages(input: MessageInput, userId: string): Promise<any[]> {
+  private extractRecoShelf(
+    toolResults: any[],
+    searchSession: SearchSession,
+  ): RecoShelfMeta | undefined {
+    const catalog = toolResults.find((t) => t.toolName === 'search_catalog');
+    if (!catalog?.products?.length) return undefined;
+
+    const productIds = (catalog.products as { id?: string }[])
+      .map((p) => String(p.id ?? ''))
+      .filter(Boolean);
+    if (productIds.length === 0) return undefined;
+
+    const recoSource: RecoSource =
+      catalog.recoSource ??
+      recoSourceFromSearchMode(
+        typeof catalog.search_mode === 'string' ? catalog.search_mode : undefined,
+      );
+    const topRelevance = (catalog.products as { relevance_score?: number }[])[0]?.relevance_score;
+    const scoreBand: ScoreBand =
+      catalog.scoreBand ??
+      (typeof topRelevance === 'number'
+        ? scoreBandFromScore(Math.min(1, topRelevance))
+        : 'mid');
+
+    const paletteName =
+      catalog.paletteName ??
+      (searchSession.postServiceColorSeason && !searchSession.paletteNormalized
+        ? searchSession.postServiceColorSeason
+        : undefined);
+
+    return {
+      productIds,
+      recoSource,
+      scoreBand,
+      ...(paletteName ? { paletteName } : {}),
+    };
+  }
+
+  private async buildUserImages(input: MessageInput, analyticsUserId: string): Promise<any[]> {
     const images: any[] = [];
     const numMedia = parseInt(input.NumMedia || '0', 10);
     const sessionId = input.MessageSid;
@@ -396,7 +454,7 @@ export class ChatOrchestrator {
       const url = input[`MediaUrl${i}`];
       if (url) {
         try {
-          const { data, mimeType } = await this.fetchImageAsBase64(url, userId, sessionId);
+          const { data, mimeType } = await this.fetchImageAsBase64(url, analyticsUserId, sessionId);
           images.push({ type: 'image', source: { type: 'base64', media_type: mimeType, data } });
         } catch (err) {
           logger.warn({ url, err }, 'Failed to fetch image for orchestrator');
@@ -406,7 +464,11 @@ export class ChatOrchestrator {
     return images;
   }
 
-  private async fetchImageAsBase64(url: string, userId: string, sessionId?: string): Promise<{ data: string; mimeType: string }> {
+  private async fetchImageAsBase64(
+    url: string,
+    analyticsUserId: string,
+    sessionId?: string,
+  ): Promise<{ data: string; mimeType: string }> {
     const startTime = Date.now();
     const sid = sessionId || randomUUID();
     try {
@@ -422,7 +484,7 @@ export class ChatOrchestrator {
       
       analyticsService.track({
         eventName: 'image_upload_completed',
-        userId,
+        userId: analyticsUserId,
         sessionId: sid,
         vibeSessionId: sid,
         flowType: 'ask_ai',
@@ -438,7 +500,7 @@ export class ChatOrchestrator {
     } catch (err) {
       analyticsService.track({
         eventName: 'image_upload_failed',
-        userId,
+        userId: analyticsUserId,
         sessionId: sid,
         vibeSessionId: sid,
         flowType: 'ask_ai',

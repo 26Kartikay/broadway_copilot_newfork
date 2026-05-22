@@ -10,10 +10,79 @@ import { buildMainMenuReplies, isMainMenuTrigger, type HttpReplyPayload } from '
 import { clearHttpPendingFlow } from './memory/redis';
 import { ChatOrchestrator } from './orchestrator';
 import { analyticsService } from '../services/analyticsService';
+import type { FlowType } from '../types/analytics';
+import { analyticsUserIdFrom } from '../utils/analyticsUserId';
+import { entryFlowFromContext } from '../utils/entryFlow';
+import type { AgentResult } from './orchestrator';
 
 export type { HttpReplyPayload } from './httpReplies';
 
 const orchestrator = new ChatOrchestrator();
+
+function trackStyleChatTurnAnalytics(params: {
+  appUserId: string;
+  messageInput: MessageInput;
+  result: AgentResult;
+  turnStartedAt: number;
+}): void {
+  const { appUserId, messageInput, result, turnStartedAt } = params;
+  const sessionId = messageInput.MessageSid;
+  if (!sessionId || !appUserId) return;
+
+  const entryFlow: FlowType = entryFlowFromContext(result.intent, messageInput);
+  const flowType: FlowType = entryFlow;
+  const charCount = (messageInput.Body || messageInput.ButtonText || '').length;
+  const hasImage = parseInt(messageInput.NumMedia || '0', 10) > 0;
+  const messageIndex = result.messageIndex ?? 0;
+  const latencyMs = Date.now() - turnStartedAt;
+  const productIds = result.products.map((p: { id?: string }) => String(p.id ?? '')).filter(Boolean);
+
+  analyticsService.track({
+    eventName: 'style_chat_message_sent',
+    userId: appUserId,
+    sessionId,
+    vibeSessionId: sessionId,
+    flowType,
+    platform: 'web',
+    properties: {
+      message_index: messageIndex,
+      entry_flow: entryFlow,
+      char_count: charCount,
+      has_image_attachment: hasImage,
+    },
+  });
+
+  analyticsService.track({
+    eventName: 'style_chat_response_received',
+    userId: appUserId,
+    sessionId,
+    vibeSessionId: sessionId,
+    flowType,
+    platform: 'web',
+    properties: {
+      latency_ms: latencyMs,
+      response_included_products: productIds.length > 0,
+      product_ids: productIds,
+    },
+  });
+
+  if (result.recoShelf && result.recoShelf.productIds.length > 0) {
+    analyticsService.track({
+      eventName: 'reco_shelf_triggered',
+      userId: appUserId,
+      sessionId,
+      vibeSessionId: sessionId,
+      flowType,
+      platform: 'web',
+      properties: {
+        product_ids: result.recoShelf.productIds,
+        reco_source: result.recoShelf.recoSource,
+        score_band: result.recoShelf.scoreBand,
+        ...(result.recoShelf.paletteName ? { palette_name: result.recoShelf.paletteName } : {}),
+      },
+    });
+  }
+}
 
 export function initializeAgent(): void {
   if (!process.env.OPENAI_API_KEY?.trim()) {
@@ -95,24 +164,18 @@ export async function runAgentForHttp(
 
     if (guestRecGate.kind === 'replay') {
       const refreshedUser = await prisma.user.findUnique({ where: { id: prismaUserId } });
+      const turnStartedAt = Date.now();
       const result = await orchestrator.handleTurn(prismaUserId, guestRecGate.messageInput);
       const replies = formatReplies(result, {
         user: refreshedUser ?? user,
         requestProfileName: guestRecGate.messageInput.ProfileName,
       });
 
-      analyticsService.track({
-        eventName: 'style_chat_message_sent',
-        userId: prismaUserId,
-        sessionId: messageInput.MessageSid, // Use MessageSid as a fallback for sessionId if not provided elsewhere
-        vibeSessionId: messageInput.MessageSid, // Use MessageSid as a fallback for vibeSessionId
-        flowType: 'ask_ai',
-        platform: 'web',
-        properties: {
-          message_index: 0,
-          char_count: messageInput.Body.length,
-          has_image_attachment: parseInt(messageInput.NumMedia) > 0,
-        },
+      trackStyleChatTurnAnalytics({
+        appUserId: analyticsUserIdFrom(refreshedUser ?? user, guestRecGate.messageInput) ?? '',
+        messageInput: guestRecGate.messageInput,
+        result,
+        turnStartedAt,
       });
 
       dbLog(
@@ -137,21 +200,15 @@ export async function runAgentForHttp(
       };
     }
 
+    const turnStartedAt = Date.now();
     const result = await orchestrator.handleTurn(prismaUserId, messageInput);
     const replies = formatReplies(result, { user, requestProfileName: messageInput.ProfileName });
 
-    analyticsService.track({
-      eventName: 'style_chat_message_sent',
-      userId: prismaUserId,
-      sessionId: messageInput.MessageSid,
-      vibeSessionId: messageInput.MessageSid,
-      flowType: (result.intent as any) || 'ask_ai',
-      platform: 'web',
-      properties: {
-        message_index: 0,
-        char_count: messageInput.Body.length,
-        has_image_attachment: parseInt(messageInput.NumMedia) > 0,
-      },
+    trackStyleChatTurnAnalytics({
+      appUserId: analyticsUserIdFrom(user, messageInput) ?? '',
+      messageInput,
+      result,
+      turnStartedAt,
     });
 
     dbLog(

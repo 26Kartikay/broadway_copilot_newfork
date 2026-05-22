@@ -9,6 +9,7 @@ import {
   skuIdFromComponentTags,
 } from '../../lib/recommendation/configDedupe';
 import { logger } from '../../utils/logger';
+import { scoreBandFromScore, type RecoSource, type ScoreBand } from '../../types/analytics';
 
 export interface SearchCatalogInput {
   query?: string;
@@ -49,6 +50,9 @@ export interface FormattedProduct {
   configId?: string;
   /** Internal dedupe key (`cfg:…` or `hid:…`). If `hid:`, each row is separate (no cross-SKU merge). */
   dedupeKey?: string;
+  /** Vector similarity or rerank score (0–1+), when available. */
+  similarityScore?: number;
+  scoreBand?: ScoreBand;
 }
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -395,6 +399,7 @@ async function searchCatalogVector(
   return reranked.slice(0, Math.min(limit, MAX_LIMIT)).map((r) => {
     const sku = skuIdFromComponentTags(r.componentTags);
     const cfg = configIdFromComponentTags(r.componentTags);
+    const similarityScore = Math.min(1, Math.max(0, r.rerankScore));
     return {
       id: r.id,
       handleId: r.handleId,
@@ -409,6 +414,8 @@ async function searchCatalogVector(
       imageUrl: r.imageUrl,
       productLink: r.productLink,
       dedupeKey: dedupeKeyFromProduct(r.componentTags, r.handleId),
+      similarityScore,
+      scoreBand: scoreBandFromScore(similarityScore),
       ...(r.dbId ? { dbId: r.dbId } : {}),
       ...(sku ? { skuId: sku } : {}),
       ...(cfg ? { configId: cfg } : {}),
@@ -525,8 +532,19 @@ async function searchCatalogIlike(
 export type SearchCatalogResult = {
   products: FormattedProduct[];
   totalFound: number;
+  recoSource?: RecoSource;
+  scoreBand?: ScoreBand;
+  paletteName?: string;
   error?: string;
 };
+
+function shelfScoreBand(products: FormattedProduct[]): ScoreBand | undefined {
+  const scores = products
+    .map((p) => p.similarityScore)
+    .filter((s): s is number => typeof s === 'number');
+  if (scores.length === 0) return undefined;
+  return scoreBandFromScore(Math.max(...scores));
+}
 
 export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCatalogResult> {
   const limit = Math.min(Math.max(input.limit ?? 8, 1), MAX_LIMIT);
@@ -534,10 +552,14 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
   try {
     let products: FormattedProduct[] = [];
     let resolvedViaEmbedding = false;
+    let recoSource: RecoSource = 'ilike';
 
     if (getOpenAI()) {
       products = await searchCatalogVector(input, limit);
-      if (products.length > 0) resolvedViaEmbedding = true;
+      if (products.length > 0) {
+        resolvedViaEmbedding = true;
+        recoSource = 'vector';
+      }
 
       const hadStrictFilters = Boolean(
         input.category ||
@@ -552,6 +574,7 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
         if (relaxed.length > 0) {
           products = relaxed;
           resolvedViaEmbedding = true;
+          recoSource = 'ilike_relaxed';
           logger.info(
             { resultCount: products.length },
             'Catalog: vector retry without category/style/color/occasion SQL filters',
@@ -566,9 +589,11 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
     if (products.length === 0) {
       products = await searchCatalogIlike(input, limit, false);
       ilikeMode = products.length > 0 ? 'strict' : 'none';
+      if (products.length > 0) recoSource = 'ilike';
       if (products.length === 0) {
         products = await searchCatalogIlike(input, limit, true);
         ilikeMode = products.length > 0 ? 'relaxed' : 'none';
+        if (products.length > 0) recoSource = 'ilike_relaxed';
       }
     }
 
@@ -613,9 +638,15 @@ export async function searchCatalog(input: SearchCatalogInput): Promise<SearchCa
       }
     }
 
+    const paletteName = input.colorSeason?.trim();
+    const scoreBand =
+      shelfScoreBand(products) ?? (resolvedViaEmbedding ? 'mid' : products.length > 0 ? 'low' : undefined);
+
     return {
       products,
       totalFound: products.length,
+      ...(products.length > 0 ? { recoSource, scoreBand: scoreBand ?? 'low' } : {}),
+      ...(paletteName ? { paletteName } : {}),
     };
   } catch (err) {
     logger.error({ err, input }, 'Error in searchCatalog tool');

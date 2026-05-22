@@ -170,7 +170,7 @@ app.post('/api/chat', async (req: Request, res: Response, next: NextFunction) =>
     if (Date.now() - conversation.createdAt.getTime() < 30000) {
       analyticsService.track({
         eventName: 'style_chat_initiated',
-        userId: user.id,
+        userId: user.appUserId,
         sessionId: sid,
         vibeSessionId: sid,
         flowType: 'home',

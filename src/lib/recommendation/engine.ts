@@ -9,6 +9,7 @@ import {
   skuIdFromComponentTags,
 } from './configDedupe';
 import { computeScore } from './scorer';
+import { recoSourceFromSearchMode, scoreBandFromScore } from '../../types/analytics';
 import type {
   ExtractedIntent,
   RecipientContext,
@@ -259,6 +260,11 @@ export async function runRecommendationEngine(
     match_reason: s.match_reason,
   }));
 
+  const topScore = finalSet[0]?.final_score ?? 0;
+  const normalizedTop = Math.min(1, Math.max(0, topScore));
+  const paletteName =
+    (intent.colorPalette?.trim() || input.user_profile.colorSeason?.trim() || undefined) ?? undefined;
+
   const result: RecommendationResult = {
     query_understood_as: intent.semantic_query,
     shopping_context: {
@@ -282,6 +288,12 @@ export async function runRecommendationEngine(
     },
     results,
     result_count: results.length,
+    reco_meta: {
+      product_ids: results.map((r) => r.id),
+      reco_source: recoSourceFromSearchMode(searchMode),
+      score_band: scoreBandFromScore(normalizedTop),
+      ...(paletteName ? { palette_name: paletteName } : {}),
+    },
   };
 
   const uniqueDedupeKeys = new Set(results.map((r) => r.dedupeKey).filter(Boolean));

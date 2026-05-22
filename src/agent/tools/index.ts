@@ -190,7 +190,12 @@ export async function executeTool(
         }
         return {
           toolName: name,
-          ...(await analyzeColorSeason({ ...input, userId, sourceImageUrl })),
+          ...(await analyzeColorSeason({
+            ...input,
+            userId,
+            appUserId: messageInput?.WaId?.trim() || userId,
+            sourceImageUrl,
+          })),
         };
       case 'save_user_preference':
         return { toolName: name, ...(await saveUserPreference({ ...input, userId })) };
@@ -202,7 +207,15 @@ export async function executeTool(
           input.imageBase64 = userImages[0].source.data;
           input.mimeType = userImages[0].source.media_type;
         }
-        return { toolName: name, ...(await vibeCheck({ ...input, userId, sourceImageUrl })) };
+        return {
+          toolName: name,
+          ...(await vibeCheck({
+            ...input,
+            userId,
+            appUserId: messageInput?.WaId?.trim() || userId,
+            sourceImageUrl,
+          })),
+        };
       case 'get_outfit_suggestion':
         return { toolName: name, ...(await getOutfitSuggestion({ ...input, userId })) };
       case 'this_or_that':

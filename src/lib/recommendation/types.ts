@@ -92,12 +92,20 @@ export interface ShoppingContext {
   profile_used: boolean;
 }
 
+export interface RecoAnalyticsMeta {
+  product_ids: string[];
+  reco_source: 'vector' | 'ilike' | 'ilike_relaxed';
+  score_band: 'low' | 'mid' | 'high';
+  palette_name?: string;
+}
+
 export interface RecommendationResult {
   query_understood_as: string;
   shopping_context: ShoppingContext;
   filters_applied: Record<string, unknown>;
   results: RecommendedProduct[];
   result_count: number;
+  reco_meta?: RecoAnalyticsMeta;
 }
 
 // ── Engine input ────────────────────────────────────────────────────────────

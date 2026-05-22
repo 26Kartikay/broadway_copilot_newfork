@@ -11,10 +11,11 @@ const router = Router();
  * @apiGroup Analytics
  * 
  * @apiParam {String} eventName Name of the event
- * @apiParam {String} [userId] Unique user identifier
+ * @apiParam {String} [userId] Client app user id (same as ChatRequest.userId / User.appUserId)
  * @apiParam {String} sessionId UUID for the entire user session
  * @apiParam {String} vibeSessionId UUID scoped to one analysis attempt
- * @apiParam {String} flowType vibe_check | color_analysis | ask_ai
+ * @apiParam {String} flowType vibe_check | color_analysis | ask_ai | home
+ * @apiParam {String} eventName image_upload_* | ai_analysis_* | reco_shelf_triggered | product_clicked | order_completed | style_chat_*
  * @apiParam {String} [platform] web | mobile
  * @apiParam {Object} properties Event-specific metadata
  */

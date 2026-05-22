@@ -5,6 +5,7 @@ import { normalizeHttpUrlReference } from '../../utils/serverUrl';
 import { isGuestUser } from '../../utils/user';
 import { openaiVisionCompletion } from '../openaiVision';
 import { analyticsService } from '../../services/analyticsService';
+import { OPENAI_VISION_MODEL } from '../openaiAgentModels';
 import { randomUUID } from 'crypto';
 
 const VIBE_CHECK_PROMPT = `
@@ -26,7 +27,10 @@ Return JSON only in this exact shape (scores 0–10, fractional allowed):
 const MIN_SCORE = 6.0;
 
 export interface VibeCheckInput {
+  /** Prisma User.id — used for DB writes. */
   userId: string;
+  /** Client app user id (ChatRequest.userId) — used for analytics. */
+  appUserId: string;
   imageBase64?: string;
   mimeType?: string;
   description?: string;
@@ -49,20 +53,29 @@ function parseTonality(raw: string | undefined): Tonality | null {
 }
 
 export async function vibeCheck(input: VibeCheckInput) {
-  const { userId, imageBase64, mimeType, description, sourceImageUrl, tonality: tonalityRaw, sessionId: providedSessionId } = input;
+  const {
+    userId,
+    appUserId,
+    imageBase64,
+    mimeType,
+    description,
+    sourceImageUrl,
+    tonality: tonalityRaw,
+    sessionId: providedSessionId,
+  } = input;
   const tonality = parseTonality(tonalityRaw);
   const startTime = Date.now();
   const sessionId = providedSessionId || randomUUID();
 
   analyticsService.track({
     eventName: 'ai_analysis_requested',
-    userId,
+    userId: appUserId,
     sessionId,
     vibeSessionId: sessionId,
     flowType: 'vibe_check',
     platform: 'web',
     properties: {
-      model_version: 'gpt-4o',
+      model_version: OPENAI_VISION_MODEL,
       image_count: imageBase64 ? 1 : 0,
       user_text_included: !!description,
     },
@@ -110,12 +123,13 @@ export async function vibeCheck(input: VibeCheckInput) {
 
     analyticsService.track({
       eventName: 'ai_analysis_completed',
-      userId,
+      userId: appUserId,
       sessionId,
       vibeSessionId: sessionId,
       flowType: 'vibe_check',
       platform: 'web',
       properties: {
+        model_version: OPENAI_VISION_MODEL,
         latency_ms: Date.now() - startTime,
         score_overall: vibeCheckResult * 10,
         score_drip_fit: clampedFit.score * 10,
@@ -169,7 +183,7 @@ export async function vibeCheck(input: VibeCheckInput) {
     logger.error({ err, userId }, 'Error in vibeCheck tool');
     analyticsService.track({
       eventName: 'ai_analysis_failed',
-      userId,
+      userId: appUserId,
       sessionId,
       vibeSessionId: sessionId,
       flowType: 'vibe_check',

@@ -11,6 +11,7 @@ import { isGuestUser } from '../../utils/user';
 import { openaiVisionCompletion } from '../openaiVision';
 import { setStagedColorAnalysis } from '../memory/redis';
 import { analyticsService } from '../../services/analyticsService';
+import { OPENAI_VISION_MODEL } from '../openaiAgentModels';
 import { randomUUID } from 'crypto';
 
 const COLOR_ANALYSIS_VISION_PROMPT = `
@@ -48,25 +49,38 @@ export interface ColorAnalysisInput {
   skinTone?: string;
   hairColor?: string;
   eyeColor?: string;
+  /** Prisma User.id — used for DB writes. */
   userId: string;
+  /** Client app user id (ChatRequest.userId) — used for analytics. */
+  appUserId: string;
   sourceImageUrl?: string;
   sessionId?: string;
 }
 
 export async function analyzeColorSeason(input: ColorAnalysisInput) {
-  const { imageBase64, mimeType, userId, skinTone, hairColor, eyeColor, sourceImageUrl, sessionId: providedSessionId } = input;
+  const {
+    imageBase64,
+    mimeType,
+    userId,
+    appUserId,
+    skinTone,
+    hairColor,
+    eyeColor,
+    sourceImageUrl,
+    sessionId: providedSessionId,
+  } = input;
   const startTime = Date.now();
   const sessionId = providedSessionId || randomUUID();
 
   analyticsService.track({
     eventName: 'ai_analysis_requested',
-    userId,
+    userId: appUserId,
     sessionId,
     vibeSessionId: sessionId,
     flowType: 'color_analysis',
     platform: 'web',
     properties: {
-      model_version: 'gpt-4o',
+      model_version: OPENAI_VISION_MODEL,
       image_count: imageBase64 ? 1 : 0,
       user_text_included: !!(skinTone || hairColor || eyeColor),
     },
@@ -88,7 +102,7 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
       if (!qOk) {
         analyticsService.track({
           eventName: 'ai_analysis_failed',
-          userId,
+          userId: appUserId,
           sessionId,
           vibeSessionId: sessionId,
           flowType: 'color_analysis',
@@ -119,7 +133,7 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
       logger.error({ userId, rawPalette }, 'Invalid palette from color analysis vision model');
       analyticsService.track({
         eventName: 'ai_analysis_failed',
-        userId,
+        userId: appUserId,
         sessionId,
         vibeSessionId: sessionId,
         flowType: 'color_analysis',
@@ -137,12 +151,13 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
 
     analyticsService.track({
       eventName: 'ai_analysis_completed',
-      userId,
+      userId: appUserId,
       sessionId,
       vibeSessionId: sessionId,
       flowType: 'color_analysis',
       platform: 'web',
       properties: {
+        model_version: OPENAI_VISION_MODEL,
         latency_ms: Date.now() - startTime,
         score_overall: 100,
         score_drip_fit: 0,
@@ -194,7 +209,7 @@ export async function analyzeColorSeason(input: ColorAnalysisInput) {
     logger.error({ err, userId }, 'Error in analyzeColorSeason tool');
     analyticsService.track({
       eventName: 'ai_analysis_failed',
-      userId,
+      userId: appUserId,
       sessionId,
       vibeSessionId: sessionId,
       flowType: 'color_analysis',

@@ -179,8 +179,6 @@ model Product {
   id               String                 @id @default(cuid())
   handleId         String                 @unique
   barcode          String?
-  /// External row id from your feed (CSV column often `id`). Stored as db_id; distinct from Product.id (CUID).
-  dbId             String?                @map("db_id")
   name             String
   brand            String
   category         ProductCategory
@@ -193,7 +191,7 @@ model Product {
   componentTags    Json
   imageUrl         String
   productLink      String
-  searchDoc        String                 @db.Text
+  searchDoc        String
   embedding        Unsupported("vector")?
   embeddingModel   String?
   embeddingDim     Int?
@@ -201,20 +199,18 @@ model Product {
   isActive         Boolean                @default(true)
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
-
-  // Automation-managed structured tags
-  legacyCategory   String?
-  subCategory      String?
-  productType      String?
-  allTags          String                 @default("") @db.Text
-  /// LLM-generated retail block (see tagExtractor formattedDescription); used for search/recommendation copy
-  llmDescription   String?                @db.Text
-
-  // Automation metadata
-  taggedBy         String?
-  taggedAt         DateTime?
-  embeddingStatus  String                 @default("pending")
+  allTags          String                 @default("")
   automationErrors String[]
+  embeddingStatus  String                 @default("pending")
+  legacyCategory   String?
+  productType      String?
+  subCategory      String?
+  taggedAt         DateTime?
+  taggedBy         String?
+  /// LLM-generated retail block (see tagExtractor formattedDescription); used for search/recommendation copy
+  llmDescription   String?
+  /// External row id from your feed (CSV column often `id`). Stored as db_id; distinct from Product.id (CUID).
+  dbId             String?                @map("db_id")
 
   @@index([category])
   @@index([generalTag])
@@ -274,17 +270,17 @@ model AutomationFailure {
   id          String    @id @default(cuid())
   productId   String
   barcode     String?
-  reason      String    @db.Text
+  reason      String
   retryCount  Int       @default(0)
   lastRetried DateTime?
   runId       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  @@unique([productId, runId])
   @@index([productId])
   @@index([retryCount])
   @@index([createdAt])
-  @@unique([productId, runId])
 }
 
 model GraphRun {
