@@ -15,14 +15,30 @@ import { OPENAI_VISION_MODEL } from '../openaiAgentModels';
 import { randomUUID } from 'crypto';
 
 const COLOR_ANALYSIS_VISION_PROMPT = `
-Analyze this person's coloring for seasonal color analysis.
-Identify: skin tone, undertone (warm/cool/neutral), eye color, hair color.
+Analyze this image for seasonal color analysis.
 
-STEP 0 — IMAGE QUALITY (faces only for this task)
+STEP 0 — IDENTIFY THE SUBJECT
+Before anything else, determine what (or who) is in the image:
+
+• If the image is of a CELEBRITY or well-known public figure (actor, model, athlete, influencer etc.):
+  Set "quality_ok": false and "quality_issue": "That looks like a celebrity photo! This is not you — please share your own selfie so I can do a personal color read for you. 📸"
+
+• If the image is of an ANIMAL or pet:
+  Set "quality_ok": false and "quality_issue": "What a cute [animal]! 🐾 But I need a photo of YOU to do your color analysis — please share your own selfie."
+
+• If the image is of a BABY or TODDLER (roughly under 3 years old):
+  Set "quality_ok": true and proceed with the full color analysis below.
+  In the "compliment" field, write something warm and sweet about the baby — e.g. "What an adorable little one! Those rosy cheeks and bright eyes are just precious 🍼"
+  Also note for colors_to_wear: soft, gentle tones that suit babies.
+
+• For all other cases (real adult, unclear): apply normal quality checks below.
+
+STEP 1 — IMAGE QUALITY (for real humans)
 Set "quality_ok": true if a real human face is clearly visible with enough detail to judge undertone (slight warmth/cool from lighting is OK).
-Set "quality_ok": false ONLY for unusable inputs: no face, extreme blur, pitch black, face fully covered, or not a person. If false, set "palette_name": "" and still include "quality_issue": "one short sentence for the user".
+Set "quality_ok": false ONLY for unusable inputs: no face, extreme blur, pitch black, face fully covered. If false, set "palette_name": "" and include "quality_issue": "one short sentence for the user".
 
-You MUST set "palette_name" to exactly ONE of these twelve identifiers (UPPER_SNAKE_CASE, no spaces) when quality_ok is true:
+STEP 2 — PALETTE (only when quality_ok is true)
+You MUST set "palette_name" to exactly ONE of these twelve identifiers (UPPER_SNAKE_CASE, no spaces):
 LIGHT_SPRING, TRUE_SPRING, BRIGHT_SPRING, LIGHT_SUMMER, TRUE_SUMMER, SOFT_SUMMER,
 SOFT_AUTUMN, TRUE_AUTUMN, DARK_AUTUMN, TRUE_WINTER, BRIGHT_WINTER, DARK_WINTER
 

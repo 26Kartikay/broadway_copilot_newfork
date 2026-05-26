@@ -209,12 +209,35 @@ async function runColorAnalysisOnMedia(
   const paletteName = String(raw.palette_name ?? raw.season ?? '');
 
   if (!isGuestUser(user, input.ProfileName)) {
+    const staged = await getStagedColorAnalysis(prismaUserId);
+    if (staged) {
+      await prisma.colorAnalysis.create({
+        data: {
+          userId: prismaUserId,
+          skin_tone: staged.skin_tone,
+          eye_color: staged.eye_color,
+          hair_color: staged.hair_color,
+          undertone: staged.undertone,
+          compliment: staged.compliment,
+          palette_name: staged.palette_name,
+          palette_description: staged.palette_description,
+          colors_suited: staged.colors_suited as Prisma.InputJsonValue,
+          colors_to_wear: staged.colors_to_wear as Prisma.InputJsonValue,
+          colors_to_avoid: staged.colors_to_avoid as Prisma.InputJsonValue,
+        },
+      });
+      await prisma.user.update({
+        where: { id: prismaUserId },
+        data: { lastColorAnalysisAt: new Date() },
+      });
+      await invalidateContext(prismaUserId);
+    }
     replies.push({
       reply_type: 'quick_reply',
-      reply_text: 'Do you want to save this color analysis result?',
+      reply_text: 'Would you like a detailed report on your color analysis?',
       buttons: [
-        { text: 'Yes', id: 'save_color_analysis_yes' },
-        { text: 'No', id: 'save_color_analysis_no' },
+        { text: 'Yes', id: 'color_report_yes' },
+        { text: 'No', id: 'color_report_no' },
       ],
     });
   } else if (paletteName) {
@@ -376,55 +399,12 @@ export async function tryHandleHttpChatFlows(
       return { handled: true, replies, pending: null };
     }
 
-    // --- Save color analysis ---
-    if (bp === 'save_color_analysis_yes') {
+    // --- Color report (detailed PDF) ---
+    if (bp === 'color_report_yes') {
       const staged = await getStagedColorAnalysis(prismaUserId);
-      if (!staged) {
-        const replies = formatReplies(
-          {
-            text: "Nothing queued to save — run a fresh color read first.",
-            toolResults: [],
-            products: [],
-            colorAnalysis: null,
-            vibeCheck: null,
-          },
-          replyOpts,
-        );
-        await appendFlowHistory(prismaUserId, input, replies);
-        return { handled: true, replies, pending: null };
-      }
-      await prisma.colorAnalysis.create({
-        data: {
-          userId: prismaUserId,
-          skin_tone: staged.skin_tone,
-          eye_color: staged.eye_color,
-          hair_color: staged.hair_color,
-          undertone: staged.undertone,
-          compliment: staged.compliment,
-          palette_name: staged.palette_name,
-          palette_description: staged.palette_description,
-          colors_suited: staged.colors_suited as Prisma.InputJsonValue,
-          colors_to_wear: staged.colors_to_wear as Prisma.InputJsonValue,
-          colors_to_avoid: staged.colors_to_avoid as Prisma.InputJsonValue,
-        },
-      });
-      await prisma.user.update({
-        where: { id: prismaUserId },
-        data: { lastColorAnalysisAt: new Date() },
-      });
-      await invalidateContext(prismaUserId);
-      const pdfUrl = getPalettePdfUrl(staged.palette_name);
+      const pdfUrl = staged?.palette_name ? getPalettePdfUrl(staged.palette_name) : null;
       await clearStagedColorAnalysis(prismaUserId);
-      const replies: HttpReplyPayload[] = formatReplies(
-        {
-          text: "Saved — I will remember this palette for your recommendations.",
-          toolResults: [],
-          products: [],
-          colorAnalysis: null,
-          vibeCheck: null,
-        },
-        replyOpts,
-      );
+      const replies: HttpReplyPayload[] = [];
       if (pdfUrl) {
         replies.push({
           reply_type: 'pdf',
@@ -437,28 +417,9 @@ export async function tryHandleHttpChatFlows(
       return { handled: true, replies, pending: null };
     }
 
-    if (bp === 'save_color_analysis_no') {
-      const staged = await getStagedColorAnalysis(prismaUserId);
-      const pdfUrl = staged?.palette_name ? getPalettePdfUrl(staged.palette_name) : null;
+    if (bp === 'color_report_no') {
       await clearStagedColorAnalysis(prismaUserId);
-      const replies: HttpReplyPayload[] = formatReplies(
-        {
-          text: "No worries — I won't save that run to your profile.",
-          toolResults: [],
-          products: [],
-          colorAnalysis: null,
-          vibeCheck: null,
-        },
-        replyOpts,
-      );
-      if (pdfUrl) {
-        replies.push({
-          reply_type: 'pdf',
-          media_url: pdfUrl,
-          reply_text: 'Here is your color palette guide PDF.',
-        });
-      }
-      replies.push(buildColorRecommendationPrompt());
+      const replies: HttpReplyPayload[] = [buildColorRecommendationPrompt()];
       await appendFlowHistory(prismaUserId, input, replies);
       return { handled: true, replies, pending: null };
     }
