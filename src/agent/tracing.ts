@@ -1,8 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 /**
- * In-memory trace buffers used by the LangGraph-style runner (`lib/graph`) and LLM adapters.
- * Shapes match what `ChatGroq` / `ChatOpenAI` append for optional DB persistence flows.
+ * In-memory trace buffers used by the agent executor and LLM adapters.
  */
 
 export interface BufferedNodeRun {

@@ -49,19 +49,6 @@ export interface OpenAIChatModelParams extends ChatModelParams {
   responseFormat?: { type: 'text' | 'json_object' };
 }
 
-export interface GroqChatModelParams extends ChatModelParams {
-  /**
-   * (Groq-specific) The maximum number of times to retry a request if it fails.
-   * Defaults to 2.
-   */
-  maxRetries?: number;
-  /**
-   * (Groq-specific) The maximum time in milliseconds to wait for a response from the API.
-   * Defaults to 1 minute.
-   */
-  timeout?: number;
-}
-
 /**
  * Represents the final outcome of a model run.
  *

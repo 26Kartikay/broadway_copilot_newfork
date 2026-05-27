@@ -1,20 +1,48 @@
-# Full local dev stack: chat bot (app) + admin dashboard + Postgres + Redis (+ optional ngrok).
-# Postgres and Redis run in Docker (named volumes). Set POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB in .env
-# (they must match DATABASE_URL for the in-stack `db` service). Bundled Redis has no auth; app/dashboard use
-# redis://redis:6379 (hardcoded in compose so .env REDIS_URL with credentials does not cause WRONGPASS).
-# set REDIS_PUBLISH_PORT to expose Redis on 127.0.0.1 for host tools (default 6379).
-# Always run from repo root:
-#   docker compose -f docker-compose.stack.yml --env-file .env up -d --build
+# Production stack: bot + Postgres + Redis.
+# Usage (from repo root):
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 #
-# Optional tunnel profile:
-#   docker compose -f docker-compose.stack.yml --profile tunnel up -d
+# DATABASE_URL: set in .env to your Postgres. If unset, defaults to bundled `db` container.
+# External DBs (RDS etc.): set SKIP_PRISMA_DB_PUSH=true — never run db push against managed DBs.
+# UPLOADS_HOST_DIR: host directory mounted to /app/uploads (default ./uploads).
+# SERVER_URL must be the public base URL (no trailing slash), e.g. https://api.yourdomain.com
+#
+# Optional tunnel:
+#   docker compose -f docker-compose.prod.yml --profile tunnel up -d
 
-name: broadway-stack
+name: broadway-bot-prod
 
 services:
   app:
-    image: node:22
-    working_dir: /usr/src/app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: broadway-bot-prod-app
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-8080}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-broadway}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
+      REDIS_URL: redis://redis:6379
+      SERVER_URL: ${SERVER_URL:?Set SERVER_URL in .env (public base URL, no default)}
+      UPLOADS_ROOT: ${UPLOADS_ROOT:-/app/uploads}
+      SKIP_PRISMA_DB_PUSH: ${SKIP_PRISMA_DB_PUSH:-}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ${UPLOADS_HOST_DIR:-./uploads}:/app/uploads
     command:
       - /bin/bash
       - -lc
@@ -22,11 +50,7 @@ services:
         set -Eeuo pipefail
         log() { printf '%s\n' "$${*}"; }
 
-        log "Installing dependencies..."
-        npm install --legacy-peer-deps --include=dev
-        log "Dependencies installed."
-
-        log "Checking Postgres availability..."
+        log "Waiting for Postgres..."
         until node <<'NODE' >/dev/null 2>&1; do
         const net = require('net');
         const host = process.env.POSTGRES_HOST || 'db';
@@ -43,66 +67,31 @@ services:
         done
         log "Postgres is ready."
 
-        log "Generating Prisma client..."
-        npx prisma generate
-
         log "Preflight (legacy Product.handleId unique constraint)..."
         npx prisma db execute --file scripts/preflight-db-push.sql --schema prisma/schema.prisma
 
-        log "Pushing database schema..."
-        npx prisma db push --accept-data-loss
-        log "Database schema is in sync."
-
-        if [ "$$NODE_ENV" = "production" ]; then
-          log "Building project..."
-          npm run build
-          log "Starting production server..."
-          npm start
+        USE_BUNDLED_DB=0
+        case "$${DATABASE_URL:-}" in *"@db:"*) USE_BUNDLED_DB=1 ;; esac
+        if [ "$${SKIP_PRISMA_DB_PUSH:-}" = "true" ]; then
+          log "Skipping prisma db push (SKIP_PRISMA_DB_PUSH=true)."
+        elif [ "$$USE_BUNDLED_DB" -eq 1 ]; then
+          log "Syncing database schema (db push) against bundled Postgres..."
+          npx prisma db push
         else
-          log "Starting development server..."
-          npm run dev
+          log "External DATABASE_URL: skipping prisma db push."
         fi
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: ${PORT:-8080}
-      POSTGRES_HOST: ${POSTGRES_HOST:-db}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-broadway}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      REDIS_URL: redis://redis:6379
-      SERVER_URL: ${SERVER_URL:-http://localhost:8080}
-      UPLOADS_ROOT: ${UPLOADS_ROOT:-/usr/src/app/uploads}
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: 1000
-    ports:
-      - "${PORT:-8080}:${PORT:-8080}"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    volumes:
-      - .:/usr/src/app
-      - node_modules:/usr/src/app/node_modules
-      - dist:/usr/src/app/dist
-      - uploads_data:/usr/src/app/uploads
+        log "Starting app..."
+        exec node dist/index.js
     networks:
       - broadway-network
 
   guest-cleanup-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: broadway-bot-prod-app
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      # Default: run hourly. Override in .env if needed.
       GUEST_CLEANUP_CRON: ${GUEST_CLEANUP_CRON:-0 * * * *}
     command:
       - /bin/bash
@@ -137,15 +126,13 @@ services:
       - broadway-network
 
   vibe-check-reminder-cron:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: broadway-bot-prod-app
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      COMMS_SERVICE_URL: ${COMMS_SERVICE_URL:-http://comms-service:8001}
+      COMMS_SERVICE_URL: ${COMMS_SERVICE_URL:-}
       CRON_VIBE_CHECK_REMINDER_ENABLED: ${CRON_VIBE_CHECK_REMINDER_ENABLED:-true}
     command: ["node", "dist/automation/cron/vibeCheckReminderCron.js"]
     depends_on:
@@ -154,36 +141,9 @@ services:
     networks:
       - broadway-network
 
-  dashboard:
-    build:
-      context: .
-      dockerfile: dashboard/Dockerfile
-      args:
-        DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-        REDIS_URL: redis://redis:6379
-        PORT: ${DASHBOARD_PORT:-8090}
-    env_file:
-      - ${ENV_FILE:-.env}
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-broadway}?schema=public}
-      REDIS_URL: redis://redis:6379
-      PORT: ${DASHBOARD_PORT:-8090}
-      ADMIN_SECRET: ${ADMIN_SECRET:-prod-secret-change-me}
-      NODE_ENV: ${NODE_ENV:-development}
-      SERVER_URL: ${SERVER_URL:-http://localhost:8080}
-      CHAT_API_URL: ${CHAT_API_URL:-}
-    ports:
-      - "${DASHBOARD_PORT:-8090}:${DASHBOARD_PORT:-8090}"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    networks:
-      - broadway-network
-
   db:
     image: pgvector/pgvector:pg16-bookworm
+    restart: unless-stopped
     command:
       - postgres
       - -c
@@ -205,7 +165,7 @@ services:
     ports:
       - "${POSTGRES_PUBLISH_PORT:-5433}:5432"
     volumes:
-      - postgres_data_v0_8_0:/var/lib/postgresql/data
+      - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER:-postgres}\""]
       interval: 5s
@@ -216,6 +176,7 @@ services:
 
   redis:
     image: redis:8
+    restart: unless-stopped
     command:
       - redis-server
       - --loglevel
@@ -223,7 +184,7 @@ services:
     ports:
       - "127.0.0.1:${REDIS_PUBLISH_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - redis_prod_data:/data
     networks:
       - broadway-network
 
@@ -233,7 +194,7 @@ services:
       - tunnel
     command:
       - http
-      - --domain=${NGROK_DOMAIN}
+      - --domain=${NGROK_DOMAIN:-}
       - "app:${PORT:-8080}"
       - --log=stdout
       - --log-level=warn
@@ -250,8 +211,5 @@ networks:
     name: broadway-network
 
 volumes:
-  node_modules:
-  dist:
-  uploads_data:
-  postgres_data_v0_8_0:
-  redis_data:
+  postgres_prod_data:
+  redis_prod_data:
